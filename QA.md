@@ -273,6 +273,108 @@ Dagster vẽ graph này trong UI. Click vào node → xem code, config, lịch s
 
 ---
 
+## BM25 — Sparse retrieval
+
+**Q:** BM25 là gì, khác vector search thế nào?
+
+**A:** BM25 (Best Match 25) là thuật toán tìm kiếm **từ khoá chính xác** dựa trên thống kê. Không cần embedding, không cần GPU.
+
+Công thức cốt lõi: mỗi từ trong query được score theo 2 yếu tố:
+- **TF (Term Frequency):** từ xuất hiện nhiều lần trong chunk → score cao hơn, nhưng có saturation (sau ngưỡng k₁ ≈ 1.5 thì không tăng thêm)
+- **IDF (Inverse Document Frequency):** từ hiếm trong toàn corpus → score cao hơn; từ phổ biến ("là", "của") → gần 0
+
+```
+BM25(q, d) = Σ IDF(t) × TF(t,d) × (k₁+1) / (TF(t,d) + k₁×(1-b+b×|d|/avgdl))
+```
+
+| | BM25 | Vector search |
+|---|---|---|
+| Tìm theo | Từ khoá chính xác | Ngữ nghĩa / ý nghĩa |
+| Query "quý 3 năm 2024" | Match đúng chunk chứa "quý 3 năm 2024" | Match chunk nói về "kết quả quý" dù khác từ |
+| Query "revenue" vs "doanh thu" | Miss (khác token) | Match (cùng semantic space) |
+| Tốc độ | Nhanh (in-memory index) | Nhanh (ANN search Qdrant) |
+| Cần embed model | Không | Có |
+| Thất bại khi | Synonym, paraphrase, đa ngôn ngữ | Số cụ thể, mã cổ phiếu, tên riêng chính xác |
+
+**Tại sao dùng BM25 trong project này:**
+- HPG BCTC có nhiều truy vấn từ khoá chính xác: "quý I/2024", "1,234,567 triệu đồng", "HOSE"
+- Vector search đôi khi "hiểu quá rộng" → trả về chunk đúng chủ đề nhưng sai số
+- BM25 làm baseline để so sánh: nếu BM25 thắng → corpus có structure rõ ràng; nếu vector thắng → query cần semantic understanding
+
+---
+
+**Q:** BM25 tích hợp vào pipeline thế nào?
+
+**A:** Project dùng `rank_bm25` (Python lib). BM25Retriever load **toàn bộ chunks từ Qdrant** vào RAM khi khởi tạo, build index, rồi search hoàn toàn in-memory — không query Qdrant lúc search.
+
+```python
+# Khởi tạo: scroll all chunks từ Qdrant → build BM25Okapi index
+retriever = BM25Retriever(collection="hpg_structural", use_vn_tokenize=False)
+
+# Search: tokenize query → BM25 score → rank → trả top_k text
+results = retriever.search("doanh thu thuần quý 3", top_k=5)
+```
+
+Trade-off: index không update real-time (cần restart để pick up chunks mới). Chấp nhận được cho eval — production cần hybrid có Qdrant handle freshness.
+
+---
+
+## VN Tokenization (underthesea)
+
+**Q:** Tại sao cần tách từ tiếng Việt, split() không đủ?
+
+**A:** Tiếng Việt là ngôn ngữ **đa âm tiết** — đơn vị nghĩa là **từ ghép** nhiều âm tiết, không phải âm tiết đơn lẻ.
+
+```
+"doanh thu" → 1 đơn vị nghĩa (revenue)
+"thu"       → âm tiết thứ 2 của "doanh thu", không phải "thu" (collect/autumn)
+
+split() → ["doanh", "thu"]     # 2 token riêng, mất nghĩa gốc
+vn_tokenize → ["doanh_thu"]    # 1 token compound, giữ nghĩa
+```
+
+Với BM25, token là đơn vị match. Nếu query "doanh thu" bị split thành `["doanh", "thu"]` và chunk cũng bị split tương tự → match ngẫu nhiên trên từng âm tiết thay vì match cụm.
+
+**underthesea** là thư viện NLP tiếng Việt — dùng CRF model để nhận diện ranh giới từ.
+
+---
+
+**Q:** underthesea có hoàn hảo không?
+
+**A:** Không. Observed trong project:
+
+```python
+word_tokenize("doanh thu thuần quý ba năm 2024", format="text")
+# Output: "doanh_thu thuần quý ba năm 2024"
+# ✓ "doanh_thu" đúng
+# ✗ "quý ba" không được nối thành "quý_ba"
+# ✗ "doanh thu thuần" nên là 1 cụm nhưng "thuần" tách riêng
+```
+
+underthesea train trên corpus phổ thông — thiếu domain-specific financial terms như:
+- `quý I`, `quý ba`, `quý 3` (Roman và Arabic numeral)
+- `lãi suất`, `lãi gộp`, `lãi ròng`
+- `HOSE`, `HNX`, `tỷ lệ P/E`
+
+Hệ quả: query "quý 3" vs corpus chứa "quý ba" → vẫn miss dù đã tokenize. Cần custom dictionary hoặc normalization step nếu muốn giải quyết triệt để.
+
+---
+
+**Q:** BM25 raw split vs BM25 + VN tokenize — khi nào cái nào tốt hơn?
+
+**A:** Chưa có kết quả đo từ project. Hypothesis dựa trên lý thuyết:
+
+| Loại query | raw split | vn_tokenize |
+|---|---|---|
+| Số cụ thể: "1,234,567" | Tương đương | Tương đương |
+| Cụm phổ thông: "doanh thu" | Tệ hơn (match từng âm tiết) | Tốt hơn |
+| Cụm tài chính: "quý ba" | Tệ hơn | Không cải thiện (underthesea miss) |
+| Tên riêng: "HPG", "HOSE" | Tốt (không bị tách) | Tốt |
+
+→ Chờ eval thực tế (`evals/bm25_raw.json` vs `evals/bm25_vn.json`) để kết luận.
+
+---
+
 ## Bài 10 — Xoá tài liệu & kiểm toán
 
 **Q:** Vì sao không xoá record khỏi Postgres khi xoá tài liệu?

@@ -86,6 +86,23 @@ def retrieve_context(question: str, collection: str, embed_model: str, top_k: in
     return [r.payload["text"] for r in results]
 
 
+def ask_with_bm25(client, question: str, bm25_retriever) -> tuple[str, list[str]]:
+    """Retrieve context via BM25 then call model."""
+    contexts = bm25_retriever.search(question, top_k=5)
+    context_block = "\n\n---\n\n".join(contexts)
+    system = (
+        "Bạn là trợ lý tài chính. Dựa vào các đoạn tài liệu dưới đây để trả lời. "
+        "Nếu thông tin không có trong tài liệu, nói rõ 'Không có trong tài liệu'.\n\n"
+        f"TÀI LIỆU:\n{context_block}"
+    )
+    resp = client.generate(
+        [Message(role="user", content=question)],
+        max_tokens=512,
+        system=system,
+    )
+    return resp.text, contexts
+
+
 def ask_with_rag(client, question: str, collection: str, embed_model: str) -> tuple[str, list[str]]:
     """Retrieve context from Qdrant then call model."""
     contexts = retrieve_context(question, collection, embed_model)
@@ -294,6 +311,13 @@ def main() -> None:
     parser.add_argument("--embed",
                         default=os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
                         help="Ollama embed model for RAG retrieval (used with --collection)")
+    parser.add_argument("--retriever",
+                        choices=["vector", "bm25"],
+                        default="vector",
+                        help="Retrieval method: vector (default) or bm25")
+    parser.add_argument("--vn-tokenize",
+                        action="store_true",
+                        help="BM25 only: use underthesea Vietnamese word tokenization")
     args = parser.parse_args()
 
     questions = load_questions(Path(args.questions))
@@ -301,8 +325,23 @@ def main() -> None:
 
     provider = os.environ.get("LLM_PROVIDER", "anthropic")
     rag_mode = bool(args.collection)
+    bm25_retriever = None
+    if rag_mode and args.retriever == "bm25":
+        from rag.retrieval_bm25 import BM25Retriever
+        bm25_retriever = BM25Retriever(
+            collection=args.collection,
+            use_vn_tokenize=args.vn_tokenize,
+        )
+
+    mode_label = "baseline (no context)"
+    if rag_mode:
+        if args.retriever == "bm25":
+            tok = "vn_tokenize" if args.vn_tokenize else "raw_split"
+            mode_label = f"BM25 ({tok}) — {args.collection}"
+        else:
+            mode_label = f"vector — {args.collection}"
     print(f"Provider      : {provider}")
-    print(f"Mode          : {'RAG — ' + args.collection if rag_mode else 'baseline (no context)'}")
+    print(f"Mode          : {mode_label}")
     print(f"RAGAS provider: {args.ragas_provider}")
     print(f"Questions     : {len(questions)} total ({sum(q.get('indexed', True) for q in questions if q['group'] not in ('no_answer','out_of_scope'))} indexed, {len([q for q in questions if q['group'] in ('no_answer','out_of_scope')])} refusal)")
     if args.ragas_provider == "ollama":
@@ -321,7 +360,9 @@ def main() -> None:
     for q in eval_qs:
         print(f"  {q['id']:6s} [{q['group']:<20}]", end="", flush=True)
         t0 = time.perf_counter()
-        if rag_mode:
+        if rag_mode and bm25_retriever is not None:
+            answer, contexts = ask_with_bm25(client, q["question"], bm25_retriever)
+        elif rag_mode:
             answer, contexts = ask_with_rag(client, q["question"], args.collection, args.embed)
         else:
             answer, contexts = ask_baseline(client, q["question"])
@@ -341,7 +382,9 @@ def main() -> None:
     for q in refusal_qs:
         print(f"  {q['id']:6s} [{q['group']:<20}]", end="", flush=True)
         t0 = time.perf_counter()
-        if rag_mode:
+        if rag_mode and bm25_retriever is not None:
+            answer, _ = ask_with_bm25(client, q["question"], bm25_retriever)
+        elif rag_mode:
             answer, _ = ask_with_rag(client, q["question"], args.collection, args.embed)
         else:
             answer, _ = ask_baseline(client, q["question"])
@@ -372,6 +415,9 @@ def main() -> None:
         "samples": samples,
         "refusal_results": refusal_results,
         "provider": provider,
+        "retriever": args.retriever,
+        "collection": args.collection,
+        "vn_tokenize": getattr(args, "vn_tokenize", False),
         "ollama_judge": args.ollama_model,
     }
     Path(args.out).write_text(

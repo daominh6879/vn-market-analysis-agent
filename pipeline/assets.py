@@ -9,6 +9,7 @@ Dagster truyền output giữa assets qua tham số cùng tên.
 raw_pdf → list[dict] → parsed_doc nhận làm tham số → trả list[dict] → downstream nhận.
 """
 import hashlib
+import io
 import os
 import sys
 import tempfile
@@ -192,12 +193,24 @@ def parsed_doc(
                 context.log.warning(f"Quality FAIL: {key} — {quality.reason}")
                 continue
 
+            md_key = f"parsed/{key[:-4]}.md" if key.lower().endswith(".pdf") else f"parsed/{key}.md"
+            md_bytes = parsed.content.encode("utf-8")
+            client.put_object(
+                _bucket(config),
+                md_key,
+                io.BytesIO(md_bytes),
+                length=len(md_bytes),
+                content_type="text/markdown",
+            )
+            context.log.info(f"Saved markdown: {md_key}")
+
             results.append({
                 "key": key,
                 "doc_id": doc_id,
                 "markdown": parsed.content,
                 "num_pages": parsed.metadata.get("num_pages", 0),
                 "dagster_run_id": context.run_id,
+                "md_key": md_key,
             })
             context.log.info(f"OK: {key} (doc_id={doc_id}, {len(parsed.content):,} chars)")
 
@@ -289,7 +302,7 @@ def financial_facts(
                 ticker=config.ticker,
                 period=config.period,
                 report_type=config.report_type,
-                nguon_file=doc["key"],
+                source_file=doc["key"],
             )
             errors = validate_facts(facts)
             for e in errors:
@@ -462,10 +475,13 @@ def minio_new_pdf_sensor(context):
                 context.log.info(f"Sensor [{ticker}]: xóa {len(to_delete)}: {to_delete}")
 
             for key in to_index:
-                run_cfg = IngestionConfig(mode="incremental", ticker=ticker, object_key=key)
+                parts = key.split("/")
+                year = parts[0] if len(parts) > 1 and parts[0].isdigit() and len(parts[0]) == 4 else cfg.period
+                run_cfg = IngestionConfig(mode="incremental", ticker=ticker, object_key=key, period=year)
                 run_requests.append(
                     RunRequest(
                         run_key=f"{ticker}:{key}:{current[key]}",
+                        job_name="ingestion_job",
                         run_config=RunConfig(
                             ops={
                                 "raw_pdf": run_cfg,

@@ -15,7 +15,10 @@ Ghi chép thực nghiệm, số đo, quyết định kỹ thuật. Không giải
 - [x] Bài 8 — Embedding model selection (bge-m3 thắng, avg RAGAS 0.376)
 - [x] Bài 9 — Idempotent index (uuid5 chunk IDs, delete-before-upsert)
 - [x] Bài 10 — Xoá tài liệu & đối chiếu (soft_delete + reconcile verified)
-- [ ] Bài 11 — Cửa lọc chất lượng (in progress)
+- [x] Bài 11 — Cửa lọc chất lượng (in progress)
+- [x] Bài 12 — Financial facts + SQL (postgres financial_facts)
+- [x] Bài 13 — Pipeline Dagster (assets.py)
+- [x] Bài 14 — BM25 + tách từ tiếng Việt (in progress)
 
 ## Pipeline hiện tại
 
@@ -34,3 +37,6 @@ Ghi chép thực nghiệm, số đo, quyết định kỹ thuật. Không giải
 | Bài 9 | [bai-9-idempotent.md](bai-9-idempotent.md) | uuid5 chunk IDs, delete-before-upsert |
 | Bài 10 | [bai-10-xoa-doi-chieu.md](bai-10-xoa-doi-chieu.md) | soft_delete + reconcile verified |
 | Bài 11 | [bai-11-chat-luong.md](bai-11-chat-luong.md) | quality filter in progress |
+| Bài 12 | [bai-12-facts-sql.md](bai-12-facts-sql.md) | financial_facts postgres, fetch prices |
+| Bài 13 | [bai-13-pipeline-dagster.md](bai-13-pipeline-dagster.md) | Dagster assets pipeline |
+| Bài 14 | [bai-14-bm25.md](bai-14-bm25.md) | BM25 + underthesea VN tokenize (in progress) |

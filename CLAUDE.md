@@ -58,6 +58,18 @@ client = Anthropic(api_key=...)
 
 ---
 
+## Documentation accuracy rule
+
+**Never write assumptions into NOTES.md, EXPLAIN.md, or QA.md.** Every claim must have a verified source:
+
+- Root cause identified → must be confirmed by checking code, DB, logs, or running a query. If unconfirmed, label it explicitly as "hypothesis" or "unverified".
+- Numbers, counts, states → must come from actual output (script run, DB query, file read), not inferred.
+- Before writing "X is not indexed / X is missing / X failed because Y" → verify it. Run the check, read the file, query Qdrant/Postgres, then write.
+
+If verification requires running a script the user must run: ask first, wait for output, then write.
+
+---
+
 ## Documentation files — when to update each
 
 All files are in Vietnamese. Match existing tone and format.

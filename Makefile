@@ -1,4 +1,4 @@
-.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui
+.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn
 
 up:
 	docker compose up -d
@@ -109,3 +109,11 @@ pipeline-dev:
 
 pipeline-ui:
 	@echo "Mở http://localhost:3000"
+
+# Bài 14
+eval-bm25:
+	uv run python evals/run.py --retriever bm25 --collection hpg_structural --skip-ragas --out evals/bm25_raw.json
+
+eval-bm25-vn:
+	uv run python evals/run.py --retriever bm25 --collection hpg_structural --vn-tokenize --skip-ragas --out evals/bm25_vn.json
+
