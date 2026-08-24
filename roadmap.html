@@ -1,0 +1,1156 @@
+<title>RAG AI Engineer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root {
+  --bg: #0A0D14;
+  --bg2: #0F1320;
+  --surface: #131720;
+  --surface2: #1A2030;
+  --border: #1E2840;
+  --border2: #263050;
+  --text: #E2E8F0;
+  --text-muted: #8899BB;
+  --text-dim: #4A5680;
+  --c1: #06B6D4; --c1bg: rgba(6,182,212,.1);
+  --c2: #F97316; --c2bg: rgba(249,115,22,.1);
+  --c3: #8B5CF6; --c3bg: rgba(139,92,246,.1);
+  --c4: #10B981; --c4bg: rgba(16,185,129,.1);
+  --c5: #3B82F6; --c5bg: rgba(59,130,246,.1);
+  --c6: #EF4444; --c6bg: rgba(239,68,68,.1);
+  --c7: #F59E0B; --c7bg: rgba(245,158,11,.1);
+  --c8: #64748B; --c8bg: rgba(100,116,139,.1);
+  --done: #10B981;
+  --core: #EF4444;
+  --expand: #F59E0B;
+  --interview: #64748B;
+  --mono: 'IBM Plex Mono', monospace;
+  --sans: 'IBM Plex Sans', sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #F0F4F8;
+    --bg2: #E8EDF5;
+    --surface: #FFFFFF;
+    --surface2: #F8FAFC;
+    --border: #DDE3EF;
+    --border2: #CBD5E8;
+    --text: #0F172A;
+    --text-muted: #475569;
+    --text-dim: #94A3B8;
+    --c1bg: rgba(6,182,212,.08);
+    --c2bg: rgba(249,115,22,.08);
+    --c3bg: rgba(139,92,246,.08);
+    --c4bg: rgba(16,185,129,.08);
+    --c5bg: rgba(59,130,246,.08);
+    --c6bg: rgba(239,68,68,.08);
+    --c7bg: rgba(245,158,11,.08);
+    --c8bg: rgba(100,116,139,.08);
+  }
+}
+:root[data-theme="light"] {
+  --bg: #F0F4F8; --bg2: #E8EDF5; --surface: #FFFFFF; --surface2: #F8FAFC;
+  --border: #DDE3EF; --border2: #CBD5E8; --text: #0F172A;
+  --text-muted: #475569; --text-dim: #94A3B8;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; scroll-behavior: smooth; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.6; }
+a { color: inherit; text-decoration: none; }
+
+/* TOP HEADER */
+.site-header {
+  padding: 2.5rem 2rem 2rem;
+  max-width: 1200px; margin: 0 auto;
+}
+.site-header h1 {
+  font-family: var(--mono); font-size: 1.1rem; font-weight: 500;
+  color: var(--text-muted); letter-spacing: .08em; text-transform: uppercase;
+  margin-bottom: .5rem;
+}
+.site-header h2 {
+  font-family: var(--mono); font-size: 2rem; font-weight: 600;
+  color: var(--text); line-height: 1.2; margin-bottom: 1.25rem;
+  text-wrap: balance;
+}
+.stack-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 2rem; }
+.chip {
+  font-family: var(--mono); font-size: .7rem; font-weight: 500;
+  padding: .2rem .55rem; border-radius: 3px;
+  border: 1px solid var(--border2); color: var(--text-muted);
+  background: var(--surface); letter-spacing: .04em;
+}
+
+/* PROGRESS BAR */
+.progress-row {
+  display: flex; align-items: center; gap: 1rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 2rem;
+}
+.progress-label { font-family: var(--mono); font-size: .75rem; color: var(--text-muted); white-space: nowrap; }
+.progress-bar-wrap { flex: 1; height: 6px; background: var(--border2); border-radius: 3px; overflow: hidden; }
+.progress-bar-fill { height: 100%; width: 16.28%; background: var(--done); border-radius: 3px; transition: width .3s; }
+.progress-stat { font-family: var(--mono); font-size: .75rem; color: var(--done); white-space: nowrap; }
+
+/* PIPELINE DIAGRAM */
+.pipeline {
+  display: flex; align-items: center; gap: 0;
+  overflow-x: auto; padding: 1.25rem 1.25rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; margin-bottom: 2.5rem;
+  scrollbar-width: thin; scrollbar-color: var(--border2) transparent;
+}
+.pipe-node {
+  flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: .3rem;
+  padding: .5rem .75rem; border-radius: 6px;
+  border: 1px solid var(--border2); background: var(--bg2);
+  min-width: 80px;
+}
+.pipe-node .pn-label { font-family: var(--mono); font-size: .65rem; color: var(--text-muted); text-align: center; line-height: 1.3; }
+.pipe-node .pn-icon { font-size: 1rem; }
+.pipe-arrow { flex-shrink: 0; color: var(--text-dim); padding: 0 .25rem; font-size: .9rem; }
+.pipe-fork { display: flex; flex-direction: column; gap: .4rem; }
+.pipe-fork .pipe-node { min-width: 72px; }
+
+/* CHAPTER NAV */
+.chapter-nav {
+  position: sticky; top: 0; z-index: 50;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+  padding: .6rem 2rem; overflow-x: auto;
+  scrollbar-width: none;
+}
+.chapter-nav::-webkit-scrollbar { display: none; }
+.chapter-nav-inner { display: flex; gap: .4rem; max-width: 1200px; margin: 0 auto; min-width: max-content; }
+.cn-pill {
+  font-family: var(--mono); font-size: .68rem; font-weight: 500;
+  padding: .25rem .7rem; border-radius: 100px;
+  border: 1px solid var(--border2); color: var(--text-muted);
+  cursor: pointer; transition: all .15s; white-space: nowrap;
+}
+.cn-pill:hover { border-color: var(--text-muted); color: var(--text); }
+.cn-pill[data-ch="1"]:hover { border-color: var(--c1); color: var(--c1); }
+.cn-pill[data-ch="2"]:hover { border-color: var(--c2); color: var(--c2); }
+.cn-pill[data-ch="3"]:hover { border-color: var(--c3); color: var(--c3); }
+.cn-pill[data-ch="4"]:hover { border-color: var(--c4); color: var(--c4); }
+.cn-pill[data-ch="5"]:hover { border-color: var(--c5); color: var(--c5); }
+.cn-pill[data-ch="6"]:hover { border-color: var(--c6); color: var(--c6); }
+.cn-pill[data-ch="7"]:hover { border-color: var(--c7); color: var(--c7); }
+.cn-pill[data-ch="8"]:hover { border-color: var(--c8); color: var(--c8); }
+
+/* MAIN */
+.main { max-width: 1200px; margin: 0 auto; padding: 2rem 2rem 4rem; }
+
+/* CHAPTER SECTION */
+.chapter-section { margin-bottom: 3rem; }
+.chapter-header {
+  display: flex; align-items: flex-start; gap: 1rem;
+  padding: 1.25rem 1.5rem; border-radius: 8px 8px 0 0;
+  border: 1px solid var(--border);
+  margin-bottom: 0;
+}
+.ch-accent { width: 4px; border-radius: 2px; align-self: stretch; flex-shrink: 0; min-height: 48px; }
+.ch-meta { flex: 1; }
+.ch-eyebrow {
+  font-family: var(--mono); font-size: .65rem; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase; margin-bottom: .3rem;
+}
+.ch-title { font-family: var(--mono); font-size: 1.1rem; font-weight: 600; color: var(--text); margin-bottom: .35rem; text-wrap: balance; }
+.ch-subtitle { font-size: .85rem; color: var(--text-muted); max-width: 60ch; line-height: 1.5; }
+.ch-stats { display: flex; flex-direction: column; gap: .3rem; align-items: flex-end; flex-shrink: 0; }
+.ch-stat { font-family: var(--mono); font-size: .68rem; color: var(--text-dim); white-space: nowrap; }
+
+/* LESSONS GRID */
+.lessons-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 0; border: 1px solid var(--border); border-top: none;
+  border-radius: 0 0 8px 8px; overflow: hidden;
+}
+.lesson-card {
+  border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  background: var(--surface); cursor: pointer; position: relative;
+  transition: background .15s;
+}
+.lesson-card:nth-child(2n) { border-right: none; }
+@media (max-width: 800px) {
+  .lessons-grid { grid-template-columns: 1fr; }
+  .lesson-card { border-right: none; }
+}
+.lesson-card:hover { background: var(--surface2); }
+.lesson-card.expanded { background: var(--surface2); }
+
+.card-top-bar { height: 3px; }
+.card-header { padding: 1rem 1.25rem .9rem; display: flex; gap: .75rem; align-items: flex-start; }
+.card-num {
+  font-family: var(--mono); font-size: .75rem; font-weight: 600;
+  color: var(--text-dim); flex-shrink: 0; padding-top: .1rem;
+  min-width: 2.5rem;
+}
+.card-info { flex: 1; }
+.card-title { font-size: .9rem; font-weight: 600; color: var(--text); line-height: 1.35; margin-bottom: .4rem; }
+.card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+.badge {
+  font-family: var(--mono); font-size: .6rem; font-weight: 600;
+  padding: .15rem .45rem; border-radius: 3px; letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.badge-core { background: rgba(239,68,68,.15); color: var(--core); }
+.badge-expand { background: rgba(245,158,11,.15); color: var(--expand); }
+.badge-interview { background: rgba(100,116,139,.15); color: var(--interview); }
+.badge-done { background: rgba(16,185,129,.15); color: var(--done); }
+.badge-pending { background: var(--border); color: var(--text-dim); }
+.card-time { font-family: var(--mono); font-size: .65rem; color: var(--text-dim); }
+.card-chevron {
+  flex-shrink: 0; width: 16px; height: 16px; margin-top: .15rem;
+  color: var(--text-dim); transition: transform .2s;
+}
+.lesson-card.expanded .card-chevron { transform: rotate(180deg); }
+
+.card-body { display: none; padding: 0 1.25rem 1.25rem; border-top: 1px solid var(--border); }
+.lesson-card.expanded .card-body { display: block; }
+.card-section { margin-top: .9rem; }
+.card-section-label {
+  font-family: var(--mono); font-size: .65rem; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--text-dim);
+  margin-bottom: .45rem;
+}
+.card-section-text { font-size: .83rem; color: var(--text-muted); line-height: 1.6; }
+.card-list { list-style: none; display: flex; flex-direction: column; gap: .3rem; }
+.card-list li {
+  font-size: .82rem; color: var(--text-muted); line-height: 1.5;
+  padding-left: 1rem; position: relative;
+}
+.card-list li::before {
+  content: '›'; position: absolute; left: 0;
+  color: var(--text-dim); font-weight: 600;
+}
+.card-list.done-list li::before { content: '□'; font-size: .75rem; }
+.card-list.done-list li.done-item { color: var(--text-dim); }
+.card-list.done-list li.done-item::before { content: '✓'; color: var(--done); }
+.trap-box {
+  margin-top: .45rem; padding: .6rem .8rem;
+  background: rgba(245,158,11,.06); border: 1px solid rgba(245,158,11,.2);
+  border-radius: 5px;
+}
+.trap-box p { font-size: .8rem; color: var(--text-muted); line-height: 1.55; }
+.trap-label {
+  font-family: var(--mono); font-size: .6rem; font-weight: 600;
+  color: var(--expand); letter-spacing: .08em; text-transform: uppercase;
+  margin-bottom: .3rem;
+}
+
+/* CHAPTER-SPECIFIC COLORS */
+.chapter-section[data-ch="1"] .ch-accent, .chapter-section[data-ch="1"] .card-top-bar { background: var(--c1); }
+.chapter-section[data-ch="1"] .ch-eyebrow { color: var(--c1); }
+.chapter-section[data-ch="1"] .chapter-header { background: var(--c1bg); }
+.chapter-section[data-ch="2"] .ch-accent, .chapter-section[data-ch="2"] .card-top-bar { background: var(--c2); }
+.chapter-section[data-ch="2"] .ch-eyebrow { color: var(--c2); }
+.chapter-section[data-ch="2"] .chapter-header { background: var(--c2bg); }
+.chapter-section[data-ch="3"] .ch-accent, .chapter-section[data-ch="3"] .card-top-bar { background: var(--c3); }
+.chapter-section[data-ch="3"] .ch-eyebrow { color: var(--c3); }
+.chapter-section[data-ch="3"] .chapter-header { background: var(--c3bg); }
+.chapter-section[data-ch="4"] .ch-accent, .chapter-section[data-ch="4"] .card-top-bar { background: var(--c4); }
+.chapter-section[data-ch="4"] .ch-eyebrow { color: var(--c4); }
+.chapter-section[data-ch="4"] .chapter-header { background: var(--c4bg); }
+.chapter-section[data-ch="5"] .ch-accent, .chapter-section[data-ch="5"] .card-top-bar { background: var(--c5); }
+.chapter-section[data-ch="5"] .ch-eyebrow { color: var(--c5); }
+.chapter-section[data-ch="5"] .chapter-header { background: var(--c5bg); }
+.chapter-section[data-ch="6"] .ch-accent, .chapter-section[data-ch="6"] .card-top-bar { background: var(--c6); }
+.chapter-section[data-ch="6"] .ch-eyebrow { color: var(--c6); }
+.chapter-section[data-ch="6"] .chapter-header { background: var(--c6bg); }
+.chapter-section[data-ch="7"] .ch-accent, .chapter-section[data-ch="7"] .card-top-bar { background: var(--c7); }
+.chapter-section[data-ch="7"] .ch-eyebrow { color: var(--c7); }
+.chapter-section[data-ch="7"] .chapter-header { background: var(--c7bg); }
+.chapter-section[data-ch="8"] .ch-accent, .chapter-section[data-ch="8"] .card-top-bar { background: var(--c8); }
+.chapter-section[data-ch="8"] .ch-eyebrow { color: var(--c8); }
+.chapter-section[data-ch="8"] .chapter-header { background: var(--c8bg); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+
+<header class="site-header">
+  <h1>VN-Stock Agentic Platform</h1>
+  <h2>RAG AI Engineer — Lộ trình 43 bài</h2>
+  <div class="stack-chips">
+    <span class="chip">Python</span><span class="chip">Qdrant</span><span class="chip">Postgres</span>
+    <span class="chip">Redis</span><span class="chip">MinIO</span><span class="chip">Ollama</span>
+    <span class="chip">RAGAS</span><span class="chip">Dagster</span><span class="chip">LangGraph</span>
+    <span class="chip">FastAPI</span><span class="chip">Streamlit</span><span class="chip">HPG BCTC</span>
+  </div>
+  <div class="progress-row">
+    <span class="progress-label">Tiến độ tổng</span>
+    <div class="progress-bar-wrap"><div class="progress-bar-fill"></div></div>
+    <span class="progress-stat">7 / 43 bài · 16%</span>
+  </div>
+  <div class="pipeline">
+    <div class="pipe-node"><span class="pn-icon">📄</span><span class="pn-label">PDF Files</span></div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-node"><span class="pn-icon">⚙️</span><span class="pn-label">Parse</span></div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-node"><span class="pn-icon">✂️</span><span class="pn-label">Chunk</span></div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-fork">
+      <div class="pipe-node"><span class="pn-icon">🔢</span><span class="pn-label">Embed → Qdrant</span></div>
+      <div class="pipe-node"><span class="pn-icon">🗄️</span><span class="pn-label">Extract → SQL</span></div>
+    </div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-node"><span class="pn-icon">🔍</span><span class="pn-label">Hybrid Search</span></div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-node"><span class="pn-icon">🔧</span><span class="pn-label">Tools</span></div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-node"><span class="pn-icon">🤖</span><span class="pn-label">Agent Graph</span></div>
+    <span class="pipe-arrow">→</span>
+    <div class="pipe-node"><span class="pn-icon">🌐</span><span class="pn-label">API / UI</span></div>
+  </div>
+</header>
+
+<nav class="chapter-nav">
+  <div class="chapter-nav-inner">
+    <a class="cn-pill" data-ch="1" href="#ch1">CH.01 Đo lường</a>
+    <a class="cn-pill" data-ch="2" href="#ch2">CH.02 Dữ liệu</a>
+    <a class="cn-pill" data-ch="3" href="#ch3">CH.03 Tìm kiếm</a>
+    <a class="cn-pill" data-ch="4" href="#ch4">CH.04 Tool</a>
+    <a class="cn-pill" data-ch="5" href="#ch5">CH.05 Agent</a>
+    <a class="cn-pill" data-ch="6" href="#ch6">CH.06 Vận hành</a>
+    <a class="cn-pill" data-ch="7" href="#ch7">CH.07 Observability</a>
+    <a class="cn-pill" data-ch="8" href="#ch8">CH.08 Portfolio</a>
+  </div>
+</nav>
+
+<main class="main" id="lessons-root"></main>
+
+<script>
+const CHAPTERS = [
+  {
+    id: 1, anchor: "ch1", weeks: "Tuần 0–1", count: 5,
+    title: "Có cân trước khi giảm cân",
+    subtitle: "Dựng hạ tầng và bộ đo trước khi viết một dòng RAG nào. Năm bài này là lý do 37 bài sau có ý nghĩa."
+  },
+  {
+    id: 2, anchor: "ch2", weeks: "Tuần 2–4", count: 8,
+    title: "Dữ liệu",
+    subtitle: "Data pipeline từ PDF thô đến vector + SQL. Bài 12 là bài dạy nhiều nhất về thiết kế trong cả sổ tay."
+  },
+  {
+    id: 3, anchor: "ch3", weeks: "Tuần 4–6", count: 6,
+    title: "Tìm kiếm",
+    subtitle: "BM25, semantic search, hybrid fusion, reranker, RAG-Fusion, multi-tenant, SQL agent."
+  },
+  {
+    id: 4, anchor: "ch4", weeks: "Tuần 6–7", count: 3,
+    title: "Tool Design",
+    subtitle: "Xây tool đúng trước khi agent chạm vào. Bài 20 là một trong ba bài dạy nhiều nhất trong cả sổ tay."
+  },
+  {
+    id: 5, anchor: "ch5", weeks: "Tuần 7–10", count: 9,
+    title: "Agent",
+    subtitle: "Chặng cốt lõi. Chạy đơn giản trước, đo, rồi mới thêm phức tạp. Bài 26 dạy nhiều nhất."
+  },
+  {
+    id: 6, anchor: "ch6", weeks: "Tuần 10–12", count: 6,
+    title: "Vận hành",
+    subtitle: "Chuyển từ 'chạy được trên máy mình' sang 'chạy được cho người thật, 24/7'."
+  },
+  {
+    id: 7, anchor: "ch7", weeks: "Tuần 12–13", count: 3,
+    title: "Nhìn vào bên trong",
+    subtitle: "Tracing, model routing, nightly eval. Đo trước khi tối ưu."
+  },
+  {
+    id: 8, anchor: "ch8", weeks: "Tuần 14–15", count: 3,
+    title: "Portfolio & Phỏng vấn",
+    subtitle: "Ba bài này không dạy thêm kỹ thuật. Chúng tồn tại để thuyết phục người khác."
+  }
+];
+
+const LESSONS = [
+  // ── CHAPTER 1 ──
+  {
+    id: "01", ch: 1, title: "Dựng sân chơi", priority: "core", time: "~1 ngày", status: "done",
+    purpose: "Nền móng mà mọi bài sau đứng lên. Không có 4 container này — không có chỗ lưu vector, không có chỗ lưu trạng thái agent, không có chỗ chứa file gốc.",
+    implement: [
+      "docker-compose.yml: Qdrant · Postgres · Redis · MinIO",
+      "Cây thư mục: api/ agents/ tools/ rag/ data/ llm/ memory/ core/ infra/ evals/ tests/",
+      "core/config.py — pydantic-settings, đọc .env, crash ngay khi thiếu biến",
+      "core/logging.py — structlog JSON có trace_id",
+      "Makefile: make up / make down / make test"
+    ],
+    done: [
+      { text: "make up → 4 container healthy, mở được Qdrant dashboard + MinIO console", done: true },
+      { text: "Xoá 1 biến trong .env → crash kèm thông báo rõ thiếu biến nào", done: true }
+    ],
+    trap: "Dùng uv hoặc poetry với lock file, không pip install trực tiếp. Bạn sẽ dựng lại môi trường này vài lần."
+  },
+  {
+    id: "02", ch: 1, title: "Lớp trung gian gọi model", priority: "core", time: "~1.5 ngày", status: "done",
+    purpose: "Gọi model ở ít nhất 15 bài sau. Bài này xây một điểm duy nhất — khi muốn đổi provider hoặc thêm logging/retry, chỉ sửa một file.",
+    implement: [
+      "llm/base.py: interface với generate() và stream()",
+      "llm/types.py: LLMResponse chuẩn hoá — text, tool_calls, tokens, model version, stop reason",
+      "5 provider clients: Ollama local + Anthropic + OpenAI + Gemini",
+      "llm/factory.py: đọc biến môi trường, trả về client tương ứng",
+      "Gom lỗi provider về exception của bạn: quá tải · bị chặn · lỗi nguồn"
+    ],
+    done: [
+      { text: "Cùng script, đổi LLM_PROVIDER, chạy 2 provider mà không sửa code", done: true },
+      { text: "Test với fake client, không gọi mạng", done: true }
+    ],
+    trap: "Ollama trên máy yếu rất chậm — cần nó để chạy eval nhiều lần mà không tốn tiền. Dùng model 3B–8B đã nén."
+  },
+  {
+    id: "03", ch: 1, title: "Tự tay viết bộ câu hỏi chuẩn", priority: "core", time: "~2 ngày", status: "done",
+    purpose: "Đây là 'thước kẻ' của cả 42 bài. Mọi quyết định kỹ thuật sau đều cần câu hỏi 'cái này có cải thiện không?' — và 25 câu này là cách duy nhất để trả lời bằng số.",
+    implement: [
+      "File PDF HPG tại evals/docs/HGP/",
+      "evals/golden_hpg.yaml — 25 câu, 6 nhóm:",
+      "· Tra số trong bảng (8) · Diễn giải văn bản (5) · So sánh nhiều kỳ (4)",
+      "· Cần hai nguồn (3) · Không có đáp án (3) · Ngoài phạm vi (2)",
+      "Mỗi câu: câu hỏi, đáp án, trang nguồn, nhóm"
+    ],
+    done: [
+      { text: "25 câu, mỗi câu tự trả lời bằng cách chỉ vào trang cụ thể trong PDF", done: true },
+      { text: "Đủ 6 nhóm", done: true }
+    ],
+    trap: "Rất muốn nhờ model sinh 100 câu trong 5 phút. Đừng. Model sinh câu tầm thường và bạn mất cơ hội hiểu dữ liệu — đó chính là thứ bài này tồn tại để dạy."
+  },
+  {
+    id: "04", ch: 1, title: "Bộ đo chạy được và fail được", priority: "core", time: "~1.5 ngày", status: "done",
+    purpose: "Tương đương unit test nhưng cho hành vi AI. Không có bài này, mọi thay đổi sau đều là đoán mò.",
+    implement: [
+      "evals/run.py: đọc golden_hpg.yaml → chạy pipeline → tính điểm → ghi baseline.json",
+      "4 chỉ số RAGAS: context_recall · context_precision · faithfulness · answer_relevancy",
+      "Model chấm điểm chạy bằng Ollama (--skip-ragas trong CI vì chậm)",
+      "So với baseline.json, thoát exit code ≠ 0 nếu tụt quá ngưỡng",
+      "make eval đưa vào CI"
+    ],
+    done: [
+      { text: "make eval in ra bảng 4 chỉ số", done: true },
+      { text: "Cố tình làm hỏng prompt → CI đỏ", done: true },
+      { text: "Kết quả baseline 'model trần' đã ghi vào NOTES.md", done: true }
+    ],
+    trap: "Bộ đo cần model để tính điểm nên nó chậm và có nhiễu. Chạy trên 25 câu, đừng chạy 500, và cache vector."
+  },
+  {
+    id: "05", ch: 1, title: "Đo nhiễu của chính cái cân", priority: "core", time: "~0.5 ngày", status: "done",
+    purpose: "Bộ đo dùng model chấm điểm — model có nhiễu ngẫu nhiên dù temperature=0. Bài này xác định 'cải thiện thật tối thiểu phải là bao nhiêu' cho toàn bộ 37 bài còn lại.",
+    implement: [
+      "Chạy make eval 5 lần liên tiếp, không thay đổi gì",
+      "Ghi 4 chỉ số mỗi lần chạy vào bảng NOTES.md mục 'Ngưỡng nhiễu'",
+      "Tính std và 2×std bằng Python inline (statistics.stdev)",
+      "Cập nhật NOISE_THRESHOLD trong evals/run.py = 2 × std thực tế",
+      "Xác nhận CI fail khi prompt hỏng, xanh khi khôi phục"
+    ],
+    done: [
+      { text: "Bảng 5 lần chạy trong NOTES.md mục 'Ngưỡng nhiễu'", done: true },
+      { text: "Ngưỡng fail của CI dựa trên số thực tế, không phải đoán", done: true }
+    ],
+    trap: "Bốn tiếng ở đây tiết kiệm hàng chục giờ về sau. Rất dễ bỏ qua vì 'không tạo ra tính năng nào'."
+  },
+
+  // ── CHAPTER 2 ──
+  {
+    id: "06", ch: 2, title: "Parse 1 file PDF và đọ bằng mắt", priority: "core", time: "~2 ngày", status: "done",
+    purpose: "Lần đầu nhìn thẳng vào dữ liệu — không qua trung gian. Nếu parse hỏng bảng số liệu mà không biết, mọi câu trả lời phía sau đều sai.",
+    implement: [
+      "data/parse.py với ParsedDoc(content, metadata)",
+      "3 wrapper: parse_with_pymupdf / parse_with_unstructured / parse_with_llamaparse",
+      "Xuất 3 file: outputs/hpg_pymupdf.md · hpg_unstructured.md · hpg_llamaparse.md",
+      "Đối chiếu bằng mắt: bảng KQKD, CĐKT, tiêu đề cột, ô số có lệch không"
+    ],
+    done: [
+      { text: "Chọn 1 công cụ, ghi lý do kèm ví dụ cụ thể cái hỏng ở 2 công cụ kia", done: true },
+      { text: "Liệt kê ≥ 5 vấn đề cụ thể trong NOTES.md", done: true }
+    ],
+    trap: "Bài dễ chìm nhất. Timebox cứng 2 ngày. Bảng tài chính PDF không bao giờ parse hoàn hảo — chấp nhận ~70%, ghi vào BLOCKED.md."
+  },
+  {
+    id: "07", ch: 2, title: "Chunking: thử 3 cách và đo", priority: "core", time: "~1.5 ngày", status: "done",
+    purpose: "Lần đầu dùng bộ đo để ra quyết định kỹ thuật thay vì đoán. Đánh đổi cốt lõi: chunk nhỏ tìm chính xác hơn, chunk lớn đủ ngữ cảnh hơn.",
+    implement: [
+      "rag/chunking.py: chunk_fixed(512, overlap=64) / chunk_structural(max=800) / chunk_hierarchical()",
+      "Index mỗi cách vào collection riêng: hpg_fixed_512 / hpg_structural / hpg_hierarchical",
+      "Thí nghiệm: prepend_metadata() — bật/tắt, đo riêng",
+      "Ghi bảng 3 dòng × (context_recall, answer_relevancy) vào NOTES.md"
+    ],
+    done: [
+      { text: "Bảng 3 dòng trong NOTES.md", done: true },
+      { text: "Chênh lệch lớn hơn ngưỡng nhiễu ở bài 5 — nếu không thì chưa kết luận được", done: true }
+    ],
+    trap: "Nếu chênh lệch nhỏ hơn nhiễu, cần thêm câu vào golden set, không phải chọn bừa cái cao nhất."
+  },
+  {
+    id: "08", ch: 2, title: "Chọn embedding model bằng số", priority: "core", time: "~1 ngày", status: "pending",
+    purpose: "Bảng xếp hạng công khai đo trên tiếng Anh chung chung. Dữ liệu tài chính tiếng Việt của bạn có thể cho thứ tự hoàn toàn khác.",
+    implement: [
+      "Wrapper thống nhất get_embedder(model_name) — SentenceTransformer hoặc OpenAI",
+      "Thử 3 model: keepitreal/vietnamese-sbert · BAAI/bge-m3 · text-embedding-3-small",
+      "Mỗi model: index vào collection riêng, đo recall@5, recall@20, context_recall, latency",
+      "Kiểm tra giới hạn token đầu vào — chunk size phải nhỏ hơn max model",
+      "Tiền tố query: / passage: cho bge-m3"
+    ],
+    done: [
+      { text: "Bảng 3 model × 6 cột (recall@5, recall@20, context_recall, dim, time_index, local?)" },
+      { text: "Biết giới hạn độ dài model đã chọn, chunk size nhỏ hơn nó" }
+    ],
+    trap: "Nhiều model cần tiền tố query: / passage:. Quên là mất chất lượng mà không có dấu hiệu gì."
+  },
+  {
+    id: "09", ch: 2, title: "Chạy 3 lần, index phải giống hệt", priority: "core", time: "~1 ngày", status: "pending",
+    purpose: "Pipeline index sẽ chạy lại nhiều lần. Nếu mỗi lần nhân đôi số chunk trong Qdrant, retrieval bị nhiễu. Bài này dạy khái niệm idempotent.",
+    implement: [
+      "data/contracts.py: ParsedDoc với validator (content không rỗng)",
+      "doc_id = sha256(file_content)[:16], chunk_id = {doc_id}_{index:04d}",
+      "Xoá chunk cũ theo doc_id trước khi upsert chunk mới",
+      "Tách 3 tầng: MinIO (raw) → Postgres (parsed) → Qdrant (chunks+vectors)",
+      "tests/test_idempotent.py: chạy 2 lần, count và ids phải bằng nhau"
+    ],
+    done: [
+      { text: "Test idempotency xanh" },
+      { text: "Đổi 1 ký tự trong PDF → doc_id đổi → coi là tài liệu mới" },
+      { text: "Chunk rỗng bị chặn bởi schema" }
+    ],
+    trap: "Chunk rỗng hoặc chỉ có khoảng trắng rất dễ lọt. Chúng làm nhiễu kết quả mà không gây lỗi nào."
+  },
+  {
+    id: "10", ch: 2, title: "Xoá tài liệu và đối chiếu", priority: "expand", time: "~1 ngày", status: "pending",
+    purpose: "Báo cáo tài chính bị thu hồi, cập nhật. Nếu không có cơ chế xoá đúng, hệ thống trả lời từ tài liệu đã thu hồi — đây là yêu cầu kiểm toán.",
+    implement: [
+      "Bảng documents(doc_id, status, deleted_at) — soft delete, không xoá record",
+      "data/delete.py: soft_delete(doc_id) — atomic: update Postgres + delete Qdrant",
+      "data/reconcile.py: so sánh pg_ids vs qdrant_ids, báo orphan và missing",
+      "Tự tay gây lệch (xoá vài vector qua Qdrant Dashboard) → test reconcile"
+    ],
+    done: [
+      { text: "Xoá 1 file → search → không còn chunk nào của nó" },
+      { text: "Tự gây lệch → reconcile phát hiện đúng và sửa được" }
+    ],
+    trap: "Với sản phẩm tài chính phải trả lời 'tài liệu này bị thu hồi ngày nào' — đó là yêu cầu kiểm toán."
+  },
+  {
+    id: "11", ch: 2, title: "Thả file rác vào pipeline", priority: "expand", time: "~1 ngày", status: "pending",
+    purpose: "File rác nguy hiểm không phải vì bị từ chối — mà vì được index thành công dưới dạng rác, lọt vào context, gây trả lời sai không có dấu hiệu lỗi.",
+    implement: [
+      "Chuẩn bị 4 file độc: PDF scan · file 500 trang · file tiếng Anh · không phải báo cáo tài chính",
+      "data/quality.py: check_char_ratio() · check_chars_per_page() · check_duplicate_ratio()",
+      "File không qua → chuyển vào MinIO quarantine/, ghi lý do Postgres, không vào index",
+      "python data/quality.py --list-quarantine"
+    ],
+    done: [
+      { text: "Cả 4 file bị chặn hoặc xử lý đúng, không file nào lọt vào index dưới dạng rác" },
+      { text: "Xem được danh sách cách ly kèm lý do" }
+    ],
+    trap: "Không có check 'số ký tự mỗi trang' thì PDF scan lọt — và debug rất lâu ở tầng retrieval trong khi lỗi ở tầng nạp dữ liệu."
+  },
+  {
+    id: "12", ch: 2, title: "Hai đường dữ liệu — số không vào vector DB", priority: "core", time: "~2 ngày", status: "pending",
+    purpose: "Bài thiết kế quan trọng nhất trong 42 bài. Vector search không đảm bảo số tài chính chính xác — tách số liệu ra SQL, nơi số là số thật, không đi qua model lần nào.",
+    implement: [
+      "Bảng financial_facts(ticker, ky, ma_chi_tieu, gia_tri, don_vi, nguon_trang)",
+      "data/extract_facts.py: dùng structured output (tool use) để ép đúng schema",
+      "3 kiểm tra nghiệp vụ: tổng tài sản = nợ + vốn chủ · không trộn riêng lẻ/hợp nhất · biến động < 500%",
+      "Giá cổ phiếu vào bảng riêng với close_adj (đã điều chỉnh) — nguồn: vnstock",
+      "Kiểm tra SELECT ra đúng con số, đối chiếu PDF gốc"
+    ],
+    done: [
+      { text: "SELECT doanh thu thuần 2024 HPG, con số khớp PDF gốc" },
+      { text: "Cố tình đưa số sai → validator bắt được" },
+      { text: "Ghi: trích được bao nhiêu % chỉ tiêu" }
+    ],
+    trap: "Giá chưa điều chỉnh làm chỉ báo sai đúng tại ngày chia cổ tức — nhìn code không thấy gì sai."
+  },
+  {
+    id: "13", ch: 2, title: "Biến script thành pipeline tự chạy", priority: "expand", time: "~2 ngày", status: "pending",
+    purpose: "Bài 6–12 là script chạy tay. Thực tế file mới xuất hiện liên tục. Dagster biến chúng thành pipeline có retry, lịch, audit trail.",
+    implement: [
+      "pipeline/assets.py: raw_pdf → parsed_doc → chunks → embeddings + financial_facts (song song)",
+      "Cấu hình retry (max=3, delay=30s) và lịch chạy daily 6:00",
+      "Sensor phát hiện file mới trong MinIO",
+      "data/RUNBOOK.md: quy trình đổi embedding model — tạo collection mới → rebuild → eval → đổi alias",
+      "Audit trail: click chunk trong Qdrant, trace về asset run và file nguồn"
+    ],
+    done: [
+      { text: "Thả 3 PDF mới vào MinIO → 5 phút sau truy vấn được, không chạm gì" },
+      { text: "Mở Dagster UI, click chunk, thấy đến từ file nào qua bước nào" },
+      { text: "Đã chạy runbook index lại một lần thật, không chỉ viết ra" }
+    ],
+    trap: "Đừng để Dagster chạy embedding không giới hạn song song — tự bắn lỗi quá tải vào API embedding."
+  },
+
+  // ── CHAPTER 3 ──
+  {
+    id: "14", ch: 3, title: "Tìm theo từ khoá + tách từ tiếng Việt", priority: "core", time: "~1 ngày", status: "pending",
+    purpose: "Vector search tìm theo nghĩa nhưng câu 'doanh thu Q3 2024 FPT' chỉ cần khớp từ khoá. BM25 làm điều đó — và bài dạy vấn đề đặc thù tiếng Việt: tách từ sai làm mất toàn bộ lợi thế.",
+    implement: [
+      "rag/retrieval_bm25.py: BM25Retriever với rank_bm25",
+      "Chạy eval chỉ với BM25 thô, ghi số",
+      "Thêm underthesea word_tokenize, chạy lại, ghi số",
+      "Tìm tay 3 câu từ khoá thắng + 3 câu ngữ nghĩa thắng, ghi vào NOTES.md"
+    ],
+    done: [
+      { text: "2 dòng số: BM25 thô vs BM25 + tách từ" },
+      { text: "6 ví dụ cụ thể (3+3) trong NOTES.md" }
+    ],
+    trap: "Nếu không thấy từ khoá thắng ở nhóm tra số, kiểm tra lại golden set có đủ câu nhóm đó chưa."
+  },
+  {
+    id: "15", ch: 3, title: "Ghép hai loại kết quả", priority: "core", time: "~1 ngày", status: "pending",
+    purpose: "Điểm cosine và điểm BM25 nằm trên hai thang khác nhau, không thể cộng trực tiếp. Bài này ghép chúng lại bằng hai cách.",
+    implement: [
+      "rag/fusion.py: weighted_sum_fusion(bm25, vector, alpha=0.5) — chuẩn hoá min-max trước",
+      "rrf_fusion(bm25, vector, k=60) — bỏ điểm, chỉ dùng vị trí: score += 1/(k+rank)",
+      "So sánh cả 2 cách với baseline đơn lẻ từ bài 14",
+      "Kiểm tra 'đoạn đúng trong top-20' cao hơn cả hai đơn lẻ"
+    ],
+    done: [
+      { text: "2 dòng số, chọn 1 cách và ghi lý do" },
+      { text: "top-20 recall cao hơn cả BM25 đơn lẻ và vector đơn lẻ" }
+    ],
+    trap: "Nếu cộng thẳng không chuẩn hoá, BM25 chi phối hoàn toàn (score 12.4 vs cosine 0.72)."
+  },
+  {
+    id: "16", ch: 3, title: "Reranker và bảng số hoàn chỉnh", priority: "core", time: "~1 ngày", status: "pending",
+    purpose: "Top-20 từ bài 15 còn nhiễu. Reranker đọc câu hỏi và từng đoạn cùng lúc để chọn ra 5 đoạn thực sự liên quan — đây là kiến trúc hai tầng chuẩn công nghiệp.",
+    implement: [
+      "BAAI/bge-reranker-v2-m3 (CrossEncoder) — đưa 20 đoạn vào, giữ top-5",
+      "Đặt đoạn điểm cao nhất gần cuối prompt (lost-in-the-middle effect)",
+      "Đo p95 latency riêng của bước reranker",
+      "Hoàn thiện bảng 5 dòng: model trần · vector only · + hybrid · + reranker · + metadata filter"
+    ],
+    done: [
+      { text: "Bảng 5 dòng đầy đủ" },
+      { text: "Nói được: 'ngữ cảnh chính xác tăng từ X lên Y, đổi lại thêm Z ms ở p95'" }
+    ],
+    trap: "Reranker trên CPU tốn 200–800ms. Con số này là chỗ chất lượng và thời gian xung đột trực tiếp lần đầu."
+  },
+  {
+    id: "16b", ch: 3, title: "RAG-Fusion: sinh nhiều truy vấn + RRF", priority: "core", time: "~1.5 ngày", status: "pending",
+    purpose: "Bài 15 gộp BM25+vector cho cùng một truy vấn. RAG-Fusion sinh N truy vấn con, chạy retrieval song song, gộp bằng RRF. Câu phức tạp cần nhiều 'góc nhìn'.",
+    implement: [
+      "rag/multi_query.py: generate_sub_queries(query, n=4) — sinh 4 góc: số liệu · so sánh · ngữ cảnh ngành · sự kiện",
+      "3 nguồn: Qdrant RAG · Postgres SQL · Web search — gán nhãn nguồn trước khi đưa vào LLM",
+      "LangGraph 5 bước: decompose → multi_retrieve (asyncio.gather) → RRF-fuse → analyze → report",
+      "Guard: KHÔNG đưa lời khuyên mua/bán/nắm giữ",
+      "Bảng 2 dòng: single query vs multi-query (N=4)"
+    ],
+    done: [
+      { text: "LangGraph flow chạy end-to-end ≥3 câu HPG thật, report có bảng số + trích nguồn" },
+      { text: "multi_retrieve_node chạy song song — xác nhận bằng đo thời gian" },
+      { text: "Guard từ chối lời khuyên đầu tư hoạt động" }
+    ],
+    trap: "LLM sinh sub-queries có thể drift xa câu gốc. Ràng buộc: tất cả sub-queries phải hỏi về cùng công ty và kỳ."
+  },
+  {
+    id: "17", ch: 3, title: "Nhiều khách hàng dùng chung: tự tấn công", priority: "expand", time: "~1.5 ngày", status: "pending",
+    purpose: "Khi nhiều tổ chức dùng chung hệ thống, dữ liệu công ty A không được lọt sang B. Bài này không chỉ thêm cách ly mà còn tự tấn công để chứng minh nó kín.",
+    implement: [
+      "Thêm tenant_id vào payload mọi chunk, mọi row Postgres, mọi cache key",
+      "Redis cache key: {tenant_id}:{hash(query)} — không chỉ hash query",
+      "Qdrant filter tại query time — không filter sau (bảo mật + chất lượng)",
+      "tests/test_tenant_isolation.py: 3 test — a_cannot_see_b · searching_b_returns_nothing · cache_is_isolated"
+    ],
+    done: [
+      { text: "3 test xanh" },
+      { text: "Đã thử lọc sau khi search và thấy vấn đề" }
+    ],
+    trap: "Nếu cache key chỉ là hash câu hỏi, tenant B nhận nguyên câu trả lời của tenant A. Đây là lỗi thật."
+  },
+  {
+    id: "18", ch: 3, title: "Phân loại câu hỏi + sinh SQL an toàn", priority: "core", time: "~2 ngày", status: "pending",
+    purpose: "'Top 5 mã ROE cao nhất 2024' cần tính toán trên toàn bộ dữ liệu — vector search không thể làm điều đó về nguyên tắc. Chống bịa số là bài toán kiến trúc, không phải prompt.",
+    implement: [
+      "rag/router.py: phân câu thành 4 nhãn — diễn_giải · số_liệu · cả_hai · ngoài_phạm_vi",
+      "Tạo Postgres role chỉ đọc (SELECT only) TRƯỚC khi viết agent",
+      "rag/sql_agent.py: 4 lớp chặn — role readonly · sqlglot parse (chặn INSERT/DROP) · LIMIT 1000 · timeout 5s",
+      "Tự tấn công với 10 prompt: bảng cấm · multi-statement · comment injection · unicode · subquery lồng"
+    ],
+    done: [
+      { text: "'Top 5 mã ROE cao nhất 2024' trả đúng, số khớp Postgres" },
+      { text: "10 prompt tấn công đều bị chặn, ghi kết quả" },
+      { text: "Router phân loại đúng ≥90% trên 30 câu test" }
+    ],
+    trap: "Nếu 10 prompt đều bị chặn ngay lần đầu, bạn chưa tấn công đủ mạnh — thử comment SQL, unicode, truy vấn lồng."
+  },
+
+  // ── CHAPTER 4 ──
+  {
+    id: "19", ch: 4, title: "Ba tool và dùng thử không cần agent", priority: "core", time: "~1.5 ngày", status: "pending",
+    purpose: "Agent sẽ gọi các tool này ở bài sau. Debug tool sai thông qua agent là cơn ác mộng — phải xây và kiểm tra độc lập trước.",
+    implement: [
+      "tools/price.py: get_realtime_price(ticker) — bọc sau PriceProvider interface",
+      "tools/price.py: get_historical_ohlcv(ticker, days) → DataFrame OHLCV, không trùng ngày",
+      "tools/price.py: calculate_indicators(df) — RSI(14), MACD(12,26,9), MA(20,50) — trả TEXT mô tả, không số thô",
+      "tools/cli.py: python -m tools.cli price FPT / ohlcv HPG 30 / indicators VNM",
+      "tests/test_tools.py — mock hoàn toàn, không gọi mạng"
+    ],
+    done: [
+      { text: "CLI chạy cho 5 mã (gồm 2 mã thanh khoản thấp) → kết quả hợp lý" },
+      { text: "RSI đối chiếu TradingView/CafeF → sai lệch < 0.5" },
+      { text: "Test xanh, không cần mạng" }
+    ],
+    trap: "pandas-ta trả NaN im lặng khi không đủ dữ liệu. NaN vào prompt → model bịa, và bạn tìm lỗi ở prompt trong khi lỗi ở dữ liệu."
+  },
+  {
+    id: "20", ch: 4, title: "Hợp đồng lỗi — chữa 90% ca agent lặp vô hạn", priority: "core", time: "~1.5 ngày", status: "pending",
+    purpose: "Khi tool trả [] hoặc raise exception, agent không biết phải làm gì — nên gọi lại mãi mãi. Bài này là bài học phản trực giác nhất: nguyên nhân thật của agent lặp gần như không phải prompt kém.",
+    implement: [
+      "tools/result.py: ToolResult(status, data, message) — status: ok/no_data/invalid_input/upstream_error/rate_limited",
+      "Sửa cả 3 tool trả ToolResult, không bao giờ raise ra ngoài, không trả list rỗng trần",
+      "Quy tắc message: viết như hướng dẫn đồng nghiệp mới — 'đừng gọi lại với cùng params, thay vào đó hãy…'",
+      "tests/test_tool_chaos.py: 5 tình huống — ticker không tồn tại · ngày lễ · HTTP 500 · timeout · rate limited",
+      "tools/registry.py: metadata mỗi tool (version, timeout, cost_hint, side_effect)"
+    ],
+    done: [
+      { text: "5 tình huống → 5 status khác nhau, không tình huống nào raise ra ngoài" },
+      { text: "tests/test_tool_chaos.py xanh" },
+      { text: "Không tool nào trả list rỗng mà không kèm status + message" }
+    ],
+    trap: "Rất muốn viết message chung chung. Nhưng nó là thứ duy nhất model đọc để quyết định bước tiếp — viết như đang hướng dẫn đồng nghiệp mới."
+  },
+  {
+    id: "21", ch: 4, title: "Đóng gói thành MCP server", priority: "expand", time: "~1.5 ngày", status: "pending",
+    purpose: "Tool hiện tại được import trực tiếp. MCP cho phép expose qua server riêng — agent chỉ biết interface, không import code. Đây là bước tách biên giới tool/agent.",
+    implement: [
+      "tools/mcp_server.py: expose 3 tool qua MCP Python SDK",
+      "MCP Inspector: gọi tool bằng UI — kiểm tra ticker hợp lệ/không tồn tại/rỗng",
+      "Cấu hình agent (bài 22+) làm MCP client thay vì import trực tiếp",
+      "Chạy lại eval sau khi chuyển — đảm bảo không tụt điểm"
+    ],
+    done: [
+      { text: "MCP Inspector gọi được cả 3 tool, thấy đúng schema" },
+      { text: "Agent gọi tool qua MCP thay vì import trực tiếp, eval không tụt" }
+    ],
+    trap: "Nếu đang trễ, bỏ bài này. Bài 20 quan trọng hơn bài 21 rất nhiều."
+  },
+
+  // ── CHAPTER 5 ──
+  {
+    id: "22", ch: 5, title: "Graph tuần tự — mốc so sánh", priority: "core", time: "~1.5 ngày", status: "pending",
+    purpose: "Bản đơn giản nhất của agent đầy đủ — luồng cố định không quyết định gì. Mục đích chính: tạo mốc. Mọi kiến trúc phức tạp hơn ở bài 23–26 phải chứng minh bằng số rằng chúng tốt hơn.",
+    implement: [
+      "agents/state.py: TypedDict — ticker, summary, price_data_path (đường dẫn, KHÔNG nhét DataFrame), tech_signals, risk_verdict, report, history, error, step_count",
+      "agents/graph.py: LangGraph 4 node tuần tự — collect → analyze_technical → assess_risk → synthesize",
+      "Node rủi ro: rule if/else đơn giản, không cần model",
+      "Node tổng hợp: output Markdown có trích nguồn [Nguồn: HPG_Q2_2024.pdf, trang 12]",
+      "agents/run.py: entry point 'python -m agents.run FPT'"
+    ],
+    done: [
+      { text: "python -m agents.run FPT → báo cáo hoàn chỉnh có trích nguồn" },
+      { text: "Xuất được ảnh sơ đồ graph PNG" },
+      { text: "Chạy 5 mã không crash; số đã ghi dưới nhãn 'mốc tuần tự' trong NOTES.md" }
+    ],
+    trap: "Nếu nhét bảng dữ liệu giá vào state, bài 27 sẽ fail và bạn mất thời gian tìm nguyên nhân."
+  },
+  {
+    id: "23", ch: 5, title: "Kế hoạch là dữ liệu có schema, không phải văn xuôi", priority: "core", time: "~2 ngày", status: "pending",
+    purpose: "Thay vì hardcode thứ tự bước, để model tự lập kế hoạch theo câu hỏi. Kế hoạch ra JSON có schema — code validate được. 'Model lập kế hoạch, code kiểm tra, rồi thực thi.'",
+    implement: [
+      "agents/planner.py: Step(id, intent, executor, depends_on, expected_output) + Plan(steps, budget_tokens)",
+      "validate_plan(): 5 điều kiện — không vòng lặp · depends_on hợp lệ · executor trong registry · ≤max_steps · ≤budget",
+      "Retry 1 lần: khi plan invalid, gọi model lần 2 với thông báo lỗi cụ thể",
+      "Fallback: sau 2 lần fail → dùng kế hoạch tuần tự mặc định từ bài 22",
+      "In plan JSON cho 3 câu (đơn giản/trung bình/phức hợp) — câu phức phải sinh nhiều bước hơn"
+    ],
+    done: [
+      { text: "3 plan JSON, câu phức hợp sinh nhiều bước hơn" },
+      { text: "Ép model sinh plan có vòng lặp → validator bắt, không crash" },
+      { text: "Kế hoạch mặc định hoạt động khi fail 2 lần" }
+    ],
+    trap: "Model rất hay sinh bước phụ thuộc vào bước không tồn tại — đây là lỗi phổ biến nhất và là lý do validator tồn tại."
+  },
+  {
+    id: "24", ch: 5, title: "Chạy song song — cảm nhận thời gian bị cắt", priority: "core", time: "~1.5 ngày", status: "pending",
+    purpose: "Kế hoạch từ bài 23 có nhiều bước độc lập. Song song cắt thời gian đáng kể. Và một bài học quan trọng về Python: async không tự động nghĩa là song song.",
+    implement: [
+      "agents/executor.py: topological_sort(steps) → danh sách tầng, mỗi tầng asyncio.gather",
+      "Hàm blocking (đọc PDF, reranker) bọc bằng asyncio.run_in_executor(None, fn, args)",
+      "Log timestamp đầu mỗi bước — 2 bước cùng tầng bắt đầu cách nhau < 50ms = đang song song",
+      "Bảng: tuần tự (bài 22) vs song song × (p50, p95, tổng token TB)"
+    ],
+    done: [
+      { text: "Bảng tuần tự vs song song × (p50, p95, tổng token)" },
+      { text: "Log chứng minh 3 bước chạy đồng thời (timestamp bắt đầu gần nhau)" }
+    ],
+    trap: "Bài rất dễ tưởng đã xong. Cách duy nhất để biết: log timestamp."
+  },
+  {
+    id: "25", ch: 5, title: "Lập lại kế hoạch + phá hệ thống có chủ đích", priority: "core", time: "~2 ngày", status: "pending",
+    purpose: "Agent ở bài 22–24 chạy tốt khi mọi thứ suôn sẻ. Bài này xây khả năng lập lại kế hoạch khi bước thất bại — và định nghĩa 'đường thất bại tử tế'.",
+    implement: [
+      "agents/replanner.py: nhận plan gốc + danh sách bước thất bại → gọi model sinh plan sửa đổi",
+      "Giới hạn cứng: tối đa 2 lần lập lại · ≤12 bước tổng · không vượt token budget · timeout toàn phiên",
+      "Đường thoát tử tế: khi chạm trần → xuất báo cáo một phần, tuyên bố rõ phần thiếu",
+      "Chặn gọi lặp: kiểm tra (executor, params) trong state.history trước khi chạy",
+      "tests/test_agent_chaos.py: 5 tình huống — Qdrant tắt · timeout · mã mới (<14 phiên) · mã không tồn · ngày lễ"
+    ],
+    done: [
+      { text: "5 tình huống: không lặp vô hạn, không crash, ra output có ý nghĩa" },
+      { text: "tests/test_agent_chaos.py xanh" },
+      { text: "Số: tỉ lệ lập lại (%) và tỉ lệ chạm trần (%) trên 30 câu" }
+    ],
+    trap: "Rất dễ để replanner sinh kế hoạch y hệt cái cũ. Phải truyền lịch sử bước đã thất bại vào, và kiểm tra plan mới có khác không."
+  },
+  {
+    id: "26", ch: 5, title: "So 3 kiến trúc — và dám kết luận trung thực", priority: "core", time: "~1 ngày", status: "pending",
+    purpose: "Bài dạy nhiều nhất trong chặng agent — không phải kỹ thuật mà là cách ra quyết định: chọn kiến trúc theo số liệu, không theo độ phức tạp. Kể cả khi số nói 2 tuần vừa xây là dư.",
+    implement: [
+      "evals/compare_architectures.py",
+      "3 kiến trúc: arch_a (RAG trực tiếp) · arch_b (graph tuần tự) · arch_c (planning+parallel+replan)",
+      "5 cột: quality_score · latency_p95 · total_tokens · cost_usd · failure_rate",
+      "Bảng 1: tổng thể 25 câu. Bảng 2: chia theo nhóm câu (simple/compound/multi_source)",
+      "Trả lời: kiến trúc C thắng nhóm nào? Có nên routing không? → cập nhật hệ thống theo số"
+    ],
+    done: [
+      { text: "Bảng 3×5, có bảng chia theo nhóm câu hỏi" },
+      { text: "Hệ thống cuối dùng kiến trúc số liệu chỉ ra, không phải kiến trúc phức tạp nhất" }
+    ],
+    trap: "Bạn sẽ có thiên hướng bảo vệ thứ mình vừa xây. Để số liệu quyết định."
+  },
+  {
+    id: "27", ch: 5, title: "Tạm dừng chờ người — sống qua việc restart server", priority: "core", time: "~1.5 ngày", status: "pending",
+    purpose: "Agent đề xuất hành động — người dùng cần duyệt trước khi thực thi. Hiện tại state trong bộ nhớ: khi server restart, phiên chờ duyệt biến mất. Thiết kế state là thiết kế khả năng khôi phục.",
+    implement: [
+      "Bảng agent_sessions(session_id, ticker, state JSONB, status, expires_at, audit_log JSONB)",
+      "agents/checkpointer.py: save_checkpoint + load_checkpoint",
+      "LangGraph interrupt() tại bước trước hành động",
+      "3 endpoint: GET /sessions/pending · POST /sessions/{id}/approve · POST /sessions/{id}/reject",
+      "Timeout 5 phút; background task kiểm tra 60s một lần"
+    ],
+    done: [
+      { text: "Test then chốt: chạy tới interrupt → docker restart postgres → phiên vẫn còn → đồng ý → tiếp đúng chỗ" },
+      { text: "2 phiên chờ song song không lẫn nhau" },
+      { text: "Đồng ý sau 6 phút → bị từ chối vì timeout" }
+    ],
+    trap: "Nếu fail, đừng sửa bằng cách ép serialize — sửa bằng cách đưa dữ liệu lớn ra khỏi state."
+  },
+  {
+    id: "28", ch: 5, title: "Memory: khi nào ghi, và xử lý mâu thuẫn", priority: "core", time: "~2 ngày", status: "pending",
+    purpose: "Người dùng nói sở thích ở phiên 1. Phiên 2 không nói lại — nhưng hệ thống nên nhớ. Phần khó của memory không phải lưu — mà là quyết định khi nào ghi và xử lý khi tự mâu thuẫn.",
+    implement: [
+      "Bảng user_memory(tenant_id, user_id, key, value JSONB, confidence, source_message, superseded_by)",
+      "memory/extractor.py: extract_preferences(conversation) → list[MemoryItem]",
+      "Cửa lọc: chỉ ghi khi confidence ≥ 0.7",
+      "Xử lý mâu thuẫn: đánh dấu superseded_by, không XOÁ — giữ cho audit",
+      "Chạy extractor SAU khi phiên kết thúc, không trong phiên (tránh ghi câu giả định)"
+    ],
+    done: [
+      { text: "Phiên 1 nói sở thích → bảng có 2 record đúng" },
+      { text: "Phiên 2 (session mới) → hệ thống biết danh mục, báo cáo đổi giọng" },
+      { text: "Phiên 3 thay đổi sở thích → record cũ superseded, vẫn còn trong DB" },
+      { text: "Câu mơ hồ → không được ghi" }
+    ],
+    trap: "Nếu chạy extractor giữa phiên, câu giả định ('nếu tôi ưa rủi ro cao thì sao?') bị ghi thành sở thích thật."
+  },
+  {
+    id: "29", ch: 5, title: "Memory: quên đi", priority: "core", time: "~1.5 ngày", status: "pending",
+    purpose: "Memory ở bài 28 chỉ ghi thêm — sau vài trăm phiên, ngữ cảnh bị nhồi đầy sở thích cũ. Memory chỉ ghi thêm mà không quên sẽ tự đầu độc.",
+    implement: [
+      "Qdrant collection episodic_memory: mỗi phiên lưu câu hỏi + tóm tắt kế hoạch + kết luận + feedback",
+      "3 lớp quên: thời hạn 90 ngày · điểm suy giảm exp(-days/30) · giới hạn top-3 vào ngữ cảnh",
+      "memory/procedural.py: sinh rule từ feedback người dùng — chỉ ghi khi có tín hiệu ngoài",
+      "Giả lập 200 item memory → ngữ cảnh vẫn ≤3 item, đo quality không tụt"
+    ],
+    done: [
+      { text: "20 phiên giả lập → lấy về đúng những lần liên quan" },
+      { text: "Bật/tắt episodic memory → có số cho biết nó giúp hay không" },
+      { text: "Nhồi 200 item → ngữ cảnh không phình, chất lượng không tụt" }
+    ],
+    trap: "Episodic memory rất dễ giảm chất lượng vì dạy model sai hướng. Phải đo, đừng giả định."
+  },
+  {
+    id: "30", ch: 5, title: "Đo memory + test rò rỉ giữa người dùng", priority: "core", time: "~1.5 ngày", status: "pending",
+    purpose: "Memory có hai lỗi thầm lặng: nhớ sai thứ chưa từng nói (bịa sở thích) và rò rỉ sở thích A sang B. Nhớ sai nguy hiểm hơn không nhớ.",
+    implement: [
+      "evals/memory_multi_session.yaml: 10 tình huống × 3 phiên",
+      "Đo 2 chỉ số: Recall (nhớ đúng thứ đã nói) + Precision (không bịa thứ chưa nói)",
+      "tests/test_memory_isolation.py: 3 test — a không thấy memory b · sở thích giống nhau không lẫn · no cross-tenant",
+      "Ghi vào NOTES.md: memory_recall = X% và memory_precision = Y%"
+    ],
+    done: [
+      { text: "10 tình huống chạy tự động, ra 2 con số" },
+      { text: "Test cách ly xanh cả 3 trường hợp" }
+    ],
+    trap: "Với sản phẩm tài chính, nhớ sai sở thích chưa từng nói → khuyến nghị lệch mà người dùng không hiểu tại sao."
+  },
+
+  // ── CHAPTER 6 ──
+  {
+    id: "31", ch: 6, title: "Streaming — chữ hiện từng từ thay vì chờ hết", priority: "core", time: "~1 ngày", status: "pending",
+    purpose: "Câu trả lời mất 8–10 giây. Spinner im lặng rồi text xuất hiện một lần — trải nghiệm tệ. Streaming giúp người dùng cảm thấy hệ thống nhanh hơn thực tế.",
+    implement: [
+      "api/routes.py: StreamingResponse với media_type='text/event-stream', header X-Accel-Buffering: no",
+      "SSE format: event: + data: + \\n\\n. Gửi status event trước content",
+      "Heartbeat mỗi 15s: ': heartbeat\\n\\n' — tránh proxy/browser timeout",
+      "Phát hiện client ngắt: asyncio.CancelledError → cancel_running_task()",
+      "Streamlit: st.write_stream(), test với curl --no-buffer"
+    ],
+    done: [
+      { text: "curl --no-buffer thấy chunk xuất hiện từng cái, không đợi hết" },
+      { text: "Ngắt kết nối giữa chừng → server không tiếp tục gọi model, token usage dừng" }
+    ],
+    trap: "Quên X-Accel-Buffering: no khi có nginx ở giữa — buffer gom tất cả rồi trả cùng lúc, streaming vô nghĩa."
+  },
+  {
+    id: "32", ch: 6, title: "Cache: đúng và sai ở đâu", priority: "core", time: "~1.5 ngày", status: "pending",
+    purpose: "Cache sai nguy hiểm hơn không cache — đặc biệt với dữ liệu tài chính. Bài này xây 2-tier cache và thực nghiệm khi nào vector similarity cache gây hại.",
+    implement: [
+      "core/cache.py: CacheKey(tenant_id, ticker, normalized_question, prompt_version, model_version)",
+      "Tier 1 (exact): SHA-256 → cache hit chắc chắn đúng",
+      "Tier 2 (vector): embedding câu hỏi → tìm câu tương tự. PHẢI trích ticker trước, không chỉ cosine",
+      "TTL: 2 phút khi thị trường mở (9:00–14:45), 30 phút ngoài giờ",
+      "Demo HPG vs HSG: câu về HSG sau khi cache HPG → không trả nhầm"
+    ],
+    done: [
+      { text: "HPG vs HSG: không trả nhầm kết quả" },
+      { text: "Thay prompt version → cache bị invalidate đúng" }
+    ],
+    trap: "Vector cache dựa thuần cosine similarity không đủ cho dữ liệu tài chính theo mã cụ thể."
+  },
+  {
+    id: "33", ch: 6, title: "Chaos engineering — phá hệ thống có chủ đích", priority: "core", time: "~1.5 ngày", status: "pending",
+    purpose: "Hệ thống chưa biết nó thất bại ra sao trong thực tế. Phá có kiểm soát thì biết trước và chuẩn bị. Phá không kiểm soát trong production thì người dùng phát hiện trước.",
+    implement: [
+      "tests/test_chaos.py: 5 tình huống — Qdrant tắt · Redis tắt · Postgres tắt · Price provider down · Price tool timeout",
+      "Điền cột 'expected' TRƯỚC khi tắt service nào",
+      "Circuit breaker: khi service fail > X lần trong Y giây → mở circuit, ngưng gọi",
+      "Retry với jitter: base * 2**attempt + random(0,1) — không retry đồng loạt",
+      "Time budget per request: khi gần hết → trả partial report thay vì hard timeout"
+    ],
+    done: [
+      { text: "5 tình huống: không có 500 cứng, mỗi tình huống ra output có ý nghĩa" },
+      { text: "Điền được cột 'thực tế' sau khi test" }
+    ],
+    trap: "'Graceful degradation' không có nghĩa trả câu trả lời không đầy đủ mà không nói. Phải nói rõ phần nào thiếu."
+  },
+  {
+    id: "34", ch: 6, title: "Load test — tìm điểm nghẽn thật", priority: "expand", time: "~1 ngày", status: "pending",
+    purpose: "Không biết hệ thống chịu được bao nhiêu người dùng đồng thời. Với hệ thống AI, điểm nghẽn gần như không bao giờ là CPU — mà là rate limit API hoặc reranker.",
+    implement: [
+      "k6 script: 3 giai đoạn — warmup (10 VU) · steady state (25 VU) · stress (50 VU)",
+      "Threshold: p95 < 10s, error rate < 1%",
+      "2 kịch bản: cold cache (câu khác nhau) và hot cache (10 câu xoay vòng)",
+      "Tìm điểm rate-limit, không phải CPU — xem log HTTP 429, reranker bottleneck"
+    ],
+    done: [
+      { text: "Bảng: cold vs hot × (p50, p95, p99, throughput, điểm nghẽn)" },
+      { text: "Nói được: 'điểm nghẽn là X, không phải CPU, tìm ra bằng trace'" }
+    ],
+    trap: "Scale thêm instance khi chưa biết điểm nghẽn là lãng phí — nếu nghẽn là rate limit API thì vô ích."
+  },
+  {
+    id: "35", ch: 6, title: "Enterprise: SSO, audit log, quota", priority: "expand", time: "~1.5 ngày", status: "pending",
+    purpose: "Khách hàng doanh nghiệp yêu cầu ba thứ không thương lượng: SSO, audit trail, kiểm soát chi phí. Một trong ba thiếu → không ký được hợp đồng.",
+    implement: [
+      "Keycloak local: 3 role — analyst (query only) · approver (bài 27) · admin (quản lý tenant)",
+      "Audit log append-only: REVOKE UPDATE, DELETE ON audit_log FROM app_user",
+      "Tenant quota Redis: quota:{tenant_id}:{today} → incr, expire 86400, raise 429 khi vượt",
+      "MinIO event webhook: file mới upload → trigger Dagster auto-index"
+    ],
+    done: [
+      { text: "Analyst không gọi được approve endpoint (403, không phải 401)" },
+      { text: "Query → audit log → không thể xoá dù là admin" },
+      { text: "Vượt quota → 429 rõ ràng" }
+    ],
+    trap: "Dùng DELETE để dọn log cũ là phá vỡ toàn bộ mục đích audit. Dùng partition archiving."
+  },
+  {
+    id: "36", ch: 6, title: "Deploy lên VM thật — cổng ra production", priority: "core", time: "~2 ngày", status: "pending",
+    purpose: "Chạy trên máy dev không đủ. Deploy lên VM thật bằng Terraform, Dockerfile multi-stage, và CI/CD gate: không deploy nếu eval tụt.",
+    implement: [
+      "Dockerfile multi-stage: builder (uv sync --frozen) → runtime (không có dev deps)",
+      "Secret không được bake vào image — inject qua env vars hoặc secret manager",
+      "GET /health/live (process còn sống) + GET /health/ready (check Qdrant/Postgres/Redis)",
+      "CI/CD: test → build → eval → deploy. Bước eval: exit code ≠ 0 → không deploy",
+      "Terraform: VM, security group, volume, remote state (S3 hoặc TF Cloud)"
+    ],
+    done: [
+      { text: "git push → pipeline chạy → image build → eval pass → deploy tự động" },
+      { text: "Ép eval fail → pipeline dừng, không deploy" },
+      { text: "Secret không có trong image, inject lúc runtime" }
+    ],
+    trap: "Readiness check Qdrant bị timeout → orchestrator restart container liên tục dù hoàn toàn khoẻ. Timeout ≤ 2s."
+  },
+
+  // ── CHAPTER 7 ──
+  {
+    id: "37", ch: 7, title: "Trace và đi tìm bước đắt nhất", priority: "core", time: "~1.5 ngày", status: "pending",
+    purpose: "Agent không có đường thực thi cố định — không thể suy ra bước nào chậm bằng đọc code. Cần trace để quan sát từng bước thật sự mất bao lâu và bao nhiêu token.",
+    implement: [
+      "LangSmith hoặc Phoenix (Arize) local — bật LANGCHAIN_TRACING_V2",
+      "Gắn nhãn nghiệp vụ tay vào mọi bước: ticker, plan_id, prompt_version, used_cache, replan_count",
+      "Chạy 50 request, trả lời 5 câu bằng số: bước chậm nhất · tốn token nhất · tiền p95 · % replan · % chạm trần",
+      "Endpoint phản hồi người dùng: nhận run_id + score, gắn vào trace"
+    ],
+    done: [
+      { text: "5 câu trên đều có số từ LangSmith" },
+      { text: "Lọc được trace theo điều kiện nghiệp vụ (ví dụ: HPG bị chạm trần số bước tuần này)" }
+    ],
+    trap: "Việc gắn nhãn quan trọng hơn việc bật tracing. Hàng nghìn bước vô danh không lọc được."
+  },
+  {
+    id: "38", ch: 7, title: "Chọn model theo việc — cắt tiền bằng số", priority: "core", time: "~1 ngày", status: "pending",
+    purpose: "Dùng model mạnh nhất cho mọi bước là lãng phí. Bài này dùng trace từ bài 37 để xác định bước nào có thể dùng model rẻ hơn — rồi đo tiết kiệm được bao nhiêu % mà chất lượng tụt trong ngưỡng nhiễu.",
+    implement: [
+      "Sort spans trong LangSmith theo total_tokens giảm dần, liệt kê 3–5 bước tốn nhất",
+      "STEP_MODEL_MAP: classify/extract_memory → claude-haiku-4-5; synthesize/replan → claude-sonnet-4-5",
+      "Bảng ≥3 cấu hình: all-sonnet · routing haiku/sonnet · all-qwen3:8b-local",
+      "Prefix caching: phần bất biến lên đầu prompt, kiểm tra cache_read_input_tokens > 0 trong response"
+    ],
+    done: [
+      { text: "Bảng ≥3 cấu hình × (tiền/request, chất lượng, latency p95)" },
+      { text: "Nói được: 'tiền giảm X% với chất lượng tụt Y điểm (trong ngưỡng nhiễu bài 5)'" }
+    ],
+    trap: "Model rẻ hỏng ở tuân thủ định dạng trước — nếu classifier trả nhãn sai format, đã hạ quá sâu."
+  },
+  {
+    id: "39", ch: 7, title: "Bộ đo tự động mỗi đêm + giả lập model đổi âm thầm", priority: "expand", time: "~1 ngày", status: "pending",
+    purpose: "Nhà cung cấp model cập nhật định kỳ không thông báo. Hành vi thay đổi, chất lượng tụt — không có exception, không có log lỗi. Với hệ thống dùng model, không đổi gì cũng có thể tệ đi.",
+    implement: [
+      ".github/workflows/nightly-eval.yml: chạy make eval mỗi đêm 22:00 UTC",
+      "evals/thresholds.py: THRESHOLDS với ngưỡng cảnh báo từ bài 5",
+      "Script commit kết quả vào evals/history/; GitHub Actions email khi exit code 1",
+      "Vẽ đồ thị trend sau ≥3 đêm — matplotlib, lưu PNG",
+      "Giả lập: đổi model synthesis xuống yếu hơn, push, đợi nightly → email cảnh báo phải đến"
+    ],
+    done: [
+      { text: "Chạy tự động 3 đêm liên tiếp, có lịch sử" },
+      { text: "Giả lập đổi model → cảnh báo nổ" }
+    ],
+    trap: "Bộ đo đêm tốn tiền nếu bộ câu lớn. Dùng model chấm điểm local, cache vector, tách bộ đo nhẹ (mỗi PR) khỏi đầy đủ (mỗi đêm)."
+  },
+
+  // ── CHAPTER 8 ──
+  {
+    id: "40", ch: 8, title: "README dẫn bằng số", priority: "interview", time: "~1.5 ngày", status: "pending",
+    purpose: "Interviewer mở repo trước buổi gặp. Họ đọc 2 phút. Nếu không thấy số thì không thấy gì cả.",
+    implement: [
+      "Thứ tự: mô tả 1 câu → sơ đồ kiến trúc → bảng benchmark 5 dòng (bài 16+18) → bảng so 3 kiến trúc (bài 26) → bảng tiền trước/sau (bài 38) → load test p95 (bài 34) → memory stats (bài 30)",
+      "make demo: docker compose up → seed 3 PDF HPG → hệ thống lên trong 5 phút",
+      "Nhờ người khác clone repo và thử make demo"
+    ],
+    done: [
+      { text: "Người khác clone repo, make demo, có hệ thống chạy trong 5 phút" },
+      { text: "README có ≥5 bảng số" }
+    ],
+    trap: "Đừng liệt kê 20 công nghệ ở đầu README. Liệt kê 5 con số."
+  },
+  {
+    id: "41", ch: 8, title: "DECISIONS.md — 10 quyết định", priority: "interview", time: "~1 ngày", status: "pending",
+    purpose: "Câu hỏi phỏng vấn 'tại sao chọn X không chọn Y' sẽ xuất hiện. DECISIONS.md là câu trả lời chuẩn bị sẵn, đồng thời chứng minh bạn đã thật sự suy nghĩ.",
+    implement: [
+      "10 quyết định: parse PDF · chunking · embedding model · hybrid fusion · kiến trúc agent (bài 26) · nơi lưu memory · model routing · 1 quyết định làm sai rồi sửa · + 2 từ NOTES.md",
+      "Format: Chọn · Đã cân · Vì sao · Đánh đổi · Ngày — 5 dòng, không hơn",
+      "Mục 'Known limitations' từ BLOCKED.md, kèm ước tính thời gian sửa"
+    ],
+    done: [
+      { text: "10 quyết định, mỗi cái có 'đánh đổi' rõ ràng" },
+      { text: "Có ít nhất 1 quyết định ghi lại việc chọn sai và sửa" }
+    ],
+    trap: "Quyết định không có phần 'đánh đổi' thì chỉ là ghi chép. Phần đánh đổi mới chứng minh bạn đã cân nhắc."
+  },
+  {
+    id: "42", ch: 8, title: "Video 3 phút + luyện nói", priority: "interview", time: "~1.5 ngày", status: "pending",
+    purpose: "Nhiều vòng phỏng vấn yêu cầu demo trực tiếp hoặc video trước. 3 phút là đủ — nếu cần hơn, script chưa tốt.",
+    implement: [
+      "Script: [0:00–0:30] hỏi mã → kế hoạch · [0:30–1:30] 3 bước song song · [1:30–2:00] dừng chờ → đồng ý · [2:00–3:00] báo cáo + mở trace chỉ cost + latency",
+      "Quay liên tục, không cắt ghép",
+      "Luyện 5 câu bằng miệng: vẽ kiến trúc 3 phút · bảng benchmark 60s · kiến trúc agent 90s · lỗi cache HPG/HSG 60s · điểm yếu hệ thống 60s"
+    ],
+    done: [
+      { text: "Video 3 phút không cắt ghép" },
+      { text: "5 câu nói trơn trong thời lượng, có số trong mỗi câu" },
+      { text: "Người ngoài ngành hiểu được hệ thống làm gì trong 30 giây đầu" }
+    ],
+    trap: "Đừng quay video giải thích code. Quay video hệ thống đang làm việc."
+  }
+];
+
+// ── RENDER ──
+const root = document.getElementById('lessons-root');
+
+CHAPTERS.forEach(ch => {
+  const lessons = LESSONS.filter(l => l.ch === ch.id);
+  const doneCount = lessons.filter(l => l.status === 'done').length;
+
+  const section = document.createElement('section');
+  section.className = 'chapter-section';
+  section.dataset.ch = ch.id;
+  section.id = ch.anchor;
+
+  section.innerHTML = `
+    <div class="chapter-header">
+      <div class="ch-accent"></div>
+      <div class="ch-meta">
+        <div class="ch-eyebrow">CH.0${ch.id} · ${ch.weeks}</div>
+        <div class="ch-title">${ch.title}</div>
+        <div class="ch-subtitle">${ch.subtitle}</div>
+      </div>
+      <div class="ch-stats">
+        <span class="ch-stat">${ch.count} bài</span>
+        <span class="ch-stat" style="color:var(--done)">${doneCount} / ${ch.count} xong</span>
+      </div>
+    </div>
+    <div class="lessons-grid" id="grid-ch${ch.id}"></div>
+  `;
+  root.appendChild(section);
+
+  const grid = section.querySelector('.lessons-grid');
+  lessons.forEach(l => {
+    const card = document.createElement('div');
+    card.className = 'lesson-card';
+    const priorityLabel = l.priority === 'core' ? '🔴 Lõi' : l.priority === 'expand' ? '🟡 Mở rộng' : '⚪ Portfolio';
+    const priorityClass = `badge-${l.priority}`;
+    const statusLabel = l.status === 'done' ? 'Xong' : 'Chưa làm';
+    const statusClass = l.status === 'done' ? 'badge-done' : 'badge-pending';
+
+    const doneItems = l.done.map(d => {
+      const isDone = typeof d === 'object' ? d.done : false;
+      const text = typeof d === 'object' ? d.text : d;
+      return `<li class="${isDone ? 'done-item' : ''}">${text}</li>`;
+    }).join('');
+
+    const implItems = l.implement.map(i => `<li>${i}</li>`).join('');
+
+    card.innerHTML = `
+      <div class="card-top-bar"></div>
+      <div class="card-header">
+        <div class="card-num">B.${l.id}</div>
+        <div class="card-info">
+          <div class="card-title">${l.title}</div>
+          <div class="card-meta">
+            <span class="badge ${priorityClass}">${priorityLabel}</span>
+            <span class="badge ${statusClass}">${statusLabel}</span>
+            <span class="card-time">${l.time}</span>
+          </div>
+        </div>
+        <svg class="card-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="4,6 8,10 12,6"/>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-section">
+          <div class="card-section-label">Mục đích</div>
+          <p class="card-section-text">${l.purpose}</p>
+        </div>
+        <div class="card-section">
+          <div class="card-section-label">Làm gì</div>
+          <ul class="card-list">${implItems}</ul>
+        </div>
+        <div class="card-section">
+          <div class="card-section-label">Xong khi</div>
+          <ul class="card-list done-list">${doneItems}</ul>
+        </div>
+        <div class="card-section">
+          <div class="card-section-label">Cái bẫy</div>
+          <div class="trap-box"><p>${l.trap}</p></div>
+        </div>
+      </div>
+    `;
+
+    card.querySelector('.card-header').addEventListener('click', () => {
+      card.classList.toggle('expanded');
+    });
+
+    grid.appendChild(card);
+  });
+});
+</script>

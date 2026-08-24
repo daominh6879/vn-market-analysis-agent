@@ -1,0 +1,258 @@
+# Golden evaluation dataset — HPG (Hòa Phát)
+# Nguồn: HPG_KQKD.xls | HPG_CDKT.xls | HPG_LCTT.xls | HPG_BCTC_Tom_Tat.xls
+#         20260327_-_HPG_-_BCTC_Cong_ty_me_sau_kiem_toan_nam_2025_1774869041.pdf
+# Đơn vị XLS: tỷ đồng | Đơn vị PDF: VND nguyên
+# Ghi chú: XLS = BCTC hợp nhất; PDF = BCTC công ty mẹ riêng lẻ
+
+questions:
+
+  # ── table_lookup (8) ────────────────────────────────────────────────────────
+  # Số nằm trong ô bảng, không có từ khoá ngữ nghĩa bao quanh.
+  # Semantic search dễ trả về đoạn văn giải thích thay vì đúng ô.
+
+  - id: q01
+    question: "Chi phí lãi vay của HPG (hợp nhất) năm 2025 là bao nhiêu?"
+    answer: "3.114,86 tỷ đồng"
+    source_page: 1
+    source_doc: "HPG_KQKD.xls"
+    group: table_lookup
+    indexed: false  # XLS hợp nhất — chưa index, bật lại sau Bài 12
+
+  - id: q02
+    question: "Hàng tồn kho của HPG (hợp nhất) tại ngày 31/03/2026 (Q1-2026) là bao nhiêu?"
+    answer: "43.515,59 tỷ đồng"
+    source_page: 1
+    source_doc: "HPG_CDKT.xls"
+    group: table_lookup
+    indexed: false  # XLS hợp nhất — chưa index
+
+  - id: q03
+    question: "Lãi cơ bản trên cổ phiếu (EPS) của HPG năm 2024 là bao nhiêu đồng?"
+    answer: "1.751 đồng/cổ phiếu"
+    source_page: 1
+    source_doc: "HPG_KQKD.xls"
+    group: table_lookup
+    indexed: false  # XLS hợp nhất — chưa index
+
+  - id: q04
+    question: "Lợi nhuận sau thuế thuộc về cổ đông thiểu số của HPG (hợp nhất) năm 2022 là bao nhiêu?"
+    answer: "-39,08 tỷ đồng (lỗ)"
+    source_page: 1
+    source_doc: "HPG_KQKD.xls"
+    group: table_lookup
+    indexed: false  # XLS hợp nhất — chưa index
+
+  - id: q05
+    question: "Nguyên giá tài sản cố định hữu hình của HPG (hợp nhất) tại ngày 30/06/2026 (Q2-2026) là bao nhiêu?"
+    answer: "186.817,97 tỷ đồng"
+    source_page: 1
+    source_doc: "HPG_CDKT.xls"
+    group: table_lookup
+    indexed: false  # XLS hợp nhất — chưa index
+
+  - id: q06
+    question: "Vay và nợ thuê tài chính ngắn hạn của HPG (hợp nhất) tại ngày 30/09/2025 (Q3-2025) là bao nhiêu?"
+    answer: "68.482,38 tỷ đồng"
+    source_page: 1
+    source_doc: "HPG_CDKT.xls"
+    group: table_lookup
+    indexed: false  # XLS hợp nhất — chưa index
+
+  - id: q07
+    question: "Tiền thu lãi cho vay, cổ tức và lợi nhuận được chia của HPG (hợp nhất) năm 2025 trong báo cáo lưu chuyển tiền tệ là bao nhiêu?"
+    answer: "1.237,21 tỷ đồng"
+    source_page: 1
+    source_doc: "HPG_LCTT.xls"
+    group: table_lookup
+    indexed: false  # XLS hợp nhất — chưa index
+
+  - id: q08
+    question: "Đầu tư tài chính dài hạn (khoản đầu tư vào công ty con) của Công ty mẹ HPG tại ngày 31/12/2025 là bao nhiêu?"
+    answer: "97.018.349.440.000 VND (khoảng 97.018 tỷ đồng)"
+    source_page: 5
+    source_doc: "20260327_-_HPG_-_BCTC_Cong_ty_me_sau_kiem_toan_nam_2025_1774869041.pdf"
+    group: table_lookup
+
+  # ── text_interpretation (5) ─────────────────────────────────────────────────
+  # Đáp án nằm trong phần thuyết minh văn xuôi, không phải số trong bảng.
+
+  - id: q09
+    question: "Tổng số nhân viên của Công ty mẹ HPG tại ngày 31/12/2025 là bao nhiêu người và thay đổi thế nào so với năm 2024?"
+    answer: "131 người, giảm so với 154 người năm 2024"
+    source_page: 10
+    source_doc: "20260327_-_HPG_-_BCTC_Cong_ty_me_sau_kiem_toan_nam_2025_1774869041.pdf"
+    group: text_interpretation
+
+  - id: q10
+    question: "Hoạt động kinh doanh chính của Công ty mẹ HPG trong năm 2025 là gì?"
+    answer: "Kinh doanh dịch vụ cho thuê văn phòng, quảng cáo, dịch vụ tư vấn quản lý và đầu tư tài chính"
+    source_page: 11
+    source_doc: "20260327_-_HPG_-_BCTC_Cong_ty_me_sau_kiem_toan_nam_2025_1774869041.pdf"
+    group: text_interpretation
+
+  - id: q11
+    question: "HPG niêm yết trên sàn giao dịch chứng khoán nào, với mã gì và từ ngày nào?"
+    answer: "Sở Giao dịch Chứng khoán TP. Hồ Chí Minh (HOSE), mã chứng khoán HPG, từ ngày 15 tháng 11 năm 2007"
+    source_page: 10
+    source_doc: "20260327_-_HPG_-_BCTC_Cong_ty_me_sau_kiem_toan_nam_2025_1774869041.pdf"
+    group: text_interpretation
+
+  - id: q12
+    question: "Kế toán trưởng của HPG ký báo cáo tài chính riêng năm 2025 là ai và báo cáo được lập vào ngày nào?"
+    answer: "Bà Phạm Thị Kim Oanh, Kế toán trưởng. Báo cáo lập ngày 24 tháng 3 năm 2026"
+    source_page: 6
+    source_doc: "20260327_-_HPG_-_BCTC_Cong_ty_me_sau_kiem_toan_nam_2025_1774869041.pdf"
+    group: text_interpretation
+
+  - id: q13
+    question: "Giấy Chứng nhận Đăng ký Kinh doanh lần đầu của HPG mang số hiệu gì, do cơ quan nào cấp và vào ngày nào?"
+    answer: "Số 0503000008, do Sở Kế hoạch và Đầu tư Tỉnh Hưng Yên cấp ngày 26 tháng 10 năm 2001"
+    source_page: 10
+    source_doc: "20260327_-_HPG_-_BCTC_Cong_ty_me_sau_kiem_toan_nam_2025_1774869041.pdf"
+    group: text_interpretation
+
+  # ── multi_period (4) ────────────────────────────────────────────────────────
+  # Cần ghép số liệu từ nhiều kỳ; một lần truy vấn không đủ.
+
+  - id: q14
+    question: "Lợi nhuận sau thuế (hợp nhất) của HPG thay đổi như thế nào từ năm 2023 đến năm 2025?"
+    answer: "Tăng từ 6.800,39 tỷ (2023) lên 15.514,93 tỷ (2025), tăng 128,1%"
+    source_page: 1
+    source_doc: "HPG_KQKD.xls"
+    group: multi_period
+    indexed: false  # XLS hợp nhất — chưa index
+
+  - id: q15
+    question: "Chi phí quản lý doanh nghiệp của HPG (hợp nhất) qua 4 năm 2022–2025 có xu hướng như thế nào?"
+    answer: "Tăng liên tục từ 1.019,44 tỷ (2022) → 1.307,29 tỷ (2023) → 1.545,52 tỷ (2024), sau đó giảm nhẹ xuống 1.436,54 tỷ (2025)"
+    source_page: 1
+    source_doc: "HPG_KQKD.xls"
+    group: multi_period
+    indexed: false  # XLS hợp nhất — chưa index
+
+  - id: q16
+    question: "Tiền và tương đương tiền của HPG (hợp nhất) biến động như thế nào qua 4 quý từ Q3-2025 đến Q2-2026?"
+    answer: "Q3-2025: 9.092,56 tỷ → Q4-2025: 8.300,89 tỷ → Q1-2026: 11.455,23 tỷ → Q2-2026: 9.782,06 tỷ; dao động trong vùng 8.300–11.455 tỷ"
+    source_page: 1
+    source_doc: "HPG_CDKT.xls"
+    group: multi_period
+    indexed: false  # XLS hợp nhất — chưa index
+
+  - id: q17
+    question: "Tổng tài sản HPG (hợp nhất) thay đổi như thế nào từ năm 2022 đến 2025?"
+    answer: "Tăng từ 170.335,52 tỷ (2022) → 187.782,59 tỷ (2023) → 224.489,71 tỷ (2024) → 257.899,20 tỷ (2025), tăng 51,4% so với 2022"
+    source_page: 1
+    source_doc: "HPG_BCTC_Tom_Tat.xls"
+    group: multi_period
+    indexed: false  # XLS hợp nhất — chưa index
+
+  # ── multi_source (3) ────────────────────────────────────────────────────────
+  # Phải kết hợp 2 tài liệu hoặc 2 bảng khác nhau mới ra đáp án.
+
+  - id: q18
+    question: "LNST của Công ty mẹ HPG năm 2025 so với LNST hợp nhất chênh lệch bao nhiêu?"
+    answer: "Công ty mẹ: 14.074,17 tỷ (PDF trang 7); Hợp nhất: 15.514,93 tỷ (HPG_KQKD.xls); chênh lệch khoảng 1.440,76 tỷ do LNST của các công ty con chưa được hợp nhất vào báo cáo riêng lẻ"
+    source_page: 7
+    source_doc: "20260327_-_HPG_-_BCTC_Cong_ty_me_sau_kiem_toan_nam_2025_1774869041.pdf"
+    source_doc_2: "HPG_KQKD.xls"
+    group: multi_source
+    indexed: false  # Cần cả PDF lẫn XLS hợp nhất — XLS chưa index
+
+  - id: q19
+    question: "Tiền và tương đương tiền của Công ty mẹ HPG tại 31/12/2025 chiếm bao nhiêu % so với toàn tập đoàn (hợp nhất)?"
+    answer: "Công ty mẹ: 481,46 tỷ (PDF trang 9); Hợp nhất: 8.300,89 tỷ (HPG_BCTC_Tom_Tat.xls); tỷ lệ ≈ 5,8% — tiền gần như nằm ở các công ty con"
+    source_page: 9
+    source_doc: "20260327_-_HPG_-_BCTC_Cong_ty_me_sau_kiem_toan_nam_2025_1774869041.pdf"
+    source_doc_2: "HPG_BCTC_Tom_Tat.xls"
+    group: multi_source
+    indexed: false  # Cần cả PDF lẫn XLS hợp nhất — XLS chưa index
+
+  - id: q20
+    question: "Lợi nhuận gộp HPG (hợp nhất) năm 2025 đạt 24.497,79 tỷ nhưng lưu chuyển tiền từ HĐKD chỉ 17.365,86 tỷ. Khoản điều chỉnh nào làm giảm dòng tiền nhiều nhất?"
+    answer: "Tăng hàng tồn kho: -7.241,77 tỷ và tăng phải thu: -8.743,13 tỷ là hai khoản làm giảm dòng tiền lớn nhất; khấu hao TSCĐ: +8.470,68 tỷ bù lại một phần (HPG_LCTT.xls + HPG_KQKD.xls)"
+    source_page: 1
+    source_doc: "HPG_LCTT.xls"
+    source_doc_2: "HPG_KQKD.xls"
+    group: multi_source
+    indexed: false  # XLS hợp nhất — chưa index
+
+  # ── 2024 parallel questions (5) ─────────────────────────────────────────────
+  # Song song với q08–q12 nhưng cho năm 2024 — tạo ambiguity để test metadata.
+  # Khi 2 file (2024+2025) cùng index, retrieval không có metadata dễ trả về sai năm.
+
+  - id: q26
+    question: "Tổng số nhân viên của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu người và thay đổi thế nào so với đầu năm 2024?"
+    answer: "154 người, tăng so với 127 người tại đầu năm 2024 (1/1/2024)"
+    source_page: 12
+    source_doc: "0004773662551440329ctcp-tp-on-ha-pht29032025-000000bo-co-ti-chnh-m-nm.pdf"
+    group: text_interpretation
+
+  - id: q27
+    question: "Hoạt động kinh doanh chính của Công ty mẹ HPG trong năm 2024 là gì?"
+    answer: "Kinh doanh dịch vụ cho thuê văn phòng, quảng cáo, mua bán các sản phẩm thép và đầu tư tài chính"
+    source_page: 12
+    source_doc: "0004773662551440329ctcp-tp-on-ha-pht29032025-000000bo-co-ti-chnh-m-nm.pdf"
+    group: text_interpretation
+
+  - id: q28
+    question: "Kế toán trưởng của HPG ký báo cáo tài chính riêng năm 2024 là ai và báo cáo được lập vào ngày nào?"
+    answer: "Bà Phạm Thị Kim Oanh, Kế toán trưởng. Báo cáo lập ngày 24 tháng 3 năm 2025"
+    source_page: 8
+    source_doc: "0004773662551440329ctcp-tp-on-ha-pht29032025-000000bo-co-ti-chnh-m-nm.pdf"
+    group: text_interpretation
+
+  - id: q29
+    question: "Đầu tư tài chính dài hạn (khoản đầu tư vào công ty con) của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu?"
+    answer: "80.585.847.420.000 VND (khoảng 80.586 tỷ đồng)"
+    source_page: 7
+    source_doc: "0004773662551440329ctcp-tp-on-ha-pht29032025-000000bo-co-ti-chnh-m-nm.pdf"
+    group: table_lookup
+
+  - id: q30
+    question: "Lợi nhuận sau thuế TNDN của Công ty mẹ HPG năm 2024 là bao nhiêu?"
+    answer: "10.247.400.472.100 VND (khoảng 10.247,40 tỷ đồng)"
+    source_page: 9
+    source_doc: "0004773662551440329ctcp-tp-on-ha-pht29032025-000000bo-co-ti-chnh-m-nm.pdf"
+    group: table_lookup
+
+  # ── no_answer (3) ───────────────────────────────────────────────────────────
+  # Thông tin có thật nhưng không có trong các tài liệu đã cung cấp.
+  # Dùng để kiểm tra RAG có hallucinate (bịa số) hay không.
+
+  - id: q21
+    question: "Doanh thu từ mảng thép xây dựng riêng lẻ của HPG trong năm 2025 là bao nhiêu?"
+    answer: "Không có trong tài liệu — BCTC hợp nhất không phân tách doanh thu theo phân khúc sản phẩm"
+    source_page: null
+    source_doc: null
+    group: no_answer
+
+  - id: q22
+    question: "Tỷ lệ cổ tức HPG dự kiến chi trả cho năm tài chính 2025 là bao nhiêu phần trăm?"
+    answer: "Không có trong tài liệu — chính sách cổ tức không được công bố trong BCTC đã kiểm toán này"
+    source_page: null
+    source_doc: null
+    group: no_answer
+
+  - id: q23
+    question: "Sản lượng thép thô HPG sản xuất trong năm 2025 là bao nhiêu tấn?"
+    answer: "Không có trong tài liệu — đây là dữ liệu hoạt động sản xuất, không được trình bày trong báo cáo tài chính"
+    source_page: null
+    source_doc: null
+    group: no_answer
+
+  # ── out_of_scope (2) ────────────────────────────────────────────────────────
+  # Hoàn toàn ngoài phạm vi tài chính — kiểm tra hệ thống có từ chối đúng không.
+
+  - id: q24
+    question: "Giá thép HRC trên thị trường quốc tế tháng 12/2025 là bao nhiêu USD/tấn?"
+    answer: "Ngoài phạm vi — đây là dữ liệu thị trường hàng hoá, không có trong báo cáo tài chính doanh nghiệp"
+    source_page: null
+    source_doc: null
+    group: out_of_scope
+
+  - id: q25
+    question: "Công nghệ lò cao nào HPG đang sử dụng tại khu liên hợp thép Dung Quất?"
+    answer: "Ngoài phạm vi — đây là thông tin kỹ thuật sản xuất, không có trong báo cáo tài chính"
+    source_page: null
+    source_doc: null
+    group: out_of_scope

@@ -1,0 +1,31 @@
+# ── LLM providers ────────────────────────────────────────────────────────────
+anthropic>=0.40.0
+openai>=1.50.0
+google-genai>=0.8.0
+httpx>=0.27.0
+
+# ── LangChain stack (used by RAGAS eval + Tavily tool) ───────────────────────
+langchain-anthropic>=0.3.0
+langchain-openai>=0.3.0
+langchain-ollama>=0.2.0
+langchain-community>=0.3.0
+langchain-google-vertexai>=2.0.0
+
+# ── Eval ─────────────────────────────────────────────────────────────────────
+ragas>=0.4.0
+datasets>=2.20.0
+
+# ── Observability ─────────────────────────────────────────────────────────────
+langfuse>=2.0.0
+
+# ── Search ───────────────────────────────────────────────────────────────────
+tavily-python>=0.3.0
+
+# ── Config / infra ───────────────────────────────────────────────────────────
+pydantic-settings>=2.0
+python-dotenv>=1.0
+PyYAML>=6.0
+structlog>=24.0
+
+# ── Test ─────────────────────────────────────────────────────────────────────
+pytest>=8.0

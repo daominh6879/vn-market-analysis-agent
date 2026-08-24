@@ -1,0 +1,82 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Venv
+.venv/
+venv/
+env/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Data & outputs
+data/minio/
+data/qdrant/
+data/outputs/
+data/postgres/
+data/redis/
+outputs/
+*.pdf
+*.parquet
+*.csv
+*.jsonl
+
+# Qdrant / vector stores
+.qdrant/
+qdrant_storage/
+
+# MinIO / object storage
+minio_data/
+
+# Logs
+*.log
+logs/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+"Network - Shortcut.lnk"
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# MyPy
+.mypy_cache/
+
+# Ruff / linting
+.ruff_cache/
+
+# CodeRAG index
+tools/coderag/
+
+# Dagster
+$DAGSTER_HOME/
+dagster_home/
+
+# Temp
+*.tmp
+*.bak
