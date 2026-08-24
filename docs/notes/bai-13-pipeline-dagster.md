@@ -74,6 +74,23 @@ Từ Qdrant: scroll payload → `source_key` = tên file trong MinIO.
 `embeddings` asset xử lý tuần tự (một doc mỗi lần) — tránh bắn quá tải vào Ollama.
 **Không dùng `ThreadPoolExecutor` hay Dagster `DynamicOutput` ở bước embed.**
 
+## Kết quả kiểm tra financial_facts
+
+```bash
+make query-fact MA=tong_tai_san KY=2024
+# python ingest/extract_facts.py --file /dev/null --query tong_tai_san 2024
+```
+
+Kết quả:
+```python
+{'ticker': 'HPG', 'period': '2024', 'report_type': 'consolidated',
+ 'metric_code': 'tong_tai_san', 'value': Decimal('224489707553981.0'),
+ 'unit': 'VND', 'source_page': 0, 'source': 'vnstock'}
+```
+
+HPG tổng tài sản 2024 = **224.49 nghìn tỷ VND** (source: vnstock).  
+→ Pipeline `financial_facts` → Postgres hoạt động đúng.
+
 ## TODO — Checklist hoàn thành
 
 - [ ] `uv add dagster dagster-webserver minio` chạy thành công

@@ -98,6 +98,19 @@ def ensure_collection(client: QdrantClient, name: str, dim: int) -> None:
         print(f"  collection '{name}' exists (dim={dim})")
 
 
+def recreate_collection(client: QdrantClient, name: str, dim: int) -> None:
+    """Drop collection if exists, then create fresh. Used by evals for clean runs."""
+    existing = {c.name for c in client.get_collections().collections}
+    if name in existing:
+        client.delete_collection(name)
+        print(f"  collection '{name}' dropped")
+    client.create_collection(
+        collection_name=name,
+        vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
+    )
+    print(f"  collection '{name}' created (dim={dim})")
+
+
 def delete_doc_chunks(client: QdrantClient, collection: str, doc_id: str) -> None:
     """Xoá tất cả chunk của doc_id này trước khi upsert lại."""
     try:

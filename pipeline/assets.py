@@ -41,8 +41,8 @@ MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
 class IngestionConfig(Config):
     mode: str = "incremental"         # "incremental" | "full_rebuild"
     ticker: str = "HPG"
-    ky: str = "2024"
-    loai_bao_cao: str = "rieng_le"
+    period: str = "2024"
+    report_type: str = "standalone"
     object_key: str = ""              # nếu có → chỉ xử lý file này
     embed_model: str = os.getenv("EMBED_MODEL", "bge-m3")
     chunk_strategy: str = os.getenv("CHUNK_STRATEGY", "structural")
@@ -240,8 +240,8 @@ def embeddings(
 
         meta = {
             "ticker": config.ticker,
-            "year": config.ky,
-            "report_type": config.loai_bao_cao,
+            "year": config.period,
+            "report_type": config.report_type,
             "source_key": doc["key"],
             "dagster_run_id": doc["dagster_run_id"],
         }
@@ -287,8 +287,8 @@ def financial_facts(
             facts = extract_facts_from_markdown(
                 markdown=doc["markdown"],
                 ticker=config.ticker,
-                ky=config.ky,
-                loai_bao_cao=config.loai_bao_cao,
+                period=config.period,
+                report_type=config.report_type,
                 nguon_file=doc["key"],
             )
             errors = validate_facts(facts)

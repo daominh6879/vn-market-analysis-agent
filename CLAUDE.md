@@ -23,6 +23,17 @@ Activate venv first: `.venv\Scripts\activate`
 
 ---
 
+## Language rules — code & schema
+
+**All code identifiers and database column names must be in English.** No exceptions.
+
+- Variable names, function names, class names, module names → English
+- Database table names, column names, migration files → English
+- Dict keys, JSON fields, Pydantic field names → English
+- Comments and docstrings → English preferred; Vietnamese allowed only in doc files (`docs/`)
+
+---
+
 ## LLM usage rules
 
 **Default model provider: DeepSeek.** `.env` has `LLM_PROVIDER=deepseek`. Do not hardcode any other provider.

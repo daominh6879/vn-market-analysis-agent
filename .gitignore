@@ -78,5 +78,5 @@ $DAGSTER_HOME/
 dagster_home/
 
 # Temp
-*.tmp
+*.tmp*/
 *.bak

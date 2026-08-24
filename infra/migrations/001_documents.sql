@@ -1,5 +1,4 @@
--- Bài 10: Bảng theo dõi tài liệu đã index
--- Không xoá record — chỉ đánh dấu status='deleted' để kiểm toán
+-- Track indexed documents; never delete rows, mark status='deleted' for audit
 
 CREATE TABLE IF NOT EXISTS documents (
     doc_id       TEXT PRIMARY KEY,

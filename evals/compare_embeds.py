@@ -48,7 +48,7 @@ from evals.run import (
 from llm.factory import create_client
 
 DEFAULT_MODELS = ["nomic-embed-text", "bge-m3", "mxbai-embed-large"]
-INPUT_MD = ROOT / "outputs" / "hpg_pymupdf.md"
+INPUT_MD = ROOT / "outputs" / "2025" / "hpg_pymupdf.md"
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 64
 
@@ -68,7 +68,7 @@ def index_for_model(
     t0 = time.perf_counter()
     dim = get_embed_dim(embed_model)
     recreate_collection(qdrant, collection, dim)
-    index_chunks(qdrant, collection, chunks, embed_model, meta=None)
+    index_chunks(qdrant, collection, chunks, embed_model, doc_id="eval", meta=None)
     elapsed = time.perf_counter() - t0
     return collection, len(chunks), elapsed
 

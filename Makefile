@@ -1,4 +1,4 @@
-.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices pipeline-dev pipeline-ui
+.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui
 
 up:
 	docker compose up -d
@@ -89,6 +89,19 @@ endif
 
 fetch-prices:
 	python ingest/fetch_prices.py --ticker $(or $(TICKER),HPG) --from $(or $(FROM),2022-01-01) --to $(or $(TO),2024-12-31)
+
+# Bài 12+ — vnstock Finance secondary ingest
+migrate-nguon:
+	python -c "from data.db import run_migration; run_migration('infra/migrations/004_nguon_column.sql')"
+
+fetch-financials-schema:
+	python ingest/fetch_financials.py --ticker $(or $(TICKER),HPG) --show-schema
+
+fetch-financials-dry:
+	python ingest/fetch_financials.py --ticker $(or $(TICKER),HPG) --period-from $(or $(FROM),2020) --period-to $(or $(TO),2024) --dry-run
+
+fetch-financials:
+	python ingest/fetch_financials.py --ticker $(or $(TICKER),HPG) --period-from $(or $(FROM),2020) --period-to $(or $(TO),2024)
 
 # Bài 13
 pipeline-dev:
