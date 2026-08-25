@@ -18,17 +18,21 @@ Ghi chép thực nghiệm, số đo, quyết định kỹ thuật. Không giải
 - [x] Bài 11 — Cửa lọc chất lượng (in progress)
 - [x] Bài 12 — Financial facts + SQL (postgres financial_facts)
 - [x] Bài 13 — Pipeline Dagster (assets.py)
-- [x] Bài 14 — BM25 + tách từ tiếng Việt (in progress)
+- [x] Bài 14 — BM25 + tách từ tiếng Việt (refusal 0.80→1.00, 6 ví dụ)
+- [x] Bài 15 — So sánh 6 collections, chọn structural_meta (recall 0.524, MAP 0.255)
+- [x] Bài 15 (fusion) — weighted_sum thắng hit@5 13/21 (+2 vs vector); candidate_k=30 giải quyết regression @20
+- [x] Bài 16 — Reranker CrossEncoder: fusion_ws vẫn thắng (13/21); reranker 11/21 + 20s p95 — không deploy
 
 ## Pipeline hiện tại
 
-**structural + bge-m3 + không metadata**
+**structural + bge-m3 + metadata (`hpg_b7_structural_meta`)**
 
 ## Per-lesson notes
 
 | Bài | File | Tóm tắt |
 |-----|------|---------|
 | Setup | [setup.md](setup.md) | Docker bind mounts, quy tắc làm việc |
+| eval | [collection-eval.md](collection-eval.md) | 6 collections × 3 retrievers; structural_meta wins (recall 0.524) |
 | Bài 4 | [bai-4-eval-baseline.md](bai-4-eval-baseline.md) | refusal_pass_rate=0.800 |
 | Bài 5 | [bai-5-noise-floor.md](bai-5-noise-floor.md) | std=0.0894, ngưỡng CI=0.1789 |
 | Bài 6 | [bai-6-pdf-parse.md](bai-6-pdf-parse.md) | pymupdf4llm + vie+eng wins |
@@ -39,4 +43,6 @@ Ghi chép thực nghiệm, số đo, quyết định kỹ thuật. Không giải
 | Bài 11 | [bai-11-chat-luong.md](bai-11-chat-luong.md) | quality filter in progress |
 | Bài 12 | [bai-12-facts-sql.md](bai-12-facts-sql.md) | financial_facts postgres, fetch prices |
 | Bài 13 | [bai-13-pipeline-dagster.md](bai-13-pipeline-dagster.md) | Dagster assets pipeline |
-| Bài 14 | [bai-14-bm25.md](bai-14-bm25.md) | BM25 + underthesea VN tokenize (in progress) |
+| Bài 14 | [bai-14-bm25.md](bai-14-bm25.md) | BM25 raw 0.80 → VN tokenize 1.00 refusal; 6 ví dụ BM25 vs vector |
+| Bài 15 | [bai-15-fusion.md](bai-15-fusion.md) | weighted_sum chọn (candidate_k=30): hit@5 13/21 (+2 vs vector), fusion@20 = vector@20 = 17/21 |
+| Bài 16 | [bai-16-reranker.md](bai-16-reranker.md) | CrossEncoder thất bại: 11/21 hit@5 + p95=20s vs fusion 13/21 + 5s; structural table chunks không phù hợp cross-encoder |

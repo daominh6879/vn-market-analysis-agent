@@ -1,0 +1,770 @@
+{
+  "collection": "hpg_b7_structural_nometa",
+  "embed": "bge-m3",
+  "top_k": 5,
+  "candidate_k": 30,
+  "alpha": 0.5,
+  "summary": {
+    "bm25_vn": {
+      "hit@5": 9,
+      "hit@10": 11,
+      "hit@20": 12,
+      "n": 21
+    },
+    "vector": {
+      "hit@5": 7,
+      "hit@10": 10,
+      "hit@20": 15,
+      "n": 21
+    },
+    "weighted_sum": {
+      "hit@5": 8,
+      "hit@10": 11,
+      "hit@20": 13,
+      "n": 21
+    },
+    "rrf": {
+      "hit@5": 9,
+      "hit@10": 10,
+      "hit@20": 14,
+      "n": 21
+    }
+  },
+  "results": [
+    {
+      "id": "q08",
+      "group": "table_lookup",
+      "keywords": [
+        "97.018.349.440.000"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": false,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": true,
+          "n_candidates": 50
+        },
+        "rrf": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": true,
+          "n_candidates": 50
+        }
+      },
+      "t_bm25": 0.003,
+      "t_vec": 2.564
+    },
+    {
+      "id": "q31",
+      "group": "table_lookup",
+      "keywords": [
+        "98.670.778.691.605"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 55
+        },
+        "rrf": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 55
+        }
+      },
+      "t_bm25": 0.002,
+      "t_vec": 2.503
+    },
+    {
+      "id": "q32",
+      "group": "table_lookup",
+      "keywords": [
+        "14.074.169.615.158"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": false,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 52
+        },
+        "rrf": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": true,
+          "n_candidates": 52
+        }
+      },
+      "t_bm25": 0.003,
+      "t_vec": 2.549
+    },
+    {
+      "id": "q33",
+      "group": "table_lookup",
+      "keywords": [
+        "94.430.926.468.210"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 51
+        },
+        "rrf": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 51
+        }
+      },
+      "t_bm25": 0.003,
+      "t_vec": 2.509
+    },
+    {
+      "id": "q35",
+      "group": "table_lookup",
+      "keywords": [
+        "14.347.362.462.056"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 54
+        },
+        "rrf": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 54
+        }
+      },
+      "t_bm25": 0.002,
+      "t_vec": 2.563
+    },
+    {
+      "id": "q37",
+      "group": "table_lookup",
+      "keywords": [
+        "2.859.500.000.000"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": false,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": false,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 52
+        },
+        "rrf": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 52
+        }
+      },
+      "t_bm25": 0.002,
+      "t_vec": 2.478
+    },
+    {
+      "id": "q09",
+      "group": "text_interpretation",
+      "keywords": [
+        "131"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 54
+        },
+        "rrf": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 54
+        }
+      },
+      "t_bm25": 0.006,
+      "t_vec": 2.474
+    },
+    {
+      "id": "q10",
+      "group": "text_interpretation",
+      "keywords": [
+        "tư vấn quản lý"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 53
+        },
+        "rrf": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 53
+        }
+      },
+      "t_bm25": 0.003,
+      "t_vec": 2.476
+    },
+    {
+      "id": "q11",
+      "group": "text_interpretation",
+      "keywords": [
+        "15 tháng 11 năm 2007"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 54
+        },
+        "rrf": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 54
+        }
+      },
+      "t_bm25": 0.004,
+      "t_vec": 2.471
+    },
+    {
+      "id": "q12",
+      "group": "text_interpretation",
+      "keywords": [
+        "Phạm Thị Kim Oanh"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 45
+        },
+        "rrf": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": true,
+          "n_candidates": 45
+        }
+      },
+      "t_bm25": 0.017,
+      "t_vec": 2.515
+    },
+    {
+      "id": "q13",
+      "group": "text_interpretation",
+      "keywords": [
+        "0503000008"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 48
+        },
+        "rrf": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 48
+        }
+      },
+      "t_bm25": 0.005,
+      "t_vec": 2.496
+    },
+    {
+      "id": "q34",
+      "group": "text_interpretation",
+      "keywords": [
+        "Deloitte"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 49
+        },
+        "rrf": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 49
+        }
+      },
+      "t_bm25": 0.004,
+      "t_vec": 2.469
+    },
+    {
+      "id": "q29",
+      "group": "table_lookup",
+      "keywords": [
+        "80.585.847.420.000"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": false,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": true,
+          "n_candidates": 52
+        },
+        "rrf": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": true,
+          "n_candidates": 52
+        }
+      },
+      "t_bm25": 0.004,
+      "t_vec": 2.548
+    },
+    {
+      "id": "q30",
+      "group": "table_lookup",
+      "keywords": [
+        "10.247.400.472.100"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": false,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 49
+        },
+        "rrf": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 49
+        }
+      },
+      "t_bm25": 0.003,
+      "t_vec": 2.463
+    },
+    {
+      "id": "q36",
+      "group": "table_lookup",
+      "keywords": [
+        "81.793.076.515.644"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 57
+        },
+        "rrf": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 57
+        }
+      },
+      "t_bm25": 0.002,
+      "t_vec": 3.317
+    },
+    {
+      "id": "q39",
+      "group": "table_lookup",
+      "keywords": [
+        "80.780.186.578.052"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 53
+        },
+        "rrf": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 53
+        }
+      },
+      "t_bm25": 0.004,
+      "t_vec": 2.499
+    },
+    {
+      "id": "q26",
+      "group": "text_interpretation",
+      "keywords": [
+        "127 người"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 57
+        },
+        "rrf": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 57
+        }
+      },
+      "t_bm25": 0.003,
+      "t_vec": 2.769
+    },
+    {
+      "id": "q27",
+      "group": "text_interpretation",
+      "keywords": [
+        "mua bán các sản phẩm thép"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": false,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 54
+        },
+        "rrf": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 54
+        }
+      },
+      "t_bm25": 0.003,
+      "t_vec": 2.795
+    },
+    {
+      "id": "q28",
+      "group": "text_interpretation",
+      "keywords": [
+        "24 tháng 3 năm 2025"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": false,
+          "hit@10": false,
+          "hit@20": false,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": false,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 47
+        },
+        "rrf": {
+          "hit@5": false,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 47
+        }
+      },
+      "t_bm25": 0.005,
+      "t_vec": 2.649
+    },
+    {
+      "id": "q38",
+      "group": "text_interpretation",
+      "keywords": [
+        "KPMG"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 48
+        },
+        "rrf": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 48
+        }
+      },
+      "t_bm25": 0.004,
+      "t_vec": 2.563
+    },
+    {
+      "id": "q40",
+      "group": "text_interpretation",
+      "keywords": [
+        "5 công ty con cấp 1"
+      ],
+      "strategies": {
+        "bm25_vn": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "vector": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 30
+        },
+        "weighted_sum": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 53
+        },
+        "rrf": {
+          "hit@5": true,
+          "hit@10": true,
+          "hit@20": true,
+          "n_candidates": 53
+        }
+      },
+      "t_bm25": 0.005,
+      "t_vec": 2.537
+    }
+  ]
+}

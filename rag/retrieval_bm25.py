@@ -65,3 +65,10 @@ class BM25Retriever:
         scores = self._bm25.get_scores(tokens)
         ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
         return [self._texts[i] for i in ranked[:top_k]]
+
+    def search_scored(self, query: str, top_k: int = 20) -> list[tuple[str, float]]:
+        """Return (text, bm25_score) pairs sorted descending — for fusion."""
+        tokens = self._tokenize(query)
+        scores = self._bm25.get_scores(tokens)
+        ranked = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+        return [(self._texts[i], float(scores[i])) for i in ranked[:top_k]]

@@ -1,0 +1,538 @@
+{
+  "collection": "hpg_b7_structural_meta",
+  "candidate_k": 30,
+  "top_k": 5,
+  "snippet_window": 3,
+  "summary": {
+    "fusion_ws": {
+      "hit@5": 13,
+      "n": 21,
+      "p50_ms": null,
+      "p95_ms": null
+    },
+    "reranker_512": {
+      "hit@5": 0,
+      "n": 21,
+      "p50_ms": null,
+      "p95_ms": null
+    },
+    "reranker_256": {
+      "hit@5": 11,
+      "n": 21,
+      "p50_ms": 15743.4,
+      "p95_ms": 17651.2
+    },
+    "reranker_snippet": {
+      "hit@5": 10,
+      "n": 21,
+      "p50_ms": 15708.3,
+      "p95_ms": 20694.3
+    }
+  },
+  "results": [
+    {
+      "id": "q08",
+      "group": "table_lookup",
+      "keywords": [
+        "97.018.349.440.000"
+      ],
+      "fusion_ws": {
+        "hit@5": false,
+        "hit@10": true,
+        "hit@20": true
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": false,
+        "t_ms": 12430.9
+      },
+      "reranker_snippet": {
+        "hit@5": false,
+        "t_ms": 17475.3
+      }
+    },
+    {
+      "id": "q31",
+      "group": "table_lookup",
+      "keywords": [
+        "98.670.778.691.605"
+      ],
+      "fusion_ws": {
+        "hit@5": false,
+        "hit@10": false,
+        "hit@20": false
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": false,
+        "t_ms": 16635.3
+      },
+      "reranker_snippet": {
+        "hit@5": false,
+        "t_ms": 14653.7
+      }
+    },
+    {
+      "id": "q32",
+      "group": "table_lookup",
+      "keywords": [
+        "14.074.169.615.158"
+      ],
+      "fusion_ws": {
+        "hit@5": false,
+        "hit@10": false,
+        "hit@20": true
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": false,
+        "t_ms": 12149.2
+      },
+      "reranker_snippet": {
+        "hit@5": false,
+        "t_ms": 11730.2
+      }
+    },
+    {
+      "id": "q33",
+      "group": "table_lookup",
+      "keywords": [
+        "94.430.926.468.210"
+      ],
+      "fusion_ws": {
+        "hit@5": false,
+        "hit@10": true,
+        "hit@20": true
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": false,
+        "t_ms": 12700.1
+      },
+      "reranker_snippet": {
+        "hit@5": false,
+        "t_ms": 24858.4
+      }
+    },
+    {
+      "id": "q35",
+      "group": "table_lookup",
+      "keywords": [
+        "14.347.362.462.056"
+      ],
+      "fusion_ws": {
+        "hit@5": true,
+        "hit@10": true,
+        "hit@20": true
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": true,
+        "t_ms": 13461.3
+      },
+      "reranker_snippet": {
+        "hit@5": false,
+        "t_ms": 12382.4
+      }
+    },
+    {
+      "id": "q37",
+      "group": "table_lookup",
+      "keywords": [
+        "2.859.500.000.000"
+      ],
+      "fusion_ws": {
+        "hit@5": true,
+        "hit@10": true,
+        "hit@20": true
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": true,
+        "t_ms": 12480.1
+      },
+      "reranker_snippet": {
+        "hit@5": true,
+        "t_ms": 11451.2
+      }
+    },
+    {
+      "id": "q09",
+      "group": "text_interpretation",
+      "keywords": [
+        "131"
+      ],
+      "fusion_ws": {
+        "hit@5": true,
+        "hit@10": true,
+        "hit@20": true
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": true,
+        "t_ms": 11525.1
+      },
+      "reranker_snippet": {
+        "hit@5": true,
+        "t_ms": 11509.6
+      }
+    },
+    {
+      "id": "q10",
+      "group": "text_interpretation",
+      "keywords": [
+        "tư vấn quản lý"
+      ],
+      "fusion_ws": {
+        "hit@5": true,
+        "hit@10": true,
+        "hit@20": true
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": true,
+        "t_ms": 12141.3
+      },
+      "reranker_snippet": {
+        "hit@5": true,
+        "t_ms": 11392.1
+      }
+    },
+    {
+      "id": "q11",
+      "group": "text_interpretation",
+      "keywords": [
+        "15 tháng 11 năm 2007"
+      ],
+      "fusion_ws": {
+        "hit@5": false,
+        "hit@10": false,
+        "hit@20": false
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": false,
+        "t_ms": 12556.0
+      },
+      "reranker_snippet": {
+        "hit@5": false,
+        "t_ms": 13973.0
+      }
+    },
+    {
+      "id": "q12",
+      "group": "text_interpretation",
+      "keywords": [
+        "Phạm Thị Kim Oanh"
+      ],
+      "fusion_ws": {
+        "hit@5": false,
+        "hit@10": false,
+        "hit@20": true
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": true,
+        "t_ms": 13257.1
+      },
+      "reranker_snippet": {
+        "hit@5": false,
+        "t_ms": 16862.4
+      }
+    },
+    {
+      "id": "q13",
+      "group": "text_interpretation",
+      "keywords": [
+        "0503000008"
+      ],
+      "fusion_ws": {
+        "hit@5": true,
+        "hit@10": true,
+        "hit@20": true
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": true,
+        "t_ms": 17501.0
+      },
+      "reranker_snippet": {
+        "hit@5": true,
+        "t_ms": 16899.0
+      }
+    },
+    {
+      "id": "q34",
+      "group": "text_interpretation",
+      "keywords": [
+        "Deloitte"
+      ],
+      "fusion_ws": {
+        "hit@5": false,
+        "hit@10": false,
+        "hit@20": false
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": false,
+        "t_ms": 16726.1
+      },
+      "reranker_snippet": {
+        "hit@5": false,
+        "t_ms": 15456.3
+      }
+    },
+    {
+      "id": "q29",
+      "group": "table_lookup",
+      "keywords": [
+        "80.585.847.420.000"
+      ],
+      "fusion_ws": {
+        "hit@5": true,
+        "hit@10": true,
+        "hit@20": true
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": false,
+        "t_ms": 17651.2
+      },
+      "reranker_snippet": {
+        "hit@5": true,
+        "t_ms": 20694.3
+      }
+    },
+    {
+      "id": "q30",
+      "group": "table_lookup",
+      "keywords": [
+        "10.247.400.472.100"
+      ],
+      "fusion_ws": {
+        "hit@5": true,
+        "hit@10": true,
+        "hit@20": true
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": true,
+        "t_ms": 17811.5
+      },
+      "reranker_snippet": {
+        "hit@5": true,
+        "t_ms": 16960.2
+      }
+    },
+    {
+      "id": "q36",
+      "group": "table_lookup",
+      "keywords": [
+        "81.793.076.515.644"
+      ],
+      "fusion_ws": {
+        "hit@5": true,
+        "hit@10": true,
+        "hit@20": true
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": false,
+        "t_ms": 15743.4
+      },
+      "reranker_snippet": {
+        "hit@5": false,
+        "t_ms": 15708.3
+      }
+    },
+    {
+      "id": "q39",
+      "group": "table_lookup",
+      "keywords": [
+        "80.780.186.578.052"
+      ],
+      "fusion_ws": {
+        "hit@5": true,
+        "hit@10": true,
+        "hit@20": true
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": false,
+        "t_ms": 12675.6
+      },
+      "reranker_snippet": {
+        "hit@5": false,
+        "t_ms": 12751.6
+      }
+    },
+    {
+      "id": "q26",
+      "group": "text_interpretation",
+      "keywords": [
+        "127 người"
+      ],
+      "fusion_ws": {
+        "hit@5": false,
+        "hit@10": false,
+        "hit@20": false
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": false,
+        "t_ms": 15926.5
+      },
+      "reranker_snippet": {
+        "hit@5": false,
+        "t_ms": 15913.2
+      }
+    },
+    {
+      "id": "q27",
+      "group": "text_interpretation",
+      "keywords": [
+        "mua bán các sản phẩm thép"
+      ],
+      "fusion_ws": {
+        "hit@5": true,
+        "hit@10": true,
+        "hit@20": true
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": true,
+        "t_ms": 16465.4
+      },
+      "reranker_snippet": {
+        "hit@5": true,
+        "t_ms": 17159.6
+      }
+    },
+    {
+      "id": "q28",
+      "group": "text_interpretation",
+      "keywords": [
+        "24 tháng 3 năm 2025"
+      ],
+      "fusion_ws": {
+        "hit@5": true,
+        "hit@10": true,
+        "hit@20": true
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": true,
+        "t_ms": 17334.8
+      },
+      "reranker_snippet": {
+        "hit@5": true,
+        "t_ms": 15927.9
+      }
+    },
+    {
+      "id": "q38",
+      "group": "text_interpretation",
+      "keywords": [
+        "KPMG"
+      ],
+      "fusion_ws": {
+        "hit@5": true,
+        "hit@10": true,
+        "hit@20": true
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": true,
+        "t_ms": 17177.7
+      },
+      "reranker_snippet": {
+        "hit@5": true,
+        "t_ms": 14050.2
+      }
+    },
+    {
+      "id": "q40",
+      "group": "text_interpretation",
+      "keywords": [
+        "5 công ty con cấp 1"
+      ],
+      "fusion_ws": {
+        "hit@5": true,
+        "hit@10": true,
+        "hit@20": true
+      },
+      "reranker_512": {
+        "hit@5": null,
+        "t_ms": null
+      },
+      "reranker_256": {
+        "hit@5": true,
+        "t_ms": 16389.9
+      },
+      "reranker_snippet": {
+        "hit@5": true,
+        "t_ms": 17268.7
+      }
+    }
+  ]
+}

@@ -86,6 +86,97 @@ def retrieve_context(question: str, collection: str, embed_model: str, top_k: in
     return [r.payload["text"] for r in results]
 
 
+def retrieve_context_scored(question: str, collection: str, embed_model: str,
+                            top_k: int = 20) -> list[tuple[str, float]]:
+    """Retrieve top-k chunks with cosine scores — for hybrid fusion."""
+    import httpx
+    from qdrant_client import QdrantClient
+
+    ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+    r = httpx.post(
+        f"{ollama_url}/api/embeddings",
+        json={"model": embed_model, "prompt": question},
+        timeout=30,
+    )
+    r.raise_for_status()
+    qvec = r.json()["embedding"]
+
+    qdrant = QdrantClient("localhost", port=6333)
+    points = qdrant.query_points(collection_name=collection, query=qvec, limit=top_k).points
+    return [(p.payload["text"], float(p.score)) for p in points]
+
+
+def ask_with_hybrid(
+    client,
+    question: str,
+    collection: str,
+    embed_model: str,
+    bm25_retriever,
+    strategy: str,
+    top_k: int = 5,
+    candidate_k: int = 20,
+) -> tuple[str, list[str]]:
+    """Retrieve from BM25 + vector, fuse, then call model."""
+    from rag.fusion import weighted_sum_fusion, rrf_fusion
+
+    bm25_scored = bm25_retriever.search_scored(question, top_k=candidate_k)
+    vec_scored  = retrieve_context_scored(question, collection, embed_model, top_k=candidate_k)
+
+    if strategy == "hybrid_weighted":
+        fused_texts = weighted_sum_fusion(bm25_scored, vec_scored)
+    else:
+        fused_texts = rrf_fusion(bm25_scored, vec_scored)
+
+    contexts = fused_texts[:top_k]
+    context_block = "\n\n---\n\n".join(contexts)
+    system = (
+        "Bạn là trợ lý tài chính. Dựa vào các đoạn tài liệu dưới đây để trả lời. "
+        "Nếu thông tin không có trong tài liệu, nói rõ 'Không có trong tài liệu'.\n\n"
+        f"TÀI LIỆU:\n{context_block}"
+    )
+    resp = client.generate(
+        [Message(role="user", content=question)],
+        max_tokens=512,
+        system=system,
+    )
+    return resp.text, contexts
+
+
+def ask_with_hybrid_rerank(
+    client,
+    question: str,
+    collection: str,
+    embed_model: str,
+    bm25_retriever,
+    candidate_k: int = 20,
+    top_k: int = 5,
+) -> tuple[str, list[str]]:
+    """Retrieve via weighted_sum fusion (top candidate_k) → CrossEncoder rerank → top_k.
+
+    Uses lost-in-middle ordering: highest-scored chunk placed last in context.
+    """
+    from rag.fusion import weighted_sum_fusion
+    from rag.reranker import rerank_for_llm
+
+    bm25_scored = bm25_retriever.search_scored(question, top_k=candidate_k)
+    vec_scored  = retrieve_context_scored(question, collection, embed_model, top_k=candidate_k)
+    fused       = weighted_sum_fusion(bm25_scored, vec_scored)
+    contexts    = rerank_for_llm(question, fused[:candidate_k], top_k=top_k)
+
+    context_block = "\n\n---\n\n".join(contexts)
+    system = (
+        "Bạn là trợ lý tài chính. Dựa vào các đoạn tài liệu dưới đây để trả lời. "
+        "Nếu thông tin không có trong tài liệu, nói rõ 'Không có trong tài liệu'.\n\n"
+        f"TÀI LIỆU:\n{context_block}"
+    )
+    resp = client.generate(
+        [Message(role="user", content=question)],
+        max_tokens=512,
+        system=system,
+    )
+    return resp.text, contexts
+
+
 def ask_with_bm25(client, question: str, bm25_retriever) -> tuple[str, list[str]]:
     """Retrieve context via BM25 then call model."""
     contexts = bm25_retriever.search(question, top_k=5)
@@ -312,9 +403,9 @@ def main() -> None:
                         default=os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
                         help="Ollama embed model for RAG retrieval (used with --collection)")
     parser.add_argument("--retriever",
-                        choices=["vector", "bm25"],
+                        choices=["vector", "bm25", "hybrid_weighted", "hybrid_rrf", "hybrid_rerank"],
                         default="vector",
-                        help="Retrieval method: vector (default) or bm25")
+                        help="Retrieval method: vector (default), bm25, hybrid_weighted, hybrid_rrf, hybrid_rerank")
     parser.add_argument("--vn-tokenize",
                         action="store_true",
                         help="BM25 only: use underthesea Vietnamese word tokenization")
@@ -326,7 +417,7 @@ def main() -> None:
     provider = os.environ.get("LLM_PROVIDER", "anthropic")
     rag_mode = bool(args.collection)
     bm25_retriever = None
-    if rag_mode and args.retriever == "bm25":
+    if rag_mode and args.retriever in ("bm25", "hybrid_weighted", "hybrid_rrf", "hybrid_rerank"):
         from rag.retrieval_bm25 import BM25Retriever
         bm25_retriever = BM25Retriever(
             collection=args.collection,
@@ -338,6 +429,9 @@ def main() -> None:
         if args.retriever == "bm25":
             tok = "vn_tokenize" if args.vn_tokenize else "raw_split"
             mode_label = f"BM25 ({tok}) — {args.collection}"
+        elif args.retriever in ("hybrid_weighted", "hybrid_rrf", "hybrid_rerank"):
+            tok = "vn_tokenize" if args.vn_tokenize else "raw_split"
+            mode_label = f"{args.retriever} (BM25 {tok} + vector) — {args.collection}"
         else:
             mode_label = f"vector — {args.collection}"
     print(f"Provider      : {provider}")
@@ -360,7 +454,16 @@ def main() -> None:
     for q in eval_qs:
         print(f"  {q['id']:6s} [{q['group']:<20}]", end="", flush=True)
         t0 = time.perf_counter()
-        if rag_mode and bm25_retriever is not None:
+        if rag_mode and args.retriever == "hybrid_rerank":
+            answer, contexts = ask_with_hybrid_rerank(
+                client, q["question"], args.collection, args.embed, bm25_retriever,
+            )
+        elif rag_mode and args.retriever in ("hybrid_weighted", "hybrid_rrf"):
+            answer, contexts = ask_with_hybrid(
+                client, q["question"], args.collection, args.embed,
+                bm25_retriever, args.retriever,
+            )
+        elif rag_mode and bm25_retriever is not None:
             answer, contexts = ask_with_bm25(client, q["question"], bm25_retriever)
         elif rag_mode:
             answer, contexts = ask_with_rag(client, q["question"], args.collection, args.embed)
@@ -382,7 +485,16 @@ def main() -> None:
     for q in refusal_qs:
         print(f"  {q['id']:6s} [{q['group']:<20}]", end="", flush=True)
         t0 = time.perf_counter()
-        if rag_mode and bm25_retriever is not None:
+        if rag_mode and args.retriever == "hybrid_rerank":
+            answer, _ = ask_with_hybrid_rerank(
+                client, q["question"], args.collection, args.embed, bm25_retriever,
+            )
+        elif rag_mode and args.retriever in ("hybrid_weighted", "hybrid_rrf"):
+            answer, _ = ask_with_hybrid(
+                client, q["question"], args.collection, args.embed,
+                bm25_retriever, args.retriever,
+            )
+        elif rag_mode and bm25_retriever is not None:
             answer, _ = ask_with_bm25(client, q["question"], bm25_retriever)
         elif rag_mode:
             answer, _ = ask_with_rag(client, q["question"], args.collection, args.embed)

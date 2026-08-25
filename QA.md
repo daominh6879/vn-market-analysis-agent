@@ -4,6 +4,32 @@ Tập hợp câu hỏi + giải thích kỹ thuật trong quá trình build RAG 
 
 ---
 
+## Fusion là gì? Mục đích và ảnh hưởng lên pipeline RAG?
+
+**Q:** Fusion là gì, mục đích của nó, ảnh hưởng thế nào tới bài?
+
+**A:** BM25 và vector search có điểm mạnh riêng — không cái nào đủ mọi trường hợp.
+
+- BM25 thắng: tra mã số (`0503000008`), ticker (`HPG`), ngày cụ thể → exact match
+- Vector thắng: câu hỏi ngữ nghĩa (`kế toán trưởng ký là ai`), bảng số trong context
+
+**Fusion** = gộp top-k kết quả từ cả hai, tạo một danh sách duy nhất.
+
+**Tại sao không cộng thẳng điểm?**  
+BM25 score ~12, cosine score ~0.7 → cộng thẳng = BM25 chi phối 94%. Vector không có tiếng nói.
+
+**Hai giải pháp:**
+
+| | Cách làm | Điểm mạnh |
+|---|---|---|
+| **Weighted-sum** | Chuẩn hoá cả hai về [0,1] rồi cộng | Tune được alpha |
+| **RRF** | Bỏ điểm, chỉ dùng thứ hạng: `1/(60+rank)` | Không cần tune, robust với outlier |
+
+**Ảnh hưởng lên pipeline:**  
+Bài 14 cho thấy BM25 MISS `q08` (bảng số), vector có thể tìm được. Fusion top-20 từ cả hai → `hit@20` tăng so với từng retriever đơn lẻ. Bài 16 tiếp tục: lấy top-20 từ fusion, đưa qua reranker để chọn 5 tốt nhất — hai tầng cộng lại mới thành pipeline hoàn chỉnh.
+
+---
+
 ## Qdrant là gì?
 
 **Qdrant** là vector database — lưu trữ và tìm kiếm vector (embedding).
