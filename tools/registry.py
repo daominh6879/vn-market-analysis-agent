@@ -52,6 +52,18 @@ TOOL_REGISTRY: dict[str, dict] = {
         "cost_hint": "medium",
         "side_effect": False,
     },
+    "get_market_performance": {
+        "version": "1.0",
+        "timeout": 15,
+        "cost_hint": "low",
+        "side_effect": False,
+    },
+    "get_market_breadth": {
+        "version": "1.0",
+        "timeout": 20,
+        "cost_hint": "low",
+        "side_effect": False,
+    },
 }
 
 

@@ -393,6 +393,11 @@ from pipeline.assets_vnstock import (
     vnstock_financials_job, vnstock_prices_job,
     vnstock_financials_schedule, vnstock_prices_schedule,
 )
+from pipeline.assets_ohlcv import (
+    ohlcv_daily_ingest,
+    ohlcv_ingest_job,
+    ohlcv_ingest_schedule,
+)
 
 ingestion_job = define_asset_job(
     name="ingestion_job",
@@ -577,11 +582,14 @@ def _serialize_cursor(data: dict[str, dict[str, str]]) -> str:
 defs = Definitions(
     assets=[raw_pdf, parsed_doc, embeddings, financial_facts, delete_doc,
             news_raw, news_indexed, news_purge,
-            vnstock_financials, vnstock_prices],
+            vnstock_financials, vnstock_prices,
+            ohlcv_daily_ingest],
     jobs=[ingestion_job, ingestion_full_rebuild_job, delete_job,
           news_job, news_purge_job,
-          vnstock_financials_job, vnstock_prices_job],
+          vnstock_financials_job, vnstock_prices_job,
+          ohlcv_ingest_job],
     schedules=[daily_schedule, news_schedule, news_purge_schedule,
-               vnstock_financials_schedule, vnstock_prices_schedule],
+               vnstock_financials_schedule, vnstock_prices_schedule,
+               ohlcv_ingest_schedule],
     sensors=[minio_new_pdf_sensor],
 )

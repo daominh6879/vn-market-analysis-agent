@@ -34,6 +34,8 @@ from tools.price import (
     analyze_market_sentiment,
     calculate_indicators,
     get_historical_ohlcv,
+    get_market_breadth,
+    get_market_performance,
     get_realtime_price,
     search_financial_news,
 )
@@ -161,6 +163,35 @@ async def search_news(ticker: str, days: int = 7) -> str:
     days: phạm vi thời gian (1-365). Nếu không có tin, trả thông báo rõ ràng.
     """
     return await _run(search_financial_news, ticker, days, timeout=_TIMEOUT_NEWS)
+
+
+_TIMEOUT_MARKET = 20.0
+
+
+@mcp.tool()
+async def get_market_perf(period: str = "week", ticker: str = "VNINDEX") -> str:
+    """
+    Tóm tắt hiệu suất thị trường theo kỳ thời gian.
+
+    period: "today" | "week" | "month" | "quarter" | "year"
+            hoặc tiếng Việt: "hôm nay", "tuần này", "quý này", "năm nay"
+    ticker: chỉ số hoặc mã CK (mặc định VNINDEX = proxy VN30).
+
+    Trả % thay đổi, high/low kỳ, biên độ, xu hướng (tăng mạnh / giảm nhẹ / đi ngang...).
+    Nguồn: ohlcv_daily (Postgres), fallback VCI live API.
+    """
+    return await _run(get_market_performance, period, ticker, timeout=_TIMEOUT_MARKET)
+
+
+@mcp.tool()
+async def get_breadth() -> str:
+    """
+    Độ rộng thị trường VN30: số mã tăng/giảm/đứng, top gainers, top losers.
+
+    Dùng để nhận xét phiên hôm nay: thị trường tăng diện rộng hay chỉ 1 nhóm?
+    Nguồn: ohlcv_daily (Postgres), fallback batch VCI live API.
+    """
+    return await _run(get_market_breadth, timeout=_TIMEOUT_MARKET)
 
 
 @mcp.tool()

@@ -459,7 +459,244 @@ def search_financial_news(
     return ToolResult(status="ok", data=result_str, message=result_str)
 
 
-# ── Tool 5: Phân tích sentiment thị trường ────────────────────────────────────
+# ── Tool 5: Hiệu suất thị trường theo kỳ ────────────────────────────────────
+
+_PERIOD_DAYS: dict[str, int] = {
+    "today": 1,
+    "week": 5,
+    "month": 22,
+    "quarter": 65,
+    "year": 250,
+}
+
+_PERIOD_ALIASES: dict[str, str] = {
+    "hôm nay": "today", "hom nay": "today",
+    "tuần này": "week", "tuan nay": "week", "tuần": "week",
+    "tháng này": "month", "thang nay": "month", "tháng": "month",
+    "quý này": "quarter", "quy nay": "quarter", "quý": "quarter",
+    "năm nay": "year", "nam nay": "year", "năm": "year",
+}
+
+_PERIOD_LABEL_VI: dict[str, str] = {
+    "today": "hôm nay",
+    "week": "tuần này",
+    "month": "tháng này",
+    "quarter": "quý này",
+    "year": "năm nay",
+}
+
+
+def _compute_performance_from_df(
+    df: pd.DataFrame, period_key: str, t: str
+) -> ToolResult:
+    """Shared computation for get_market_performance — works on any OHLCV DataFrame."""
+    days = _PERIOD_DAYS[period_key]
+
+    if df.empty or len(df) < 2:
+        return ToolResult(
+            status="no_data",
+            data=None,
+            message=f"Không đủ dữ liệu lịch sử để tính hiệu suất '{t}' kỳ '{period_key}'.",
+        )
+
+    if period_key == "today":
+        period_df = df.iloc[-1:]
+        prev_close = float(df["close"].iloc[-2]) if len(df) >= 2 else None
+    else:
+        period_df = df.tail(days) if len(df) >= days else df
+        prev_idx = len(df) - len(period_df) - 1
+        prev_close = float(df["close"].iloc[prev_idx]) if prev_idx >= 0 else None
+
+    last_close = float(period_df["close"].iloc[-1])
+    period_high = float(period_df["high"].max())
+    period_low = float(period_df["low"].min())
+    avg_vol = float(period_df["volume"].mean())
+
+    base = prev_close if prev_close is not None else float(period_df["close"].iloc[0])
+    pct_change = (last_close - base) / base * 100 if base else 0.0
+
+    if pct_change > 3:
+        trend = "tăng mạnh"
+    elif pct_change > 0.5:
+        trend = "tăng nhẹ"
+    elif pct_change > -0.5:
+        trend = "đi ngang"
+    elif pct_change > -3:
+        trend = "giảm nhẹ"
+    else:
+        trend = "giảm mạnh"
+
+    period_label = _PERIOD_LABEL_VI[period_key]
+    range_pct = (period_high - period_low) / period_low * 100 if period_low else 0.0
+
+    summary_lines = [
+        f"{t} {period_label}: {trend} ({pct_change:+.2f}%)",
+        f"Đóng cửa: {last_close:,.0f} | Cao: {period_high:,.0f} | Thấp: {period_low:,.0f}",
+        f"Biên độ kỳ: {range_pct:.1f}% | Khối lượng TB: {avg_vol:,.0f}",
+    ]
+    summary = "\n".join(summary_lines)
+    return ToolResult(
+        status="ok",
+        data={
+            "period": period_key,
+            "ticker": t,
+            "pct_change": round(pct_change, 2),
+            "last_close": last_close,
+            "high": period_high,
+            "low": period_low,
+            "avg_volume": round(avg_vol),
+            "trend": trend,
+            "trading_days": len(period_df),
+            "summary": summary,
+        },
+        message=summary,
+    )
+
+
+def get_market_performance(period: str = "week", ticker: str = "VNINDEX") -> ToolResult:
+    """Tóm tắt hiệu suất thị trường trong kỳ: % thay đổi, high/low, xu hướng.
+
+    DB-first: query ohlcv_daily (Postgres). Falls back to live VCI API if DB empty.
+    period: "today"|"week"|"month"|"quarter"|"year" hoặc tiếng Việt
+            ("hôm nay", "tuần này", "quý này", "năm nay")
+    ticker: chỉ số hoặc mã CK — mặc định VNINDEX (proxy VN30 trên VCI)
+    """
+    period_key = _PERIOD_ALIASES.get(period.strip().lower(), period.strip().lower())
+    if period_key not in _PERIOD_DAYS:
+        valid = "today, week, month, quarter, year"
+        return ToolResult(
+            status="invalid_input",
+            data=None,
+            message=(
+                f"period='{period}' không hợp lệ. Dùng: {valid} "
+                "hoặc tiếng Việt: 'hôm nay', 'tuần này', 'tháng này', 'quý này', 'năm nay'."
+            ),
+        )
+
+    days = _PERIOD_DAYS[period_key]
+    t = (ticker.strip().upper() if ticker else "VNINDEX")
+    resolved = resolve_ticker(t)
+
+    # DB-first
+    from tools.ohlcv_db import query_ohlcv
+    df = query_ohlcv(resolved, days + 15)
+    if df is not None and len(df) >= 2:
+        return _compute_performance_from_df(df, period_key, t)
+
+    # Fallback: live VCI API
+    p = _detect_provider(t)
+    try:
+        df = p.get_history(resolved, days + 15)
+    except ValueError as e:
+        return ToolResult(
+            status="no_data",
+            data=None,
+            message=f"Không có dữ liệu lịch sử cho '{t}': {e}.",
+        )
+    except Exception as e:
+        return _map_upstream_error(t, e)
+
+    return _compute_performance_from_df(df, period_key, t)
+
+
+# ── Tool 6: Market breadth VN30 ───────────────────────────────────────────────
+
+_VN30_CONSTITUENTS: list[str] = [
+    "ACB", "BCM", "BID", "BVH", "CTG", "FPT", "GAS", "GVR", "HDB", "HPG",
+    "MBB", "MSN", "MWG", "PDR", "PLX", "POW", "SAB", "SHB", "SSB", "SSI",
+    "STB", "TCB", "TPB", "VCB", "VHM", "VIB", "VIC", "VJC", "VNM", "VPB",
+]
+
+
+def _build_breadth_result(changes: list[dict]) -> ToolResult:
+    """Shared result builder for get_market_breadth."""
+    advances = [c for c in changes if c["pct_change"] > 0]
+    declines = [c for c in changes if c["pct_change"] < 0]
+    unchanged = [c for c in changes if c["pct_change"] == 0]
+
+    top_gainers = sorted(advances, key=lambda x: x["pct_change"], reverse=True)[:5]
+    top_losers = sorted(declines, key=lambda x: x["pct_change"])[:5]
+
+    gainers_str = " | ".join(f"{g['ticker']} {g['pct_change']:+.1f}%" for g in top_gainers)
+    losers_str = " | ".join(f"{l['ticker']} {l['pct_change']:+.1f}%" for l in top_losers)
+
+    summary_lines = [
+        f"VN30 breadth: {len(advances)} tăng / {len(unchanged)} đứng / {len(declines)} giảm",
+        f"Top tăng: {gainers_str}" if gainers_str else "Top tăng: (không có)",
+        f"Top giảm: {losers_str}" if losers_str else "Top giảm: (không có)",
+    ]
+    summary = "\n".join(summary_lines)
+    return ToolResult(
+        status="ok",
+        data={
+            "advances": len(advances),
+            "declines": len(declines),
+            "unchanged": len(unchanged),
+            "top_gainers": top_gainers,
+            "top_losers": top_losers,
+            "all_changes": changes,
+            "summary": summary,
+        },
+        message=summary,
+    )
+
+
+def get_market_breadth() -> ToolResult:
+    """Độ rộng thị trường VN30: advance/decline, top gainers/losers.
+
+    DB-first: query ohlcv_daily (1 SQL). Falls back to live batch VCI API if DB empty.
+    """
+    # DB-first: 1 SQL JOIN cho toàn bộ VN30
+    from tools.ohlcv_db import query_vn30_latest
+    db_df = query_vn30_latest(_VN30_CONSTITUENTS)
+    if db_df is not None and not db_df.empty:
+        changes = [
+            {
+                "ticker": row["ticker"],
+                "pct_change": float(row["pct_change"]),
+                "close": float(row["close"]),
+                "volume": 0,
+            }
+            for _, row in db_df.iterrows()
+        ]
+        if changes:
+            return _build_breadth_result(changes)
+
+    # Fallback: live batch VCI API
+    from tools.providers import VciDirectProvider
+    provider = VciDirectProvider()
+    try:
+        batch = provider.fetch_batch_latest(_VN30_CONSTITUENTS, count_back=3)
+    except Exception as e:
+        return _map_upstream_error("VN30", e)
+
+    if not batch:
+        return ToolResult(
+            status="no_data",
+            data=None,
+            message="Không lấy được dữ liệu batch VN30. Kiểm tra kết nối VCI API.",
+        )
+
+    changes = []
+    for sym, df in batch.items():
+        if df.empty or len(df) < 2:
+            continue
+        prev = float(df["close"].iloc[-2])
+        curr = float(df["close"].iloc[-1])
+        vol = float(df["volume"].iloc[-1])
+        pct = (curr - prev) / prev * 100 if prev else 0.0
+        changes.append({"ticker": sym, "pct_change": round(pct, 2), "close": curr, "volume": vol})
+
+    if not changes:
+        return ToolResult(
+            status="no_data",
+            data=None,
+            message="Không đủ dữ liệu để tính advance/decline VN30 (cần ít nhất 2 phiên).",
+        )
+    return _build_breadth_result(changes)
+
+
+# ── Tool 7: Phân tích sentiment thị trường ────────────────────────────────────
 
 def analyze_market_sentiment(ticker: str, days: int = 7) -> ToolResult:
     """Phân tích cảm xúc thị trường về ticker từ tin tức gần nhất (few-shot LLM).

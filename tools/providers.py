@@ -156,6 +156,48 @@ class VciDirectProvider(PriceProvider):
             raise ValueError(f"Không có dữ liệu lịch sử cho '{ticker}'")
         return df.tail(days).reset_index(drop=True)
 
+    def fetch_batch_latest(self, tickers: list[str], count_back: int = 2) -> dict[str, pd.DataFrame]:
+        """Fetch latest OHLCV for multiple tickers in one API call. Returns {ticker: df}."""
+        import httpx
+
+        payload = {
+            "timeFrame": "ONE_DAY",
+            "symbols": [t.upper() for t in tickers],
+            "to": int(datetime.now().timestamp()),
+            "countBack": count_back,
+        }
+        resp = httpx.post(self._URL, json=payload, headers=self._HEADERS, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+        if isinstance(data, dict) and "data" in data:
+            data = data["data"]
+        if not data:
+            return {}
+
+        upper_tickers = [t.upper() for t in tickers]
+        result: dict[str, pd.DataFrame] = {}
+        for idx, symbol_data in enumerate(data):
+            # VCI may return a "sym" field; fall back to request order if absent
+            sym = (symbol_data.get("sym") or symbol_data.get("s") or "").upper()
+            if not sym:
+                sym = upper_tickers[idx] if idx < len(upper_tickers) else f"UNKNOWN_{idx}"
+            if not symbol_data.get("t"):
+                continue
+            rows = [
+                {
+                    "time":   datetime.fromtimestamp(int(ts)).strftime("%Y-%m-%d"),
+                    "open":   symbol_data["o"][i],
+                    "high":   symbol_data["h"][i],
+                    "low":    symbol_data["l"][i],
+                    "close":  symbol_data["c"][i],
+                    "volume": symbol_data["v"][i],
+                }
+                for i, ts in enumerate(symbol_data["t"])
+            ]
+            df = pd.DataFrame(rows).sort_values("time").drop_duplicates(subset=["time"]).reset_index(drop=True)
+            result[sym] = df
+        return result
+
 
 # ── YFinanceProvider ──────────────────────────────────────────────────────────
 
