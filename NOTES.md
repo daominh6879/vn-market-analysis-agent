@@ -22,3 +22,8 @@
 | Bài 12 | [docs/notes/bai-12-facts-sql.md](docs/notes/bai-12-facts-sql.md) |
 | Bài 13 | [docs/notes/bai-13-pipeline-dagster.md](docs/notes/bai-13-pipeline-dagster.md) |
 | Bài 19 | [docs/notes/bai-19-tools.md](docs/notes/bai-19-tools.md) |
+| Bài 19b | [docs/notes/bai-19b-news-sentiment.md](docs/notes/bai-19b-news-sentiment.md) |
+| Bài 20 | [docs/notes/bai-20-tool-result.md](docs/notes/bai-20-tool-result.md) |
+| Bài 21 | [docs/notes/bai-21-mcp-server.md](docs/notes/bai-21-mcp-server.md) |
+| Bài 22 | [docs/notes/bai-22-agent-graph.md](docs/notes/bai-22-agent-graph.md) |
+| Bài 23 | [docs/notes/bai-23-ohlcv-db.md](docs/notes/bai-23-ohlcv-db.md) |
