@@ -95,6 +95,13 @@ TOOL_REGISTRY: dict[str, dict] = {
         "cost_hint": "low",
         "side_effect": False,
     },
+    # ── Phase 1: HOSE universe + top movers ─────────────────────────────────
+    "get_top_movers": {
+        "version": "1.0",
+        "timeout": 15,
+        "cost_hint": "low",
+        "side_effect": False,
+    },
 }
 
 

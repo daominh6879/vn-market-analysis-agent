@@ -69,11 +69,24 @@ def fetch_and_upsert(ticker: str, days: int = 30) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tickers", default="VN30,HPG,FPT", help="Comma-separated tickers")
-    parser.add_argument("--days",    type=int, default=30)
+    parser.add_argument("--tickers",  default="", help="Comma-separated tickers")
+    parser.add_argument("--universe", choices=["hose", "vn30"], default="",
+                        help="hose = full HOSE seed (~150 mã); vn30 = VN30 only")
+    parser.add_argument("--days",     type=int, default=30)
     args = parser.parse_args()
 
-    ticker_list = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
+    if args.universe == "hose":
+        from data.hose_universe import load_hose_tickers
+        ticker_list = load_hose_tickers()
+    elif args.universe == "vn30":
+        from data.hose_universe import get_vn30_tickers
+        ticker_list = get_vn30_tickers()
+    else:
+        ticker_list = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
+
+    if not ticker_list:
+        parser.error("Provide --tickers or --universe (hose|vn30)")
+
     total = 0
     for t in ticker_list:
         try:

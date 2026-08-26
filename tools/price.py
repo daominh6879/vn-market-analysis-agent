@@ -608,7 +608,7 @@ _VN30_CONSTITUENTS: list[str] = [
 ]
 
 
-def _build_breadth_result(changes: list[dict]) -> ToolResult:
+def _build_breadth_result(changes: list[dict], label: str = "VN30") -> ToolResult:
     """Shared result builder for get_market_breadth."""
     advances = [c for c in changes if c["pct_change"] > 0]
     declines = [c for c in changes if c["pct_change"] < 0]
@@ -621,7 +621,7 @@ def _build_breadth_result(changes: list[dict]) -> ToolResult:
     losers_str = " | ".join(f"{l['ticker']} {l['pct_change']:+.1f}%" for l in top_losers)
 
     summary_lines = [
-        f"VN30 breadth: {len(advances)} tăng / {len(unchanged)} đứng / {len(declines)} giảm",
+        f"{label} breadth: {len(advances)} tăng / {len(unchanged)} đứng / {len(declines)} giảm",
         f"Top tăng: {gainers_str}" if gainers_str else "Top tăng: (không có)",
         f"Top giảm: {losers_str}" if losers_str else "Top giảm: (không có)",
     ]
@@ -641,14 +641,25 @@ def _build_breadth_result(changes: list[dict]) -> ToolResult:
     )
 
 
-def get_market_breadth() -> ToolResult:
-    """Độ rộng thị trường VN30: advance/decline, top gainers/losers.
+def get_market_breadth(universe: str = "HOSE") -> ToolResult:
+    """Độ rộng thị trường: advance/decline/unchanged + top gainers/losers.
 
-    DB-first: query ohlcv_daily (1 SQL). Falls back to live batch VCI API if DB empty.
+    universe: "HOSE" (default, ~150-400 mã) | "VN30" (30 mã, faster)
+
+    DB-first: query ohlcv_daily. Falls back to live batch VCI API if DB empty.
     """
-    # DB-first: 1 SQL JOIN cho toàn bộ VN30
-    from tools.ohlcv_db import query_vn30_latest
-    db_df = query_vn30_latest(_VN30_CONSTITUENTS)
+    # Resolve ticker list
+    if universe.upper() == "VN30":
+        tickers = _VN30_CONSTITUENTS
+        label = "VN30"
+    else:
+        from data.hose_universe import load_hose_tickers
+        tickers = load_hose_tickers()
+        label = "HOSE"
+
+    # DB-first
+    from tools.ohlcv_db import query_universe_latest
+    db_df = query_universe_latest(tickers)
     if db_df is not None and not db_df.empty:
         changes = [
             {
@@ -660,40 +671,108 @@ def get_market_breadth() -> ToolResult:
             for _, row in db_df.iterrows()
         ]
         if changes:
-            return _build_breadth_result(changes)
+            return _build_breadth_result(changes, label=label)
 
-    # Fallback: live batch VCI API
+    # Fallback: live batch VCI API (chunk into groups of 30 to respect API limits)
     from tools.providers import VciDirectProvider
     provider = VciDirectProvider()
-    try:
-        batch = provider.fetch_batch_latest(_VN30_CONSTITUENTS, count_back=3)
-    except Exception as e:
-        return _map_upstream_error("VN30", e)
-
-    if not batch:
-        return ToolResult(
-            status="no_data",
-            data=None,
-            message="Không lấy được dữ liệu batch VN30. Kiểm tra kết nối VCI API.",
-        )
-
     changes = []
-    for sym, df in batch.items():
-        if df.empty or len(df) < 2:
-            continue
-        prev = float(df["close"].iloc[-2])
-        curr = float(df["close"].iloc[-1])
-        vol = float(df["volume"].iloc[-1])
-        pct = (curr - prev) / prev * 100 if prev else 0.0
-        changes.append({"ticker": sym, "pct_change": round(pct, 2), "close": curr, "volume": vol})
+    chunk_size = 30
+    for i in range(0, len(tickers), chunk_size):
+        chunk = tickers[i:i + chunk_size]
+        try:
+            batch = provider.fetch_batch_latest(chunk, count_back=3)
+        except Exception as e:
+            continue  # skip failed chunks, don't abort entire breadth
+        for sym, df in batch.items():
+            if df.empty or len(df) < 2:
+                continue
+            prev = float(df["close"].iloc[-2])
+            curr = float(df["close"].iloc[-1])
+            vol = float(df["volume"].iloc[-1])
+            pct = (curr - prev) / prev * 100 if prev else 0.0
+            changes.append({"ticker": sym, "pct_change": round(pct, 2), "close": curr, "volume": vol})
 
     if not changes:
         return ToolResult(
             status="no_data",
             data=None,
-            message="Không đủ dữ liệu để tính advance/decline VN30 (cần ít nhất 2 phiên).",
+            message=f"Không đủ dữ liệu để tính advance/decline {label} (cần ít nhất 2 phiên).",
         )
-    return _build_breadth_result(changes)
+    return _build_breadth_result(changes, label=label)
+
+
+def get_top_movers(by: str = "value", limit: int = 5) -> ToolResult:
+    """Top mã theo thanh khoản hoặc % thay đổi trong phiên gần nhất.
+
+    by: "value" (top theo giá trị giao dịch ≈ close×volume) |
+        "pct_gain" (top tăng giá) | "pct_loss" (top giảm giá)
+    limit: số mã trả về (mặc định 5)
+    """
+    from data.hose_universe import load_hose_tickers
+    tickers = load_hose_tickers()
+
+    by = by.lower().strip()
+    if by not in ("value", "pct_gain", "pct_loss"):
+        return ToolResult(
+            status="invalid_input",
+            data=None,
+            message="by phải là 'value', 'pct_gain', hoặc 'pct_loss'.",
+        )
+
+    try:
+        if by == "value":
+            from tools.ohlcv_db import query_top_by_value
+            df = query_top_by_value(tickers, limit=limit)
+            if df is None or df.empty:
+                return ToolResult(status="no_data", data=None,
+                                  message="Không có dữ liệu top thanh khoản từ DB.")
+            items = [
+                {
+                    "ticker": row["ticker"],
+                    "close": float(row["close"]),
+                    "volume": int(row["volume"]),
+                    "traded_value": float(row["traded_value"]),
+                    "pct_change": float(row["pct_change"]),
+                }
+                for _, row in df.iterrows()
+            ]
+            lines = [f"• {r['ticker']}: {r['close']:,.0f} ({r['pct_change']:+.1f}%)"
+                     f" — value ~{r['traded_value']/1e9:.0f} tỷ"
+                     for r in items]
+            message = "Top thanh khoản:\n" + "\n".join(lines)
+            return ToolResult(status="ok", data=items, message=message)
+
+        else:
+            from tools.ohlcv_db import query_universe_latest
+            db_df = query_universe_latest(tickers)
+            if db_df is None or db_df.empty:
+                return ToolResult(status="no_data", data=None,
+                                  message="Không có dữ liệu từ DB.")
+
+            if by == "pct_gain":
+                top = db_df.nlargest(limit, "pct_change")
+                label = "Top tăng"
+            else:
+                top = db_df.nsmallest(limit, "pct_change")
+                label = "Top giảm"
+
+            items = [
+                {
+                    "ticker": row["ticker"],
+                    "close": float(row["close"]),
+                    "pct_change": float(row["pct_change"]),
+                }
+                for _, row in top.iterrows()
+            ]
+            lines = [f"• {r['ticker']}: {r['close']:,.0f} ({r['pct_change']:+.1f}%)"
+                     for r in items]
+            message = f"{label}:\n" + "\n".join(lines)
+            return ToolResult(status="ok", data=items, message=message)
+
+    except Exception as e:
+        return ToolResult(status="upstream_error", data=None,
+                          message=f"Lỗi get_top_movers: {e}")
 
 
 # ── Tool 7: Phân tích sentiment thị trường ────────────────────────────────────
