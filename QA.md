@@ -536,3 +536,93 @@ Không có lớp nào đủ một mình. Defense-in-depth: lớp sau bắt nhữ
 
 ---
 
+## Bài 20 — Tại sao trả `[]` khiến agent lặp vô hạn, còn `no_data` kèm hướng dẫn thì không?
+
+**Q:** Tôi thấy agent gọi đi gọi lại cùng 1 tool với cùng tham số. Lý do thật sự là gì? Có phải prompt kém không?
+
+**A:** Không phải prompt kém. Lý do là **tool không cho agent thông tin để thoát ra**.
+
+Khi tool trả `[]` hoặc raise exception:
+1. Agent nhận tín hiệu "không có kết quả / thất bại"
+2. Agent không có hướng dẫn nào → suy luận: *"có thể mạng chậm, thử lại"*
+3. Agent gọi lại đúng tool, đúng tham số → cùng kết quả → lặp lại bước 2
+
+Khi tool trả `ToolResult(status="no_data", message="Không có tin tức HPG 7 ngày. **Tăng khoảng thời gian hoặc thử mã khác.**")`:
+1. Agent nhận được status + hướng dẫn cụ thể
+2. Agent thay đổi chiến lược: thử `days=30` hoặc chuyển sang tool khác
+3. Vòng lặp phá vỡ
+
+Nguyên nhân cốt lõi: agent không có ý chí riêng — nó tối đa hoá "hoàn thành task". Nếu không có signal nào nói "đường này dead end", nó cứ thử lại. `message` là **thứ duy nhất** model đọc để quyết định bước tiếp theo.
+
+---
+
+**Q:** Nếu `message` viết là "có lỗi xảy ra" thì model làm gì?
+
+**A:** Model làm chính xác những gì message nói — tức là không làm gì có ích.
+
+"Có lỗi xảy ra" không trả lời được câu hỏi nào mà agent cần: *Lỗi gì? Tạm thời hay vĩnh viễn? Thử lại ngay hay chờ? Đổi tham số gì? Dùng tool nào thay thế?*
+
+Model không có thêm thông tin nào ngoài message → tiếp tục tìm cách "giải quyết lỗi" bằng cách thử lại với cùng input → loop.
+
+So sánh:
+
+| Message | Agent làm gì tiếp |
+|---|---|
+| `"có lỗi xảy ra"` | Retry ngay, loop |
+| `"Timeout. Thử lại sau 1–2 phút."` | Pause, retry 1 lần |
+| `"Không có dữ liệu cho 'XXXX'. Kiểm tra mã CK. Thử mã khác."` | Xác nhận ticker, thử ticker khác |
+| `"429 Rate limited. Chờ 60 giây. Đừng gọi lại ngay."` | Chuyển sang tool khác trong khi chờ |
+
+**Quy tắc viết message:** nói rõ *đừng làm gì* và *nên làm gì thay thế*. Viết như đang nhắn tin cho đồng nghiệp mới đang bị stuck, không phải ghi log lỗi cho dev.
+
+---
+
+**Q:** `_map_upstream_error` dùng string matching để phân biệt loại lỗi — có brittle không?
+
+**A:** Có, nhưng đây là đánh đổi có chủ ý.
+
+Vấn đề: `VnstockProvider` và `YFinanceProvider` raise exception với message không nhất quán — không có enum lỗi chuẩn, mỗi library format khác nhau. Parse exception message là cách duy nhất không cần sửa provider.
+
+```python
+# vnstock có thể raise: "HTTP Error 429 for url..."
+# yfinance có thể raise: "Too Many Requests. Rate limited."
+# requests có thể raise: "429 Client Error: Too Many Requests"
+# → tất cả đều chứa "429" hoặc "rate" → match được
+```
+
+Brittle ở đâu: nếu provider nâng cấp và đổi format message hoàn toàn → có thể map sai sang `upstream_error` thay vì `rate_limited`. Hệ quả: agent retry ngay thay vì chờ 60s — không nguy hiểm, chỉ kém optimal.
+
+Fix đúng hơn: wrapper riêng cho từng provider, convert exception thành enum `ProviderError`. Nhưng với 2 provider hiện tại, string matching đủ dùng và ít code hơn nhiều.
+
+---
+
+**Q:** Tại sao `data: Any | None` thay vì generic `ToolResult[T]`?
+
+**A:** Generic `ToolResult[T]` (Pydantic v2 generic model) yêu cầu khai báo type tại call site:
+
+```python
+# Generic — verbose, cần biết type trước khi gọi
+result: ToolResult[float] = get_realtime_price("HPG")
+result: ToolResult[pd.DataFrame] = get_historical_ohlcv("HPG", 30)
+```
+
+Với `data: Any | None`, caller chỉ cần check `status == "ok"` rồi dùng `result.data` — IDE và runtime vẫn biết type qua function signature return type. Ngoài ra, `pd.DataFrame` trong generic model cần `ConfigDict(arbitrary_types_allowed=True)` dù sao, và agent code thường không cần strict typing cho `data` vì nó đọc `message` nhiều hơn.
+
+Trade-off chấp nhận được: mất type safety cho `data`, đổi lại interface đơn giản hơn, không cần bọc DataFrame vào TypeVar.
+
+---
+
+**Q:** `tools/registry.py` dùng để làm gì thực tế? Không thấy code nào đọc nó.
+
+**A:** Registry hiện tại là **metadata chờ dùng** — không có code tự động đọc nó, nhưng nó phục vụ 3 use case sắp tới:
+
+1. **Bài 21 (MCP server):** khi expose tool qua MCP, server cần `timeout` để set HTTP deadline, `version` để version the endpoint. Không có registry → hardcode trong mcp_server.py → khó sync với tool thật.
+
+2. **Agent orchestrator (bài 22+):** agent cần biết `cost_hint` để quyết định gọi tool nào trước (gọi `free` tool trước, chỉ gọi `medium` khi cần) và `side_effect` để biết tool nào an toàn retry (side_effect=False → retry vô hại; side_effect=True → không retry mù).
+
+3. **Monitoring:** log mỗi tool call kèm metadata → biết tool nào tốn tiền nhiều nhất, tool nào timeout thường xuyên.
+
+Pattern này là **self-documenting infrastructure** — metadata viết một lần, dùng ở nhiều chỗ. Giống schema migration: không có tác dụng ngay nhưng là prerequisite cho nhiều thứ sau.
+
+---
+

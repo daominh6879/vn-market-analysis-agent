@@ -1,5 +1,5 @@
 """
-tools/cli.py — CLI để test 5 tool độc lập.
+tools/cli.py — CLI để test 5 tool độc lập (bài 19 + 19B + 20).
 
 Dùng:
     python -m tools.cli price FPT
@@ -16,61 +16,91 @@ Dùng:
 import argparse
 import sys
 
+from tools.result import ToolResult
+
+
+def _check(result: ToolResult, *, exit_on_error: bool = True) -> bool:
+    """Print error message and optionally exit if status is not ok."""
+    if result.status != "ok":
+        print(f"[{result.status}] {result.message}", file=sys.stderr)
+        if exit_on_error:
+            sys.exit(1)
+        return False
+    return True
+
 
 def cmd_price(args: argparse.Namespace) -> None:
     from tools.price import get_realtime_price
-    price = get_realtime_price(args.ticker)
-    print(f"{args.ticker}: {price:,.0f} VND")
+    result = get_realtime_price(args.ticker)
+    if _check(result):
+        print(f"{args.ticker}: {result.data:,.0f} VND")
 
 
 def cmd_price_intl(args: argparse.Namespace) -> None:
     from tools.price import get_realtime_price_intl
-    price = get_realtime_price_intl(args.ticker)
-    print(f"{args.ticker}: {price:.2f} USD")
+    result = get_realtime_price_intl(args.ticker)
+    if _check(result):
+        print(f"{args.ticker}: {result.data:.2f} USD")
 
 
 def cmd_ohlcv(args: argparse.Namespace) -> None:
     from tools.price import get_historical_ohlcv
-    df = get_historical_ohlcv(args.ticker, args.days)
-    print(f"{args.ticker} — {len(df)} phiên gần nhất (VND):")
-    print(df.tail(5).to_string(index=False))
+    result = get_historical_ohlcv(args.ticker, args.days)
+    if _check(result):
+        print(f"{args.ticker} — {len(result.data)} phiên gần nhất (VND):")
+        print(result.data.tail(5).to_string(index=False))
 
 
 def cmd_ohlcv_intl(args: argparse.Namespace) -> None:
     from tools.price import get_historical_ohlcv_intl
-    df = get_historical_ohlcv_intl(args.ticker, args.days)
-    print(f"{args.ticker} — {len(df)} phiên gần nhất (USD):")
-    print(df.tail(5).to_string(index=False))
+    result = get_historical_ohlcv_intl(args.ticker, args.days)
+    if _check(result):
+        print(f"{args.ticker} — {len(result.data)} phiên gần nhất (USD):")
+        print(result.data.tail(5).to_string(index=False))
 
 
 def cmd_indicators(args: argparse.Namespace) -> None:
     from tools.price import get_historical_ohlcv, calculate_indicators
-    df = get_historical_ohlcv(args.ticker, args.days)
-    result = calculate_indicators(df, currency="VND")
-    print(f"=== Chỉ báo kỹ thuật: {args.ticker} ===")
-    print(result)
+    ohlcv = get_historical_ohlcv(args.ticker, args.days)
+    if not _check(ohlcv):
+        return
+    result = calculate_indicators(ohlcv.data, currency="VND")
+    if _check(result):
+        print(f"=== Chỉ báo kỹ thuật: {args.ticker} ===")
+        print(result.data)
 
 
 def cmd_indicators_intl(args: argparse.Namespace) -> None:
     from tools.price import get_historical_ohlcv_intl, calculate_indicators
-    df = get_historical_ohlcv_intl(args.ticker, args.days)
-    result = calculate_indicators(df, currency="USD")
-    print(f"=== Chỉ báo kỹ thuật: {args.ticker} (USD) ===")
-    print(result)
+    ohlcv = get_historical_ohlcv_intl(args.ticker, args.days)
+    if not _check(ohlcv):
+        return
+    result = calculate_indicators(ohlcv.data, currency="USD")
+    if _check(result):
+        print(f"=== Chỉ báo kỹ thuật: {args.ticker} (USD) ===")
+        print(result.data)
 
 
 def cmd_news(args: argparse.Namespace) -> None:
     from tools.price import search_financial_news
     result = search_financial_news(args.ticker, args.days)
-    print(f"=== Tin tức: {args.ticker} ({args.days} ngày) ===")
-    print(result)
+    if result.status == "ok":
+        print(f"=== Tin tức: {args.ticker} ({args.days} ngày) ===")
+        print(result.data)
+    else:
+        print(f"[{result.status}] {result.message}", file=sys.stderr)
+        sys.exit(1)
 
 
 def cmd_sentiment(args: argparse.Namespace) -> None:
     from tools.price import analyze_market_sentiment
     result = analyze_market_sentiment(args.ticker, args.days)
-    print(f"=== Sentiment: {args.ticker} ({args.days} ngày) ===")
-    print(result)
+    if result.status == "ok":
+        print(f"=== Sentiment: {args.ticker} ({args.days} ngày) ===")
+        print(result.data)
+    else:
+        print(f"[{result.status}] {result.message}", file=sys.stderr)
+        sys.exit(1)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -125,29 +155,22 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    try:
-        if args.command == "price":
-            cmd_price(args)
-        elif args.command == "price-intl":
-            cmd_price_intl(args)
-        elif args.command == "ohlcv":
-            cmd_ohlcv(args)
-        elif args.command == "ohlcv-intl":
-            cmd_ohlcv_intl(args)
-        elif args.command == "indicators":
-            cmd_indicators(args)
-        elif args.command == "indicators-intl":
-            cmd_indicators_intl(args)
-        elif args.command == "news":
-            cmd_news(args)
-        elif args.command == "sentiment":
-            cmd_sentiment(args)
-    except ValueError as e:
-        print(f"Lỗi: {e}", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(f"Lỗi không mong đợi: {e}", file=sys.stderr)
-        sys.exit(1)
+    if args.command == "price":
+        cmd_price(args)
+    elif args.command == "price-intl":
+        cmd_price_intl(args)
+    elif args.command == "ohlcv":
+        cmd_ohlcv(args)
+    elif args.command == "ohlcv-intl":
+        cmd_ohlcv_intl(args)
+    elif args.command == "indicators":
+        cmd_indicators(args)
+    elif args.command == "indicators-intl":
+        cmd_indicators_intl(args)
+    elif args.command == "news":
+        cmd_news(args)
+    elif args.command == "sentiment":
+        cmd_sentiment(args)
 
 
 if __name__ == "__main__":

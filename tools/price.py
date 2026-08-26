@@ -1,7 +1,8 @@
 """
-tools/price.py — Ba tool giá chứng khoán độc lập (bài 19).
+tools/price.py — Tool giá chứng khoán (bài 19 + 19B + 20).
 
-Dùng trực tiếp, không cần agent.
+Mọi public function trả ToolResult — không raise ra ngoài,
+không trả empty list trần. Agent đọc .message để quyết định bước tiếp.
 """
 
 from __future__ import annotations
@@ -12,6 +13,8 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import pandas as pd
+
+from tools.result import ToolResult
 
 
 # ── TTL cache ────────────────────────────────────────────────────────────────
@@ -163,46 +166,108 @@ def set_provider(provider: PriceProvider) -> None:
     _default_provider = provider
 
 
+# ── Error mapping helper ──────────────────────────────────────────────────────
+
+def _map_upstream_error(ticker: str, exc: Exception) -> ToolResult:
+    """Map generic exception → ToolResult với status phù hợp và message có ích."""
+    msg = str(exc).lower()
+    if "429" in msg or "rate" in msg or "too many" in msg:
+        return ToolResult(
+            status="rate_limited",
+            data=None,
+            message=(
+                f"Đã vượt giới hạn request khi lấy dữ liệu '{ticker}'. "
+                "Chờ 60 giây rồi thử lại. Đừng gọi lại ngay — sẽ bị chặn tiếp."
+            ),
+        )
+    if "timeout" in msg or "timed out" in msg:
+        return ToolResult(
+            status="upstream_error",
+            data=None,
+            message=(
+                f"Timeout khi kết nối nguồn dữ liệu cho '{ticker}'. "
+                "Thử lại sau 1–2 phút. Không cần đổi tham số."
+            ),
+        )
+    if "500" in msg or "server error" in msg or "internal server" in msg:
+        return ToolResult(
+            status="upstream_error",
+            data=None,
+            message=(
+                f"Server nguồn dữ liệu trả lỗi 500 khi lấy '{ticker}'. "
+                "Đây là lỗi tạm thời phía server. Thử lại sau 1–2 phút, không đổi tham số."
+            ),
+        )
+    return ToolResult(
+        status="upstream_error",
+        data=None,
+        message=(
+            f"Lỗi kết nối khi lấy dữ liệu '{ticker}': {exc}. "
+            "Thử lại sau vài phút."
+        ),
+    )
+
+
 # ── Tool 1: Giá hiện tại ─────────────────────────────────────────────────────
 
-def get_realtime_price(ticker: str, provider: PriceProvider | None = None) -> float:
-    """
-    Trả về giá đóng cửa gần nhất (VND).
-
-    Args:
-        ticker: Mã CK, ví dụ 'FPT', 'HPG'.
-        provider: Override provider (mặc định dùng VnstockProvider).
-
-    Returns:
-        Giá float (VND).
-
-    Raises:
-        ValueError: ticker rỗng hoặc không có dữ liệu.
-    """
+def get_realtime_price(ticker: str, provider: PriceProvider | None = None) -> ToolResult:
+    """Trả giá đóng cửa gần nhất (VND). Luôn trả ToolResult, không raise."""
     if not ticker or not ticker.strip():
-        raise ValueError("ticker không được rỗng")
+        return ToolResult(
+            status="invalid_input",
+            data=None,
+            message="ticker không được rỗng. Thử với mã hợp lệ như 'HPG' hoặc 'FPT'.",
+        )
+    t = ticker.strip().upper()
     p = provider or _default_provider
-    return p.get_price(ticker.upper())
+    try:
+        price = p.get_price(t)
+        return ToolResult(
+            status="ok",
+            data=price,
+            message=f"Giá {t}: {price:,.0f} VND (phiên gần nhất).",
+        )
+    except ValueError as e:
+        return ToolResult(
+            status="no_data",
+            data=None,
+            message=(
+                f"Không có dữ liệu giá cho '{t}': {e}. "
+                "Kiểm tra mã CK đúng chính tả. Thử mã khác hoặc dùng get_historical_ohlcv."
+            ),
+        )
+    except Exception as e:
+        return _map_upstream_error(t, e)
 
 
-def get_realtime_price_intl(ticker: str, provider: PriceProvider | None = None) -> float:
-    """
-    Trả về giá đóng cửa gần nhất (USD) cho mã quốc tế (NYSE/NASDAQ).
-
-    Args:
-        ticker: Mã CK quốc tế, ví dụ 'AAPL', 'TSLA'.
-        provider: Override provider (mặc định dùng YFinanceProvider).
-
-    Returns:
-        Giá float (USD).
-
-    Raises:
-        ValueError: ticker rỗng hoặc không có dữ liệu.
-    """
+def get_realtime_price_intl(ticker: str, provider: PriceProvider | None = None) -> ToolResult:
+    """Trả giá đóng cửa gần nhất (USD) cho mã quốc tế. Luôn trả ToolResult, không raise."""
     if not ticker or not ticker.strip():
-        raise ValueError("ticker không được rỗng")
+        return ToolResult(
+            status="invalid_input",
+            data=None,
+            message="ticker không được rỗng. Thử với mã quốc tế như 'AAPL' hoặc 'TSLA'.",
+        )
+    t = ticker.strip().upper()
     p = provider or YFinanceProvider()
-    return p.get_price(ticker.upper())
+    try:
+        price = p.get_price(t)
+        return ToolResult(
+            status="ok",
+            data=price,
+            message=f"Giá {t}: {price:.2f} USD (phiên gần nhất).",
+        )
+    except ValueError as e:
+        return ToolResult(
+            status="no_data",
+            data=None,
+            message=(
+                f"Không có dữ liệu giá cho '{t}': {e}. "
+                "Kiểm tra mã NYSE/NASDAQ đúng chính tả. Thử mã khác."
+            ),
+        )
+    except Exception as e:
+        return _map_upstream_error(t, e)
 
 
 # ── Tool 2: Lịch sử OHLCV ────────────────────────────────────────────────────
@@ -211,133 +276,187 @@ def get_historical_ohlcv(
     ticker: str,
     days: int = 60,
     provider: PriceProvider | None = None,
-) -> pd.DataFrame:
-    """
-    Trả về DataFrame OHLCV `days` phiên gần nhất, không có ngày trùng.
-
-    Columns: time, open, high, low, close, volume.
-
-    Raises:
-        ValueError: ticker rỗng, days < 1, hoặc không có dữ liệu.
-    """
+) -> ToolResult:
+    """Trả DataFrame OHLCV `days` phiên gần nhất. Luôn trả ToolResult, không raise."""
     if not ticker or not ticker.strip():
-        raise ValueError("ticker không được rỗng")
+        return ToolResult(
+            status="invalid_input",
+            data=None,
+            message="ticker không được rỗng. Thử với mã hợp lệ như 'HPG'.",
+        )
     if days < 1:
-        raise ValueError("days phải >= 1")
+        return ToolResult(
+            status="invalid_input",
+            data=None,
+            message=f"days={days} không hợp lệ. Phải >= 1. Thử days=30 hoặc days=60.",
+        )
+    t = ticker.strip().upper()
     p = provider or _default_provider
-    return p.get_history(ticker.upper(), days)
+    try:
+        df = p.get_history(t, days)
+        return ToolResult(
+            status="ok",
+            data=df,
+            message=f"Lấy được {len(df)} phiên lịch sử OHLCV của {t} (VND).",
+        )
+    except ValueError as e:
+        return ToolResult(
+            status="no_data",
+            data=None,
+            message=(
+                f"Không có dữ liệu lịch sử cho '{t}': {e}. "
+                "Kiểm tra mã CK hoặc giảm số ngày (days)."
+            ),
+        )
+    except Exception as e:
+        return _map_upstream_error(t, e)
 
 
 def get_historical_ohlcv_intl(
     ticker: str,
     days: int = 60,
     provider: PriceProvider | None = None,
-) -> pd.DataFrame:
-    """
-    Trả về DataFrame OHLCV `days` phiên gần nhất cho mã quốc tế (USD).
-
-    Columns: time, open, high, low, close, volume.
-
-    Raises:
-        ValueError: ticker rỗng, days < 1, hoặc không có dữ liệu.
-    """
+) -> ToolResult:
+    """Trả DataFrame OHLCV `days` phiên gần nhất cho mã quốc tế (USD). Luôn trả ToolResult."""
     if not ticker or not ticker.strip():
-        raise ValueError("ticker không được rỗng")
+        return ToolResult(
+            status="invalid_input",
+            data=None,
+            message="ticker không được rỗng. Thử với mã quốc tế như 'AAPL'.",
+        )
     if days < 1:
-        raise ValueError("days phải >= 1")
+        return ToolResult(
+            status="invalid_input",
+            data=None,
+            message=f"days={days} không hợp lệ. Phải >= 1. Thử days=30.",
+        )
+    t = ticker.strip().upper()
     p = provider or YFinanceProvider()
-    return p.get_history(ticker.upper(), days)
+    try:
+        df = p.get_history(t, days)
+        return ToolResult(
+            status="ok",
+            data=df,
+            message=f"Lấy được {len(df)} phiên lịch sử OHLCV của {t} (USD).",
+        )
+    except ValueError as e:
+        return ToolResult(
+            status="no_data",
+            data=None,
+            message=(
+                f"Không có dữ liệu lịch sử cho '{t}': {e}. "
+                "Kiểm tra mã NYSE/NASDAQ hoặc giảm số ngày."
+            ),
+        )
+    except Exception as e:
+        return _map_upstream_error(t, e)
 
 
 # ── Tool 3: Chỉ báo kỹ thuật ─────────────────────────────────────────────────
 
-def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> str:
+def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> ToolResult:
     """
-    Tính RSI(14), MACD(12,26,9), MA(20), MA(50) và trả text mô tả.
-
-    Không trả số thô — text giúp model hiểu ngữ cảnh.
+    Tính RSI(14), MACD(12,26,9), MA(20), MA(50). Luôn trả ToolResult, không raise.
 
     Args:
         df: DataFrame từ get_historical_ohlcv (phải có cột 'close').
         currency: Đơn vị tiền tệ ('VND' hoặc 'USD'). Tag vào output.
-
-    Returns:
-        Chuỗi mô tả các chỉ báo.
     """
     try:
         import pandas_ta as ta  # noqa: F401
     except ImportError:
-        return "Lỗi: pandas-ta chưa cài. Chạy: pip install pandas-ta"
+        return ToolResult(
+            status="upstream_error",
+            data=None,
+            message="pandas-ta chưa cài. Không thể tính chỉ báo. Chạy: pip install pandas-ta rồi thử lại.",
+        )
 
     if df is None or df.empty:
-        return "Lỗi: DataFrame rỗng, không thể tính chỉ báo."
+        return ToolResult(
+            status="invalid_input",
+            data=None,
+            message="DataFrame rỗng. Truyền vào DataFrame có dữ liệu từ get_historical_ohlcv.",
+        )
 
     if "close" not in df.columns:
-        return "Lỗi: DataFrame thiếu cột 'close'."
+        return ToolResult(
+            status="invalid_input",
+            data=None,
+            message="DataFrame thiếu cột 'close'. Truyền vào DataFrame từ get_historical_ohlcv.",
+        )
 
-    lines: list[str] = [f"[Đơn vị: {currency}]"]
-
-    # RSI(14)
-    rsi_series = df.ta.rsi(length=14)
     try:
-        rsi = float(rsi_series.iloc[-1]) if rsi_series is not None else float("nan")
-    except (TypeError, ValueError):
-        rsi = float("nan")
-    if pd.isna(rsi):
-        lines.append("RSI(14): không đủ dữ liệu (cần ít nhất 14 phiên)")
-    else:
-        zone = "quá mua" if rsi > 70 else "quá bán" if rsi < 30 else "trung tính"
-        lines.append(f"RSI(14) = {rsi:.1f} → vùng {zone}")
+        lines: list[str] = [f"[Đơn vị: {currency}]"]
 
-    # MACD(12,26,9)
-    macd_df = df.ta.macd(fast=12, slow=26, signal=9)
-    if macd_df is None or "MACD_12_26_9" not in macd_df.columns:
-        lines.append("MACD(12,26,9): không đủ dữ liệu (cần ít nhất 26 phiên)")
-    else:
+        # RSI(14)
+        rsi_series = df.ta.rsi(length=14)
         try:
-            macd_val = float(macd_df["MACD_12_26_9"].iloc[-1])
-            signal_val = float(macd_df["MACDs_12_26_9"].iloc[-1])
-            hist_val = float(macd_df["MACDh_12_26_9"].iloc[-1])
+            rsi = float(rsi_series.iloc[-1]) if rsi_series is not None else float("nan")
         except (TypeError, ValueError):
-            macd_val = float("nan")
-            signal_val = float("nan")
-            hist_val = float("nan")
-        if pd.isna(macd_val):
-            lines.append("MACD(12,26,9): không đủ dữ liệu")
+            rsi = float("nan")
+        if pd.isna(rsi):
+            lines.append("RSI(14): không đủ dữ liệu (cần ít nhất 14 phiên)")
         else:
-            trend = "tăng" if hist_val > 0 else "giảm"
-            lines.append(
-                f"MACD(12,26,9) = {macd_val:.2f}, Signal = {signal_val:.2f}, "
-                f"Histogram = {hist_val:.2f} → xu hướng {trend}"
-            )
+            zone = "quá mua" if rsi > 70 else "quá bán" if rsi < 30 else "trung tính"
+            lines.append(f"RSI(14) = {rsi:.1f} → vùng {zone}")
 
-    # MA(20)
-    ma20 = df.ta.sma(length=20)
-    try:
-        ma20_val = float(ma20.iloc[-1]) if ma20 is not None else float("nan")
-    except (TypeError, ValueError):
-        ma20_val = float("nan")
-    if pd.isna(ma20_val):
-        lines.append("MA(20): không đủ dữ liệu (cần ít nhất 20 phiên)")
-    else:
-        close_last = float(df["close"].iloc[-1])
-        pos = "trên" if close_last > ma20_val else "dưới"
-        lines.append(f"MA(20) = {ma20_val:,.0f} → giá đang {pos} MA20")
+        # MACD(12,26,9)
+        macd_df = df.ta.macd(fast=12, slow=26, signal=9)
+        if macd_df is None or "MACD_12_26_9" not in macd_df.columns:
+            lines.append("MACD(12,26,9): không đủ dữ liệu (cần ít nhất 26 phiên)")
+        else:
+            try:
+                macd_val = float(macd_df["MACD_12_26_9"].iloc[-1])
+                signal_val = float(macd_df["MACDs_12_26_9"].iloc[-1])
+                hist_val = float(macd_df["MACDh_12_26_9"].iloc[-1])
+            except (TypeError, ValueError):
+                macd_val = float("nan")
+                signal_val = float("nan")
+                hist_val = float("nan")
+            if pd.isna(macd_val):
+                lines.append("MACD(12,26,9): không đủ dữ liệu")
+            else:
+                trend = "tăng" if hist_val > 0 else "giảm"
+                lines.append(
+                    f"MACD(12,26,9) = {macd_val:.2f}, Signal = {signal_val:.2f}, "
+                    f"Histogram = {hist_val:.2f} → xu hướng {trend}"
+                )
 
-    # MA(50)
-    ma50 = df.ta.sma(length=50)
-    try:
-        ma50_val = float(ma50.iloc[-1]) if ma50 is not None else float("nan")
-    except (TypeError, ValueError):
-        ma50_val = float("nan")
-    if pd.isna(ma50_val):
-        lines.append("MA(50): không đủ dữ liệu (cần ít nhất 50 phiên)")
-    else:
-        close_last = float(df["close"].iloc[-1])
-        pos = "trên" if close_last > ma50_val else "dưới"
-        lines.append(f"MA(50) = {ma50_val:,.0f} → giá đang {pos} MA50")
+        # MA(20)
+        ma20 = df.ta.sma(length=20)
+        try:
+            ma20_val = float(ma20.iloc[-1]) if ma20 is not None else float("nan")
+        except (TypeError, ValueError):
+            ma20_val = float("nan")
+        if pd.isna(ma20_val):
+            lines.append("MA(20): không đủ dữ liệu (cần ít nhất 20 phiên)")
+        else:
+            close_last = float(df["close"].iloc[-1])
+            pos = "trên" if close_last > ma20_val else "dưới"
+            lines.append(f"MA(20) = {ma20_val:,.0f} → giá đang {pos} MA20")
 
-    return "\n".join(lines)
+        # MA(50)
+        ma50 = df.ta.sma(length=50)
+        try:
+            ma50_val = float(ma50.iloc[-1]) if ma50 is not None else float("nan")
+        except (TypeError, ValueError):
+            ma50_val = float("nan")
+        if pd.isna(ma50_val):
+            lines.append("MA(50): không đủ dữ liệu (cần ít nhất 50 phiên)")
+        else:
+            close_last = float(df["close"].iloc[-1])
+            pos = "trên" if close_last > ma50_val else "dưới"
+            lines.append(f"MA(50) = {ma50_val:,.0f} → giá đang {pos} MA50")
+
+        result_str = "\n".join(lines)
+        return ToolResult(status="ok", data=result_str, message=result_str)
+
+    except Exception as e:
+        return ToolResult(
+            status="upstream_error",
+            data=None,
+            message=f"Lỗi khi tính chỉ báo kỹ thuật: {e}. Kiểm tra DataFrame đầu vào.",
+        )
 
 
 # ── Tool 4: Tin tức tài chính ─────────────────────────────────────────────────
@@ -346,24 +465,37 @@ def search_financial_news(
     ticker: str,
     days: int = 7,
     provider: PriceProvider | None = None,  # unused — kept for interface consistency
-) -> str:
+) -> ToolResult:
     """
     Tìm tin tức tài chính về ticker trong N ngày gần nhất từ Qdrant news_chunks.
-
-    Trả text: '[nguồn | ngày] tiêu đề — tóm tắt'.
-    Nếu không có tin: chuỗi thông báo, không raise.
+    Luôn trả ToolResult, không raise.
     """
     if not ticker or not ticker.strip():
-        raise ValueError("ticker không được rỗng")
+        return ToolResult(
+            status="invalid_input",
+            data=None,
+            message="ticker không được rỗng. Thử với mã như 'HPG' hoặc 'VNM'.",
+        )
     if days < 1 or days > 365:
-        raise ValueError("days phải từ 1 đến 365")
+        return ToolResult(
+            status="invalid_input",
+            data=None,
+            message=f"days={days} không hợp lệ. Phải từ 1 đến 365. Thử days=7.",
+        )
 
     try:
         from rag.news_index import search_news_by_text
     except ImportError:
-        return "Lỗi: không thể import rag.news_index — kiểm tra cài đặt."
+        return ToolResult(
+            status="upstream_error",
+            data=None,
+            message="Không thể import rag.news_index. Kiểm tra Qdrant đang chạy và news_chunks đã được index.",
+        )
 
-    raw = search_news_by_text(ticker.strip().upper(), days=days, limit=10)
+    try:
+        raw = search_news_by_text(ticker.strip().upper(), days=days, limit=10)
+    except Exception as e:
+        return _map_upstream_error(ticker.strip().upper(), e)
 
     # dedup by URL, keep top 5
     seen_urls: set[str] = set()
@@ -376,8 +508,16 @@ def search_financial_news(
         if len(unique) == 5:
             break
 
+    t = ticker.strip().upper()
     if not unique:
-        return f"Không có tin tức về {ticker.strip().upper()} trong {days} ngày gần nhất."
+        return ToolResult(
+            status="no_data",
+            data=None,
+            message=(
+                f"Không có tin tức về {t} trong {days} ngày gần nhất. "
+                "Tăng khoảng thời gian (days) hoặc thử mã CK khác."
+            ),
+        )
 
     lines: list[str] = []
     for item in unique:
@@ -386,7 +526,6 @@ def search_financial_news(
         date_str = pub[:10] if pub else "N/A"
         title = item.get("title", "").strip()
         body = item.get("text", "").strip()
-        # first line of body as short summary (skip if it duplicates the title)
         summary_raw = body.split("\n")[0][:120] if body else ""
         summary = summary_raw if not summary_raw.startswith(title) else summary_raw[len(title):].strip(" —-")
         line = f"[{source} | {date_str}] {title}"
@@ -394,29 +533,47 @@ def search_financial_news(
             line += f" — {summary}"
         lines.append(line)
 
-    return "\n".join(lines)
+    result_str = "\n".join(lines)
+    return ToolResult(
+        status="ok",
+        data=result_str,
+        message=result_str,
+    )
 
 
 # ── Tool 5: Phân tích sentiment thị trường ────────────────────────────────────
 
-def analyze_market_sentiment(ticker: str, days: int = 7) -> str:
+def analyze_market_sentiment(ticker: str, days: int = 7) -> ToolResult:
     """
     Phân tích cảm xúc thị trường về ticker từ tin tức gần nhất (few-shot LLM).
-
-    Trả: nhãn (tích cực/tiêu cực/trung tính) kèm lý do ngắn gọn.
-    Nếu không có tin: chuỗi thông báo, không raise.
+    Luôn trả ToolResult, không raise.
     """
     if not ticker or not ticker.strip():
-        raise ValueError("ticker không được rỗng")
+        return ToolResult(
+            status="invalid_input",
+            data=None,
+            message="ticker không được rỗng. Thử với mã như 'HPG' hoặc 'VNM'.",
+        )
     if days < 1 or days > 365:
-        raise ValueError("days phải từ 1 đến 365")
+        return ToolResult(
+            status="invalid_input",
+            data=None,
+            message=f"days={days} không hợp lệ. Phải từ 1 đến 365. Thử days=7.",
+        )
 
     try:
         from rag.news_index import search_news_by_text
     except ImportError:
-        return "Lỗi: không thể import rag.news_index — kiểm tra cài đặt."
+        return ToolResult(
+            status="upstream_error",
+            data=None,
+            message="Không thể import rag.news_index. Kiểm tra Qdrant đang chạy và news_chunks đã được index.",
+        )
 
-    raw = search_news_by_text(ticker.strip().upper(), days=days, limit=5)
+    try:
+        raw = search_news_by_text(ticker.strip().upper(), days=days, limit=5)
+    except Exception as e:
+        return _map_upstream_error(ticker.strip().upper(), e)
 
     # dedup by URL
     seen_urls: set[str] = set()
@@ -427,14 +584,29 @@ def analyze_market_sentiment(ticker: str, days: int = 7) -> str:
             seen_urls.add(url)
             unique.append(item)
 
+    t = ticker.strip().upper()
     if not unique:
-        return f"Không đủ tin tức để phân tích sentiment cho {ticker.strip().upper()}."
+        return ToolResult(
+            status="no_data",
+            data=None,
+            message=(
+                f"Không đủ tin tức để phân tích sentiment cho {t}. "
+                "Tăng khoảng thời gian (days) hoặc dùng search_financial_news để kiểm tra có tin không."
+            ),
+        )
 
     headlines = [item.get("title", "").strip() for item in unique if item.get("title")]
     if not headlines:
-        return f"Không đủ tin tức để phân tích sentiment cho {ticker.strip().upper()}."
+        return ToolResult(
+            status="no_data",
+            data=None,
+            message=(
+                f"Tin tức về {t} không có tiêu đề. "
+                "Không thể phân tích sentiment. Thử lại với khoảng thời gian khác."
+            ),
+        )
 
-    # load few-shot examples from data/sentiment_shots_vi.json
+    # load few-shot examples
     import json
     from pathlib import Path
 
@@ -445,8 +617,6 @@ def analyze_market_sentiment(ticker: str, days: int = 7) -> str:
             shots = json.load(f)
 
     label_vi = {"positive": "tích cực", "negative": "tiêu cực", "neutral": "trung tính"}
-
-    # balanced sample: 2 positive, 2 negative, 1 neutral
     by_label: dict[str, list[str]] = {"positive": [], "negative": [], "neutral": []}
     for s in shots:
         lbl = s.get("label", "neutral")
@@ -458,13 +628,12 @@ def analyze_market_sentiment(ticker: str, days: int = 7) -> str:
         for text in by_label[lbl][:count]:
             few_shot_lines.append(f'"{text}" → {label_vi[lbl]}')
 
-    ticker_upper = ticker.strip().upper()
     news_block = "\n".join(f"{i + 1}. {h}" for i, h in enumerate(headlines))
     few_shot_block = "\n".join(few_shot_lines)
     n = len(headlines)
 
     prompt = (
-        f"Tin tức về {ticker_upper} trong {days} ngày gần nhất:\n{news_block}\n\n"
+        f"Tin tức về {t} trong {days} ngày gần nhất:\n{news_block}\n\n"
         f"Ví dụ phân loại:\n{few_shot_block}\n\n"
         f"Phân tích xu hướng tổng thể ({n} tin trên) là tích cực, tiêu cực hay trung tính. "
         f"Trả lời đúng format: 'Xu hướng [NHÃN] — [lý do 1–2 câu ngắn gọn]'"
@@ -483,6 +652,14 @@ def analyze_market_sentiment(ticker: str, days: int = 7) -> str:
                 "Phân tích sentiment tin tức chứng khoán Việt Nam."
             ),
         )
-        return resp.text.strip()
+        result_str = resp.text.strip()
+        return ToolResult(status="ok", data=result_str, message=result_str)
     except Exception as e:
-        return f"Lỗi khi phân tích sentiment: {e}"
+        return ToolResult(
+            status="upstream_error",
+            data=None,
+            message=(
+                f"Lỗi khi gọi LLM để phân tích sentiment cho '{t}': {e}. "
+                "Thử lại sau. Nếu lỗi tiếp, kiểm tra kết nối LLM provider."
+            ),
+        )

@@ -1,7 +1,7 @@
 """
-tests/test_tools.py — Unit tests cho 3 tool giá chứng khoán (bài 19).
+tests/test_tools.py — Unit tests cho 7 tool giá chứng khoán (bài 19 + 19B + 20).
 
-Mock hoàn toàn, không gọi mạng.
+Mock hoàn toàn, không gọi mạng. Mọi tool trả ToolResult.
 """
 
 import math
@@ -13,10 +13,14 @@ import pytest
 
 from tools.price import (
     PriceProvider,
+    YFinanceProvider,
     calculate_indicators,
     get_historical_ohlcv,
+    get_historical_ohlcv_intl,
     get_realtime_price,
+    get_realtime_price_intl,
 )
+from tools.result import ToolResult
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -51,11 +55,17 @@ class MockProvider(PriceProvider):
 # ── get_realtime_price ────────────────────────────────────────────────────────
 
 class TestGetRealtimePrice:
-    def test_returns_float(self):
+    def test_returns_tool_result(self):
         p = MockProvider(price=95_000.0)
         result = get_realtime_price("FPT", provider=p)
-        assert isinstance(result, float)
-        assert result == 95_000.0
+        assert isinstance(result, ToolResult)
+        assert result.status == "ok"
+
+    def test_data_is_float(self):
+        p = MockProvider(price=95_000.0)
+        result = get_realtime_price("FPT", provider=p)
+        assert isinstance(result.data, float)
+        assert result.data == 95_000.0
 
     def test_ticker_uppercased(self):
         calls = []
@@ -71,17 +81,19 @@ class TestGetRealtimePrice:
         get_realtime_price("fpt", provider=TrackingProvider())
         assert calls[0] == "FPT"
 
-    def test_empty_ticker_raises(self):
+    def test_empty_ticker_returns_invalid_input(self):
         p = MockProvider()
-        with pytest.raises(ValueError, match="ticker"):
-            get_realtime_price("", provider=p)
+        result = get_realtime_price("", provider=p)
+        assert result.status == "invalid_input"
+        assert result.data is None
 
-    def test_whitespace_ticker_raises(self):
+    def test_whitespace_ticker_returns_invalid_input(self):
         p = MockProvider()
-        with pytest.raises(ValueError):
-            get_realtime_price("   ", provider=p)
+        result = get_realtime_price("   ", provider=p)
+        assert result.status == "invalid_input"
+        assert result.data is None
 
-    def test_provider_error_propagates(self):
+    def test_provider_value_error_returns_no_data(self):
         class BrokenProvider(PriceProvider):
             def fetch_price(self, ticker):
                 raise ValueError("upstream down")
@@ -89,28 +101,41 @@ class TestGetRealtimePrice:
             def fetch_history(self, ticker, days):
                 return _make_ohlcv()
 
-        with pytest.raises(ValueError, match="upstream down"):
-            get_realtime_price("HPG", provider=BrokenProvider())
+        result = get_realtime_price("HPG", provider=BrokenProvider())
+        assert result.status == "no_data"
+        assert result.data is None
+
+    def test_message_is_non_empty_string(self):
+        p = MockProvider(price=80_000.0)
+        result = get_realtime_price("HPG", provider=p)
+        assert isinstance(result.message, str)
+        assert len(result.message) > 0
 
 
 # ── get_historical_ohlcv ──────────────────────────────────────────────────────
 
 class TestGetHistoricalOhlcv:
-    def test_returns_dataframe(self):
+    def test_returns_tool_result_ok(self):
         p = MockProvider()
-        df = get_historical_ohlcv("VNM", 30, provider=p)
-        assert isinstance(df, pd.DataFrame)
+        result = get_historical_ohlcv("VNM", 30, provider=p)
+        assert isinstance(result, ToolResult)
+        assert result.status == "ok"
+
+    def test_data_is_dataframe(self):
+        p = MockProvider()
+        result = get_historical_ohlcv("VNM", 30, provider=p)
+        assert isinstance(result.data, pd.DataFrame)
 
     def test_columns_present(self):
         p = MockProvider()
-        df = get_historical_ohlcv("VNM", 30, provider=p)
+        result = get_historical_ohlcv("VNM", 30, provider=p)
         for col in ["time", "open", "high", "low", "close", "volume"]:
-            assert col in df.columns
+            assert col in result.data.columns
 
     def test_days_limit_respected(self):
         p = MockProvider(_make_ohlcv(60))
-        df = get_historical_ohlcv("VNM", 30, provider=p)
-        assert len(df) <= 30
+        result = get_historical_ohlcv("VNM", 30, provider=p)
+        assert len(result.data) <= 30
 
     def test_no_duplicate_dates(self):
         df_dup = _make_ohlcv(10)
@@ -123,23 +148,25 @@ class TestGetHistoricalOhlcv:
             def fetch_history(self, ticker, days):
                 return df_dup.drop_duplicates(subset=["time"]).tail(days).reset_index(drop=True)
 
-        df = get_historical_ohlcv("FPT", 10, provider=DupProvider())
-        assert df["time"].duplicated().sum() == 0
+        result = get_historical_ohlcv("FPT", 10, provider=DupProvider())
+        assert result.status == "ok"
+        assert result.data["time"].duplicated().sum() == 0
 
-    def test_empty_ticker_raises(self):
+    def test_empty_ticker_returns_invalid_input(self):
         p = MockProvider()
-        with pytest.raises(ValueError):
-            get_historical_ohlcv("", 30, provider=p)
+        result = get_historical_ohlcv("", 30, provider=p)
+        assert result.status == "invalid_input"
+        assert result.data is None
 
-    def test_days_zero_raises(self):
+    def test_days_zero_returns_invalid_input(self):
         p = MockProvider()
-        with pytest.raises(ValueError):
-            get_historical_ohlcv("FPT", 0, provider=p)
+        result = get_historical_ohlcv("FPT", 0, provider=p)
+        assert result.status == "invalid_input"
 
-    def test_days_negative_raises(self):
+    def test_days_negative_returns_invalid_input(self):
         p = MockProvider()
-        with pytest.raises(ValueError):
-            get_historical_ohlcv("FPT", -5, provider=p)
+        result = get_historical_ohlcv("FPT", -5, provider=p)
+        assert result.status == "invalid_input"
 
 
 # ── calculate_indicators ──────────────────────────────────────────────────────
@@ -148,46 +175,53 @@ class TestCalculateIndicators:
     def _df(self, n=100):
         return _make_ohlcv(n)
 
-    def test_returns_string(self):
+    def test_returns_tool_result_ok(self):
         pytest.importorskip("pandas_ta")
         result = calculate_indicators(self._df())
-        assert isinstance(result, str)
+        assert isinstance(result, ToolResult)
+        assert result.status == "ok"
+
+    def test_data_is_string(self):
+        pytest.importorskip("pandas_ta")
+        result = calculate_indicators(self._df())
+        assert isinstance(result.data, str)
 
     def test_rsi_label_present(self):
         pytest.importorskip("pandas_ta")
         result = calculate_indicators(self._df(100))
-        assert "RSI" in result
+        assert "RSI" in result.data
 
     def test_macd_label_present(self):
         pytest.importorskip("pandas_ta")
         result = calculate_indicators(self._df(100))
-        assert "MACD" in result
+        assert "MACD" in result.data
 
     def test_ma20_label_present(self):
         pytest.importorskip("pandas_ta")
         result = calculate_indicators(self._df(100))
-        assert "MA(20)" in result
+        assert "MA(20)" in result.data
 
     def test_ma50_label_present(self):
         pytest.importorskip("pandas_ta")
         result = calculate_indicators(self._df(100))
-        assert "MA(50)" in result
+        assert "MA(50)" in result.data
 
-    def test_insufficient_data_no_crash(self):
+    def test_insufficient_data_still_ok_with_notice(self):
         pytest.importorskip("pandas_ta")
         result = calculate_indicators(self._df(5))
-        assert "không đủ dữ liệu" in result
+        assert result.status == "ok"
+        assert "không đủ dữ liệu" in result.data
 
     def test_new_listing_under_14_sessions(self):
-        """Mã mới lên sàn dưới 14 phiên — hàm trả thông báo thiếu dữ liệu, không crash."""
+        """Mã mới lên sàn dưới 14 phiên — trả ok với thông báo thiếu dữ liệu."""
         pytest.importorskip("pandas_ta")
         result = calculate_indicators(self._df(10))
-        assert isinstance(result, str)
-        assert "không đủ dữ liệu" in result
+        assert result.status == "ok"
+        assert isinstance(result.data, str)
+        assert "không đủ dữ liệu" in result.data
 
     def test_rsi_zone_overbought(self):
         pytest.importorskip("pandas_ta")
-        # Tạo chuỗi giá tăng mạnh liên tục → RSI > 70
         closes = [100 + i * 10 for i in range(100)]
         df = pd.DataFrame({
             "time": [datetime(2024, 1, 1) + timedelta(days=i) for i in range(100)],
@@ -198,13 +232,11 @@ class TestCalculateIndicators:
             "volume": [1_000_000] * 100,
         })
         result = calculate_indicators(df)
-        assert "quá mua" in result
+        assert "quá mua" in result.data
 
     def test_rsi_zone_oversold(self):
         pytest.importorskip("pandas_ta")
-        # Giá giảm mạnh liên tục → RSI < 30
-        closes = [1000 - i * 10 for i in range(100)]
-        closes = [max(c, 1) for c in closes]
+        closes = [max(1000 - i * 10, 1) for i in range(100)]
         df = pd.DataFrame({
             "time": [datetime(2024, 1, 1) + timedelta(days=i) for i in range(100)],
             "open": [c + 1 for c in closes],
@@ -214,40 +246,38 @@ class TestCalculateIndicators:
             "volume": [1_000_000] * 100,
         })
         result = calculate_indicators(df)
-        assert "quá bán" in result
+        assert "quá bán" in result.data
 
-    def test_empty_df_returns_error_string(self):
+    def test_empty_df_returns_invalid_input(self):
         pytest.importorskip("pandas_ta")
         result = calculate_indicators(pd.DataFrame())
-        assert "Lỗi" in result or "rỗng" in result
+        assert result.status == "invalid_input"
+        assert result.data is None
 
-    def test_missing_close_column(self):
+    def test_missing_close_column_returns_invalid_input(self):
         pytest.importorskip("pandas_ta")
         df = pd.DataFrame({"open": [1, 2], "high": [2, 3], "low": [0, 1]})
         result = calculate_indicators(df)
-        assert "Lỗi" in result
+        assert result.status == "invalid_input"
 
-    def test_no_nan_in_output_for_sufficient_data(self):
+    def test_no_nan_in_data_for_sufficient_data(self):
         pytest.importorskip("pandas_ta")
         result = calculate_indicators(self._df(100))
-        assert "nan" not in result.lower()
-        assert "NaN" not in result
+        assert "nan" not in result.data.lower()
+        assert "NaN" not in result.data
 
     def test_currency_tag_vnd(self):
         pytest.importorskip("pandas_ta")
         result = calculate_indicators(self._df(100), currency="VND")
-        assert "VND" in result
+        assert "VND" in result.data
 
     def test_currency_tag_usd(self):
         pytest.importorskip("pandas_ta")
         result = calculate_indicators(self._df(100), currency="USD")
-        assert "USD" in result
+        assert "USD" in result.data
 
 
 # ── YFinanceProvider ──────────────────────────────────────────────────────────
-
-from tools.price import YFinanceProvider, get_realtime_price_intl, get_historical_ohlcv_intl  # noqa: E402
-
 
 class MockYFinanceProvider(PriceProvider):
     def __init__(self, df: pd.DataFrame | None = None, price: float = 150.0):
@@ -262,11 +292,17 @@ class MockYFinanceProvider(PriceProvider):
 
 
 class TestGetRealtimePriceIntl:
-    def test_returns_float(self):
+    def test_returns_tool_result_ok(self):
         p = MockYFinanceProvider(price=182.5)
         result = get_realtime_price_intl("AAPL", provider=p)
-        assert isinstance(result, float)
-        assert result == 182.5
+        assert isinstance(result, ToolResult)
+        assert result.status == "ok"
+
+    def test_data_is_float(self):
+        p = MockYFinanceProvider(price=182.5)
+        result = get_realtime_price_intl("AAPL", provider=p)
+        assert isinstance(result.data, float)
+        assert result.data == 182.5
 
     def test_ticker_uppercased(self):
         calls = []
@@ -282,17 +318,18 @@ class TestGetRealtimePriceIntl:
         get_realtime_price_intl("aapl", provider=TrackingProvider())
         assert calls[0] == "AAPL"
 
-    def test_empty_ticker_raises(self):
+    def test_empty_ticker_returns_invalid_input(self):
         p = MockYFinanceProvider()
-        with pytest.raises(ValueError, match="ticker"):
-            get_realtime_price_intl("", provider=p)
+        result = get_realtime_price_intl("", provider=p)
+        assert result.status == "invalid_input"
+        assert result.data is None
 
-    def test_whitespace_ticker_raises(self):
+    def test_whitespace_ticker_returns_invalid_input(self):
         p = MockYFinanceProvider()
-        with pytest.raises(ValueError):
-            get_realtime_price_intl("   ", provider=p)
+        result = get_realtime_price_intl("   ", provider=p)
+        assert result.status == "invalid_input"
 
-    def test_provider_error_propagates(self):
+    def test_provider_value_error_returns_no_data(self):
         class BrokenProvider(PriceProvider):
             def fetch_price(self, ticker):
                 raise ValueError("market closed")
@@ -300,36 +337,43 @@ class TestGetRealtimePriceIntl:
             def fetch_history(self, ticker, days):
                 return _make_ohlcv()
 
-        with pytest.raises(ValueError, match="market closed"):
-            get_realtime_price_intl("TSLA", provider=BrokenProvider())
+        result = get_realtime_price_intl("TSLA", provider=BrokenProvider())
+        assert result.status == "no_data"
+        assert result.data is None
 
 
 class TestGetHistoricalOhlcvIntl:
-    def test_returns_dataframe(self):
+    def test_returns_tool_result_ok(self):
         p = MockYFinanceProvider()
-        df = get_historical_ohlcv_intl("AAPL", 30, provider=p)
-        assert isinstance(df, pd.DataFrame)
+        result = get_historical_ohlcv_intl("AAPL", 30, provider=p)
+        assert isinstance(result, ToolResult)
+        assert result.status == "ok"
+
+    def test_data_is_dataframe(self):
+        p = MockYFinanceProvider()
+        result = get_historical_ohlcv_intl("AAPL", 30, provider=p)
+        assert isinstance(result.data, pd.DataFrame)
 
     def test_columns_present(self):
         p = MockYFinanceProvider()
-        df = get_historical_ohlcv_intl("AAPL", 30, provider=p)
+        result = get_historical_ohlcv_intl("AAPL", 30, provider=p)
         for col in ["time", "open", "high", "low", "close", "volume"]:
-            assert col in df.columns
+            assert col in result.data.columns
 
     def test_days_limit_respected(self):
         p = MockYFinanceProvider(_make_ohlcv(60))
-        df = get_historical_ohlcv_intl("TSLA", 30, provider=p)
-        assert len(df) <= 30
+        result = get_historical_ohlcv_intl("TSLA", 30, provider=p)
+        assert len(result.data) <= 30
 
-    def test_empty_ticker_raises(self):
+    def test_empty_ticker_returns_invalid_input(self):
         p = MockYFinanceProvider()
-        with pytest.raises(ValueError):
-            get_historical_ohlcv_intl("", 30, provider=p)
+        result = get_historical_ohlcv_intl("", 30, provider=p)
+        assert result.status == "invalid_input"
 
-    def test_days_zero_raises(self):
+    def test_days_zero_returns_invalid_input(self):
         p = MockYFinanceProvider()
-        with pytest.raises(ValueError):
-            get_historical_ohlcv_intl("AAPL", 0, provider=p)
+        result = get_historical_ohlcv_intl("AAPL", 0, provider=p)
+        assert result.status == "invalid_input"
 
 
 class TestDetectProvider:
@@ -344,8 +388,6 @@ class TestDetectProvider:
         assert isinstance(_detect_provider("HOSE"), VnstockProvider)
 
     def test_intl_ticker_4_chars_aapl_is_yfinance(self):
-        # AAPL is 4 chars, no dot → VnstockProvider by rule; but TSLA is 4 chars too
-        # Rule: <=4 chars no dot → VN. Test with 5-char ticker.
         from tools.price import _detect_provider
         assert isinstance(_detect_provider("GOOGL"), YFinanceProvider)
 
@@ -359,12 +401,11 @@ class TestDetectProvider:
 
 
 class TestYFinanceProviderMock:
-    """YFinanceProvider với mock — không gọi mạng."""
+    """YFinanceProvider internals — provider level masih raises (hợp lệ)."""
 
     def test_fetch_price_returns_float(self, monkeypatch):
         import types
         mock_yf = types.ModuleType("yfinance")
-
         hist_df = _make_ohlcv(5)
         hist_df = hist_df.rename(columns={"close": "Close"})
 
@@ -374,7 +415,6 @@ class TestYFinanceProviderMock:
 
         mock_yf.Ticker = lambda ticker: MockTicker()
         monkeypatch.setitem(__import__("sys").modules, "yfinance", mock_yf)
-
         p = YFinanceProvider()
         price = p.fetch_price("AAPL")
         assert isinstance(price, float)
@@ -389,7 +429,6 @@ class TestYFinanceProviderMock:
 
         mock_yf.Ticker = lambda ticker: MockTicker()
         monkeypatch.setitem(__import__("sys").modules, "yfinance", mock_yf)
-
         p = YFinanceProvider()
         with pytest.raises(ValueError, match="Không có dữ liệu"):
             p.fetch_price("FAKE")
@@ -397,7 +436,6 @@ class TestYFinanceProviderMock:
     def test_fetch_history_returns_dataframe(self, monkeypatch):
         import types
         mock_yf = types.ModuleType("yfinance")
-
         raw = pd.DataFrame({
             "Date": [datetime(2024, 1, i + 1) for i in range(30)],
             "Open": [100.0] * 30,
@@ -413,7 +451,6 @@ class TestYFinanceProviderMock:
 
         mock_yf.Ticker = lambda ticker: MockTicker()
         monkeypatch.setitem(__import__("sys").modules, "yfinance", mock_yf)
-
         p = YFinanceProvider()
         df = p.fetch_history("AAPL", 20)
         assert isinstance(df, pd.DataFrame)
@@ -439,35 +476,40 @@ def _make_news_payloads(n: int = 3, ticker: str = "HPG") -> list[dict]:
 
 
 class TestSearchFinancialNews:
-    def test_returns_formatted_string(self, monkeypatch):
+    def test_returns_tool_result_ok(self, monkeypatch):
         monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: _make_news_payloads(3))
         from tools.price import search_financial_news
         result = search_financial_news("HPG", 7)
-        assert isinstance(result, str)
-        assert "HPG" in result
-        assert "CafeF" in result
+        assert isinstance(result, ToolResult)
+        assert result.status == "ok"
+
+    def test_data_contains_formatted_news(self, monkeypatch):
+        monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: _make_news_payloads(3))
+        from tools.price import search_financial_news
+        result = search_financial_news("HPG", 7)
+        assert "HPG" in result.data
+        assert "CafeF" in result.data
 
     def test_format_source_and_date(self, monkeypatch):
         monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: _make_news_payloads(1))
         from tools.price import search_financial_news
         result = search_financial_news("HPG", 7)
-        assert "[CafeF | 2025-08-20]" in result
+        assert "[CafeF | 2025-08-20]" in result.data
 
-    def test_no_news_returns_message(self, monkeypatch):
+    def test_no_news_returns_no_data(self, monkeypatch):
         monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: [])
         from tools.price import search_financial_news
         result = search_financial_news("HPG", 7)
-        assert "Không có tin tức" in result
-        assert "HPG" in result
+        assert result.status == "no_data"
+        assert result.data is None
+        assert "HPG" in result.message
 
     def test_dedup_by_url(self, monkeypatch):
-        # 6 items but only 2 distinct URLs → should return 2 lines
-        payloads = _make_news_payloads(2)
-        payloads_dup = payloads * 3  # same URLs repeated
-        monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: payloads_dup)
+        payloads = _make_news_payloads(2) * 3  # same URLs repeated
+        monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: payloads)
         from tools.price import search_financial_news
         result = search_financial_news("HPG", 7)
-        lines = [l for l in result.strip().split("\n") if l]
+        lines = [l for l in result.data.strip().split("\n") if l]
         assert len(lines) == 2
 
     def test_top_5_max(self, monkeypatch):
@@ -485,24 +527,24 @@ class TestSearchFinancialNews:
         monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: payloads)
         from tools.price import search_financial_news
         result = search_financial_news("HPG", 7)
-        lines = [l for l in result.strip().split("\n") if l]
+        lines = [l for l in result.data.strip().split("\n") if l]
         assert len(lines) <= 5
 
-    def test_empty_ticker_raises(self, monkeypatch):
-        monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: [])
+    def test_empty_ticker_returns_invalid_input(self):
         from tools.price import search_financial_news
-        with pytest.raises(ValueError, match="ticker"):
-            search_financial_news("", 7)
+        result = search_financial_news("", 7)
+        assert result.status == "invalid_input"
+        assert result.data is None
 
-    def test_days_zero_raises(self, monkeypatch):
+    def test_days_zero_returns_invalid_input(self):
         from tools.price import search_financial_news
-        with pytest.raises(ValueError, match="days"):
-            search_financial_news("HPG", 0)
+        result = search_financial_news("HPG", 0)
+        assert result.status == "invalid_input"
 
-    def test_days_over_365_raises(self, monkeypatch):
+    def test_days_over_365_returns_invalid_input(self):
         from tools.price import search_financial_news
-        with pytest.raises(ValueError, match="days"):
-            search_financial_news("HPG", 366)
+        result = search_financial_news("HPG", 366)
+        assert result.status == "invalid_input"
 
     def test_ticker_uppercased_in_query(self, monkeypatch):
         calls: list[str] = []
@@ -537,33 +579,40 @@ class TestAnalyzeMarketSentiment:
         monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: payloads)
         monkeypatch.setattr("llm.factory.create_client", lambda: _FakeLLMClient(llm_text))
 
-    def test_returns_string_with_label(self, monkeypatch):
+    def test_returns_tool_result_ok(self, monkeypatch):
         self._patch(monkeypatch, _make_news_payloads(3))
         from tools.price import analyze_market_sentiment
         result = analyze_market_sentiment("HPG", 7)
-        assert isinstance(result, str)
-        assert len(result) > 0
+        assert isinstance(result, ToolResult)
+        assert result.status == "ok"
 
-    def test_no_news_returns_message(self, monkeypatch):
+    def test_data_is_string(self, monkeypatch):
+        self._patch(monkeypatch, _make_news_payloads(3))
+        from tools.price import analyze_market_sentiment
+        result = analyze_market_sentiment("HPG", 7)
+        assert isinstance(result.data, str)
+        assert len(result.data) > 0
+
+    def test_no_news_returns_no_data(self, monkeypatch):
         monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: [])
         from tools.price import analyze_market_sentiment
         result = analyze_market_sentiment("HPG", 7)
-        assert "Không đủ tin tức" in result
-        assert "HPG" in result
+        assert result.status == "no_data"
+        assert result.data is None
 
-    def test_positive_label_in_result(self, monkeypatch):
+    def test_positive_label_in_data(self, monkeypatch):
         self._patch(monkeypatch, _make_news_payloads(3), "Xu hướng TÍCH CỰC — cổ phiếu tăng mạnh.")
         from tools.price import analyze_market_sentiment
         result = analyze_market_sentiment("HPG")
-        assert "TÍCH CỰC" in result or "tích cực" in result.lower()
+        assert "TÍCH CỰC" in result.data or "tích cực" in result.data.lower()
 
-    def test_negative_label_in_result(self, monkeypatch):
+    def test_negative_label_in_data(self, monkeypatch):
         self._patch(monkeypatch, _make_news_payloads(3), "Xu hướng TIÊU CỰC — lợi nhuận giảm mạnh.")
         from tools.price import analyze_market_sentiment
         result = analyze_market_sentiment("HPG")
-        assert "TIÊU CỰC" in result or "tiêu cực" in result.lower()
+        assert "TIÊU CỰC" in result.data or "tiêu cực" in result.data.lower()
 
-    def test_llm_error_returns_message_not_raises(self, monkeypatch):
+    def test_llm_error_returns_upstream_error(self, monkeypatch):
         monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: _make_news_payloads(2))
 
         class BrokenClient:
@@ -573,16 +622,16 @@ class TestAnalyzeMarketSentiment:
         monkeypatch.setattr("llm.factory.create_client", lambda: BrokenClient())
         from tools.price import analyze_market_sentiment
         result = analyze_market_sentiment("HPG")
-        assert isinstance(result, str)
-        assert "Lỗi" in result
+        assert result.status == "upstream_error"
+        assert result.data is None
 
-    def test_empty_ticker_raises(self, monkeypatch):
+    def test_empty_ticker_returns_invalid_input(self):
         from tools.price import analyze_market_sentiment
-        with pytest.raises(ValueError, match="ticker"):
-            analyze_market_sentiment("", 7)
+        result = analyze_market_sentiment("", 7)
+        assert result.status == "invalid_input"
+        assert result.data is None
 
     def test_dedup_payloads_used(self, monkeypatch):
-        # 4 items, 2 unique URLs — LLM should receive prompt with ≤2 headlines
         payloads = _make_news_payloads(2) * 2
         captured_prompts: list[str] = []
 
@@ -596,7 +645,6 @@ class TestAnalyzeMarketSentiment:
         from tools.price import analyze_market_sentiment
         analyze_market_sentiment("HPG")
         assert captured_prompts, "LLM not called"
-        # 2 unique headlines → 2 lines in news block
         prompt = captured_prompts[0]
         assert "1." in prompt and "2." in prompt
         assert "3." not in prompt

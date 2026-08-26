@@ -28,6 +28,7 @@ Ghi chép thực nghiệm, số đo, quyết định kỹ thuật. Không giải
 - [x] Bài 12B — News pipeline: 268 bài/4 nguồn indexed, eval_news_quality 9/9, sentiment 96.5%
 - [x] Bài 19 — 3 tool giá chứng khoán: VnstockProvider + YFinanceProvider, CLI, 44 tests xanh
 - [x] Bài 19B — search_financial_news + analyze_market_sentiment, few-shot vi, 60 tests xanh
+- [x] Bài 20 — ToolResult hợp đồng lỗi: 5 status, không tool nào raise, 93 tests xanh
 
 ## Pipeline hiện tại
 
@@ -58,3 +59,4 @@ Ghi chép thực nghiệm, số đo, quyết định kỹ thuật. Không giải
 | Bài 12B | [bai-12b-news-pipeline.md](bai-12b-news-pipeline.md) | 268 bài/4 nguồn, news_chunks dim=1024, eval_news_quality 9/9 ✅, sentiment EN=96.5% VI=90% ✅ |
 | Bài 19 | [bai-19-tools.md](bai-19-tools.md) | 3 tool giá: VnstockProvider + YFinanceProvider + CLI; 44 tests xanh |
 | Bài 19B | [bai-19b-news-sentiment.md](bai-19b-news-sentiment.md) | search_financial_news + analyze_market_sentiment; few-shot vi; 60 tests xanh |
+| Bài 20 | [bai-20-tool-result.md](bai-20-tool-result.md) | ToolResult 5 status; _map_upstream_error; registry.py; 93 tests xanh |
