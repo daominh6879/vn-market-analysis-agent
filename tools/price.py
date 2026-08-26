@@ -338,3 +338,151 @@ def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> str:
         lines.append(f"MA(50) = {ma50_val:,.0f} → giá đang {pos} MA50")
 
     return "\n".join(lines)
+
+
+# ── Tool 4: Tin tức tài chính ─────────────────────────────────────────────────
+
+def search_financial_news(
+    ticker: str,
+    days: int = 7,
+    provider: PriceProvider | None = None,  # unused — kept for interface consistency
+) -> str:
+    """
+    Tìm tin tức tài chính về ticker trong N ngày gần nhất từ Qdrant news_chunks.
+
+    Trả text: '[nguồn | ngày] tiêu đề — tóm tắt'.
+    Nếu không có tin: chuỗi thông báo, không raise.
+    """
+    if not ticker or not ticker.strip():
+        raise ValueError("ticker không được rỗng")
+    if days < 1 or days > 365:
+        raise ValueError("days phải từ 1 đến 365")
+
+    try:
+        from rag.news_index import search_news_by_text
+    except ImportError:
+        return "Lỗi: không thể import rag.news_index — kiểm tra cài đặt."
+
+    raw = search_news_by_text(ticker.strip().upper(), days=days, limit=10)
+
+    # dedup by URL, keep top 5
+    seen_urls: set[str] = set()
+    unique: list[dict] = []
+    for item in raw:
+        url = item.get("url", "")
+        if url not in seen_urls:
+            seen_urls.add(url)
+            unique.append(item)
+        if len(unique) == 5:
+            break
+
+    if not unique:
+        return f"Không có tin tức về {ticker.strip().upper()} trong {days} ngày gần nhất."
+
+    lines: list[str] = []
+    for item in unique:
+        source = item.get("source", "unknown")
+        pub = item.get("published_at", "")
+        date_str = pub[:10] if pub else "N/A"
+        title = item.get("title", "").strip()
+        body = item.get("text", "").strip()
+        # first line of body as short summary (skip if it duplicates the title)
+        summary_raw = body.split("\n")[0][:120] if body else ""
+        summary = summary_raw if not summary_raw.startswith(title) else summary_raw[len(title):].strip(" —-")
+        line = f"[{source} | {date_str}] {title}"
+        if summary:
+            line += f" — {summary}"
+        lines.append(line)
+
+    return "\n".join(lines)
+
+
+# ── Tool 5: Phân tích sentiment thị trường ────────────────────────────────────
+
+def analyze_market_sentiment(ticker: str, days: int = 7) -> str:
+    """
+    Phân tích cảm xúc thị trường về ticker từ tin tức gần nhất (few-shot LLM).
+
+    Trả: nhãn (tích cực/tiêu cực/trung tính) kèm lý do ngắn gọn.
+    Nếu không có tin: chuỗi thông báo, không raise.
+    """
+    if not ticker or not ticker.strip():
+        raise ValueError("ticker không được rỗng")
+    if days < 1 or days > 365:
+        raise ValueError("days phải từ 1 đến 365")
+
+    try:
+        from rag.news_index import search_news_by_text
+    except ImportError:
+        return "Lỗi: không thể import rag.news_index — kiểm tra cài đặt."
+
+    raw = search_news_by_text(ticker.strip().upper(), days=days, limit=5)
+
+    # dedup by URL
+    seen_urls: set[str] = set()
+    unique: list[dict] = []
+    for item in raw:
+        url = item.get("url", "")
+        if url not in seen_urls:
+            seen_urls.add(url)
+            unique.append(item)
+
+    if not unique:
+        return f"Không đủ tin tức để phân tích sentiment cho {ticker.strip().upper()}."
+
+    headlines = [item.get("title", "").strip() for item in unique if item.get("title")]
+    if not headlines:
+        return f"Không đủ tin tức để phân tích sentiment cho {ticker.strip().upper()}."
+
+    # load few-shot examples from data/sentiment_shots_vi.json
+    import json
+    from pathlib import Path
+
+    shots_path = Path(__file__).parent.parent / "data" / "sentiment_shots_vi.json"
+    shots: list[dict] = []
+    if shots_path.exists():
+        with shots_path.open(encoding="utf-8") as f:
+            shots = json.load(f)
+
+    label_vi = {"positive": "tích cực", "negative": "tiêu cực", "neutral": "trung tính"}
+
+    # balanced sample: 2 positive, 2 negative, 1 neutral
+    by_label: dict[str, list[str]] = {"positive": [], "negative": [], "neutral": []}
+    for s in shots:
+        lbl = s.get("label", "neutral")
+        if lbl in by_label:
+            by_label[lbl].append(s.get("text", ""))
+
+    few_shot_lines: list[str] = []
+    for lbl, count in [("positive", 2), ("negative", 2), ("neutral", 1)]:
+        for text in by_label[lbl][:count]:
+            few_shot_lines.append(f'"{text}" → {label_vi[lbl]}')
+
+    ticker_upper = ticker.strip().upper()
+    news_block = "\n".join(f"{i + 1}. {h}" for i, h in enumerate(headlines))
+    few_shot_block = "\n".join(few_shot_lines)
+    n = len(headlines)
+
+    prompt = (
+        f"Tin tức về {ticker_upper} trong {days} ngày gần nhất:\n{news_block}\n\n"
+        f"Ví dụ phân loại:\n{few_shot_block}\n\n"
+        f"Phân tích xu hướng tổng thể ({n} tin trên) là tích cực, tiêu cực hay trung tính. "
+        f"Trả lời đúng format: 'Xu hướng [NHÃN] — [lý do 1–2 câu ngắn gọn]'"
+    )
+
+    try:
+        from llm.factory import create_client
+        from llm.types import Message
+
+        client = create_client()
+        resp = client.generate(
+            [Message(role="user", content=prompt)],
+            max_tokens=150,
+            system=(
+                "Bạn là chuyên gia phân tích tài chính. "
+                "Phân tích sentiment tin tức chứng khoán Việt Nam."
+            ),
+        )
+        return resp.text.strip()
+    except Exception as e:
+        return f"Lỗi khi phân tích sentiment: {e}"

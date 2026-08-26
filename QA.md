@@ -478,6 +478,42 @@ Dấu hiệu nhận ra: khi sub-queries của model đều hỏi về cùng mộ
 
 ---
 
+## Bài 19B — Mục đích của tool tin tức và sentiment
+
+**Q:** Tại sao cần 2 tool `search_financial_news` và `analyze_market_sentiment`? Tool giá (bài 19) chưa đủ sao?
+
+**A:** Tool giá trả lời "giá bao nhiêu" — số liệu lịch sử, không có context tại sao. Agent nhận được "HPG = 27,500 VND" nhưng không biết hôm nay thị trường đang nghĩ gì về HPG.
+
+**Vấn đề cụ thể không có 2 tool này:**
+
+Câu hỏi *"HPG có đáng mua không?"* → agent có giá, có chỉ báo kỹ thuật, nhưng:
+- Không biết hôm qua HPG vừa thông báo tạm ngừng lò cao
+- Không biết tuần này 4/5 tin về HPG là tiêu cực
+- Kết quả: agent phân tích kỹ thuật trông hợp lý nhưng bỏ qua event thực tế → sai hoàn toàn
+
+**`search_financial_news` giải quyết:** cung cấp context thị trường trong N ngày — agent biết chuyện gì đang xảy ra với ticker, không chỉ biết con số.
+
+**`analyze_market_sentiment` giải quyết:** tổng hợp 5 tin thành 1 nhãn có lý do — agent không cần tự đọc từng bài báo và tự phán xét, đã có signal rõ ràng: "Xu hướng TIÊU CỰC — 3/5 tin đề cập sụt giảm sản lượng".
+
+**Tại sao few-shot thay vì zero-shot:**
+
+Zero-shot với financial tiếng Việt dễ bị lệch: "HPG tạm dừng lò cao để bảo trì theo kế hoạch" — zero-shot có thể đánh giá neutral (bảo trì = bình thường), nhưng trong ngữ cảnh ngành thép Việt Nam đây là tín hiệu tiêu cực (nhu cầu thấp → giảm công suất). Few-shot với ví dụ domain-specific giúp model calibrate đúng.
+
+**Flow trong agent (bài 22+):**
+
+```
+user: "Tình hình HPG thế nào?"
+→ agent gọi get_realtime_price("HPG")        # giá hiện tại
+→ agent gọi calculate_indicators(df)          # kỹ thuật
+→ agent gọi search_financial_news("HPG", 7)   # context thị trường
+→ agent gọi analyze_market_sentiment("HPG")   # tổng hợp sentiment
+→ agent synthesis từ 4 nguồn → trả lời đầy đủ
+```
+
+Không có bài 19B: agent chỉ nhìn biểu đồ kỹ thuật, mù với news flow.
+
+---
+
 ## Bài 18 — Router prompt cần khai báo data sources, không chỉ mô tả abstract
 
 **Q:** Router phân loại 80% lần đầu — cải thiện bằng cách nào mà không thêm few-shot examples?

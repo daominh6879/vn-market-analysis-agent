@@ -26,6 +26,8 @@ Ghi chép thực nghiệm, số đo, quyết định kỹ thuật. Không giải
 - [x] Bài 17 — Tenant isolation: filter tại query time + cache key prefix (4 test xanh)
 - [x] Bài 18 — Router + SQL agent: 10/10 attack blocked, router 30/30 = 100%, integration 4/4 (readonly role + timeout verified)
 - [x] Bài 12B — News pipeline: 268 bài/4 nguồn indexed, eval_news_quality 9/9, sentiment 96.5%
+- [x] Bài 19 — 3 tool giá chứng khoán: VnstockProvider + YFinanceProvider, CLI, 44 tests xanh
+- [x] Bài 19B — search_financial_news + analyze_market_sentiment, few-shot vi, 60 tests xanh
 
 ## Pipeline hiện tại
 
@@ -54,3 +56,5 @@ Ghi chép thực nghiệm, số đo, quyết định kỹ thuật. Không giải
 | Bài 17 | [bai-17-tenant-isolation.md](bai-17-tenant-isolation.md) | filter tại query time; cache key prefix; 4 test (3 bắt buộc + post-filter demo) |
 | Bài 18 | [bai-18-router-sql.md](bai-18-router-sql.md) | router + SQL agent; readonly role; 10/10 attack blocked |
 | Bài 12B | [bai-12b-news-pipeline.md](bai-12b-news-pipeline.md) | 268 bài/4 nguồn, news_chunks dim=1024, eval_news_quality 9/9 ✅, sentiment EN=96.5% VI=90% ✅ |
+| Bài 19 | [bai-19-tools.md](bai-19-tools.md) | 3 tool giá: VnstockProvider + YFinanceProvider + CLI; 44 tests xanh |
+| Bài 19B | [bai-19b-news-sentiment.md](bai-19b-news-sentiment.md) | search_financial_news + analyze_market_sentiment; few-shot vi; 60 tests xanh |

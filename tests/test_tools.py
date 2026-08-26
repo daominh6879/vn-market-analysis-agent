@@ -420,3 +420,183 @@ class TestYFinanceProviderMock:
         for col in ["time", "open", "high", "low", "close", "volume"]:
             assert col in df.columns
         assert len(df) <= 20
+
+
+# ── search_financial_news ─────────────────────────────────────────────────────
+
+def _make_news_payloads(n: int = 3, ticker: str = "HPG") -> list[dict]:
+    return [
+        {
+            "url": f"https://example.com/news/{i}",
+            "title": f"{ticker} tin số {i}",
+            "source": "CafeF",
+            "published_at": "2025-08-20T10:00:00Z",
+            "text": f"{ticker} tin số {i}\nNội dung bài báo số {i}.",
+            "tickers": [ticker],
+        }
+        for i in range(n)
+    ]
+
+
+class TestSearchFinancialNews:
+    def test_returns_formatted_string(self, monkeypatch):
+        monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: _make_news_payloads(3))
+        from tools.price import search_financial_news
+        result = search_financial_news("HPG", 7)
+        assert isinstance(result, str)
+        assert "HPG" in result
+        assert "CafeF" in result
+
+    def test_format_source_and_date(self, monkeypatch):
+        monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: _make_news_payloads(1))
+        from tools.price import search_financial_news
+        result = search_financial_news("HPG", 7)
+        assert "[CafeF | 2025-08-20]" in result
+
+    def test_no_news_returns_message(self, monkeypatch):
+        monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: [])
+        from tools.price import search_financial_news
+        result = search_financial_news("HPG", 7)
+        assert "Không có tin tức" in result
+        assert "HPG" in result
+
+    def test_dedup_by_url(self, monkeypatch):
+        # 6 items but only 2 distinct URLs → should return 2 lines
+        payloads = _make_news_payloads(2)
+        payloads_dup = payloads * 3  # same URLs repeated
+        monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: payloads_dup)
+        from tools.price import search_financial_news
+        result = search_financial_news("HPG", 7)
+        lines = [l for l in result.strip().split("\n") if l]
+        assert len(lines) == 2
+
+    def test_top_5_max(self, monkeypatch):
+        payloads = [
+            {
+                "url": f"https://example.com/news/{i}",
+                "title": f"HPG tin {i}",
+                "source": "VnExpress",
+                "published_at": "2025-08-20T10:00:00Z",
+                "text": f"HPG tin {i}",
+                "tickers": ["HPG"],
+            }
+            for i in range(10)
+        ]
+        monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: payloads)
+        from tools.price import search_financial_news
+        result = search_financial_news("HPG", 7)
+        lines = [l for l in result.strip().split("\n") if l]
+        assert len(lines) <= 5
+
+    def test_empty_ticker_raises(self, monkeypatch):
+        monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: [])
+        from tools.price import search_financial_news
+        with pytest.raises(ValueError, match="ticker"):
+            search_financial_news("", 7)
+
+    def test_days_zero_raises(self, monkeypatch):
+        from tools.price import search_financial_news
+        with pytest.raises(ValueError, match="days"):
+            search_financial_news("HPG", 0)
+
+    def test_days_over_365_raises(self, monkeypatch):
+        from tools.price import search_financial_news
+        with pytest.raises(ValueError, match="days"):
+            search_financial_news("HPG", 366)
+
+    def test_ticker_uppercased_in_query(self, monkeypatch):
+        calls: list[str] = []
+
+        def fake_search(query, **kw):
+            calls.append(query)
+            return []
+
+        monkeypatch.setattr("rag.news_index.search_news_by_text", fake_search)
+        from tools.price import search_financial_news
+        search_financial_news("hpg", 7)
+        assert calls[0] == "HPG"
+
+
+# ── analyze_market_sentiment ──────────────────────────────────────────────────
+
+class _FakeLLMResponse:
+    def __init__(self, text: str):
+        self.text = text
+
+
+class _FakeLLMClient:
+    def __init__(self, response_text: str = "Xu hướng TÍCH CỰC — kết quả kinh doanh tốt."):
+        self._text = response_text
+
+    def generate(self, messages, **kw):
+        return _FakeLLMResponse(self._text)
+
+
+class TestAnalyzeMarketSentiment:
+    def _patch(self, monkeypatch, payloads, llm_text="Xu hướng TÍCH CỰC — kết quả kinh doanh tốt."):
+        monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: payloads)
+        monkeypatch.setattr("llm.factory.create_client", lambda: _FakeLLMClient(llm_text))
+
+    def test_returns_string_with_label(self, monkeypatch):
+        self._patch(monkeypatch, _make_news_payloads(3))
+        from tools.price import analyze_market_sentiment
+        result = analyze_market_sentiment("HPG", 7)
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_no_news_returns_message(self, monkeypatch):
+        monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: [])
+        from tools.price import analyze_market_sentiment
+        result = analyze_market_sentiment("HPG", 7)
+        assert "Không đủ tin tức" in result
+        assert "HPG" in result
+
+    def test_positive_label_in_result(self, monkeypatch):
+        self._patch(monkeypatch, _make_news_payloads(3), "Xu hướng TÍCH CỰC — cổ phiếu tăng mạnh.")
+        from tools.price import analyze_market_sentiment
+        result = analyze_market_sentiment("HPG")
+        assert "TÍCH CỰC" in result or "tích cực" in result.lower()
+
+    def test_negative_label_in_result(self, monkeypatch):
+        self._patch(monkeypatch, _make_news_payloads(3), "Xu hướng TIÊU CỰC — lợi nhuận giảm mạnh.")
+        from tools.price import analyze_market_sentiment
+        result = analyze_market_sentiment("HPG")
+        assert "TIÊU CỰC" in result or "tiêu cực" in result.lower()
+
+    def test_llm_error_returns_message_not_raises(self, monkeypatch):
+        monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: _make_news_payloads(2))
+
+        class BrokenClient:
+            def generate(self, *a, **kw):
+                raise RuntimeError("LLM unreachable")
+
+        monkeypatch.setattr("llm.factory.create_client", lambda: BrokenClient())
+        from tools.price import analyze_market_sentiment
+        result = analyze_market_sentiment("HPG")
+        assert isinstance(result, str)
+        assert "Lỗi" in result
+
+    def test_empty_ticker_raises(self, monkeypatch):
+        from tools.price import analyze_market_sentiment
+        with pytest.raises(ValueError, match="ticker"):
+            analyze_market_sentiment("", 7)
+
+    def test_dedup_payloads_used(self, monkeypatch):
+        # 4 items, 2 unique URLs — LLM should receive prompt with ≤2 headlines
+        payloads = _make_news_payloads(2) * 2
+        captured_prompts: list[str] = []
+
+        class CapturingClient:
+            def generate(self, messages, **kw):
+                captured_prompts.append(messages[0].content)
+                return _FakeLLMResponse("Xu hướng TRUNG TÍNH — ổn định.")
+
+        monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: payloads)
+        monkeypatch.setattr("llm.factory.create_client", lambda: CapturingClient())
+        from tools.price import analyze_market_sentiment
+        analyze_market_sentiment("HPG")
+        assert captured_prompts, "LLM not called"
+        # 2 unique headlines → 2 lines in news block
+        prompt = captured_prompts[0]
+        assert "1." in prompt and "2." in prompt
+        assert "3." not in prompt

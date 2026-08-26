@@ -1,5 +1,5 @@
 """
-tools/cli.py — CLI để test 3 tool độc lập.
+tools/cli.py — CLI để test 5 tool độc lập.
 
 Dùng:
     python -m tools.cli price FPT
@@ -9,6 +9,8 @@ Dùng:
     python -m tools.cli price-intl AAPL
     python -m tools.cli ohlcv-intl TSLA 30
     python -m tools.cli indicators-intl NVDA
+    python -m tools.cli news HPG --days 7
+    python -m tools.cli sentiment HPG
 """
 
 import argparse
@@ -57,6 +59,20 @@ def cmd_indicators_intl(args: argparse.Namespace) -> None:
     print(result)
 
 
+def cmd_news(args: argparse.Namespace) -> None:
+    from tools.price import search_financial_news
+    result = search_financial_news(args.ticker, args.days)
+    print(f"=== Tin tức: {args.ticker} ({args.days} ngày) ===")
+    print(result)
+
+
+def cmd_sentiment(args: argparse.Namespace) -> None:
+    from tools.price import analyze_market_sentiment
+    result = analyze_market_sentiment(args.ticker, args.days)
+    print(f"=== Sentiment: {args.ticker} ({args.days} ngày) ===")
+    print(result)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m tools.cli",
@@ -92,6 +108,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_ind_intl.add_argument("ticker", help="Mã CK quốc tế")
     p_ind_intl.add_argument("--days", type=int, default=100, help="Số phiên lịch sử (mặc định 100)")
 
+    # news
+    p_news = sub.add_parser("news", help="Tin tức tài chính về mã CK")
+    p_news.add_argument("ticker", help="Mã CK, ví dụ HPG")
+    p_news.add_argument("--days", type=int, default=7, help="Số ngày tìm kiếm (mặc định 7)")
+
+    # sentiment
+    p_sent = sub.add_parser("sentiment", help="Phân tích sentiment thị trường")
+    p_sent.add_argument("ticker", help="Mã CK, ví dụ HPG")
+    p_sent.add_argument("--days", type=int, default=7, help="Số ngày tìm kiếm (mặc định 7)")
+
     return parser
 
 
@@ -112,6 +138,10 @@ def main(argv: list[str] | None = None) -> None:
             cmd_indicators(args)
         elif args.command == "indicators-intl":
             cmd_indicators_intl(args)
+        elif args.command == "news":
+            cmd_news(args)
+        elif args.command == "sentiment":
+            cmd_sentiment(args)
     except ValueError as e:
         print(f"Lỗi: {e}", file=sys.stderr)
         sys.exit(1)
