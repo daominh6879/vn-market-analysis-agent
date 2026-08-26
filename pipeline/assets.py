@@ -387,6 +387,13 @@ def delete_doc(context: AssetExecutionContext, config: DeleteConfig) -> dict:
 
 # ── Jobs ──────────────────────────────────────────────────────────────────────
 
+from pipeline.assets_news import news_raw, news_indexed, news_purge
+from pipeline.assets_vnstock import (
+    vnstock_financials, vnstock_prices,
+    vnstock_financials_job, vnstock_prices_job,
+    vnstock_financials_schedule, vnstock_prices_schedule,
+)
+
 ingestion_job = define_asset_job(
     name="ingestion_job",
     selection=[raw_pdf, parsed_doc, embeddings, financial_facts],
@@ -417,6 +424,28 @@ daily_schedule = ScheduleDefinition(
     job=ingestion_job,
     cron_schedule="0 6 * * *",
     name="daily_ingestion_0600",
+)
+
+news_job = define_asset_job(
+    name="news_job",
+    selection=[news_raw, news_indexed],
+)
+
+news_purge_job = define_asset_job(
+    name="news_purge_job",
+    selection=[news_purge],
+)
+
+news_schedule = ScheduleDefinition(
+    job=news_job,
+    cron_schedule="0 */6 * * *",   # every 6h
+    name="news_6h",
+)
+
+news_purge_schedule = ScheduleDefinition(
+    job=news_purge_job,
+    cron_schedule="0 2 * * 0",     # weekly Sunday 02:00
+    name="news_purge_weekly",
 )
 
 
@@ -546,8 +575,13 @@ def _serialize_cursor(data: dict[str, dict[str, str]]) -> str:
 # ── Definitions ───────────────────────────────────────────────────────────────
 
 defs = Definitions(
-    assets=[raw_pdf, parsed_doc, embeddings, financial_facts, delete_doc],
-    jobs=[ingestion_job, ingestion_full_rebuild_job, delete_job],
-    schedules=[daily_schedule],
+    assets=[raw_pdf, parsed_doc, embeddings, financial_facts, delete_doc,
+            news_raw, news_indexed, news_purge,
+            vnstock_financials, vnstock_prices],
+    jobs=[ingestion_job, ingestion_full_rebuild_job, delete_job,
+          news_job, news_purge_job,
+          vnstock_financials_job, vnstock_prices_job],
+    schedules=[daily_schedule, news_schedule, news_purge_schedule,
+               vnstock_financials_schedule, vnstock_prices_schedule],
     sensors=[minio_new_pdf_sensor],
 )

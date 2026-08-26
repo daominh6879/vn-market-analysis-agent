@@ -1,0 +1,122 @@
+[
+  {
+    "text": "Doanh thu thuần của HPG tăng 23% so với cùng kỳ, vượt kỳ vọng thị trường.",
+    "label": "positive"
+  },
+  {
+    "text": "VNM ghi nhận lợi nhuận sau thuế cao nhất trong 5 năm gần đây nhờ biên lợi nhuận cải thiện mạnh.",
+    "label": "positive"
+  },
+  {
+    "text": "FPT ký hợp đồng xuất khẩu phần mềm trị giá 200 triệu USD, mở ra thị trường mới tại Nhật Bản.",
+    "label": "positive"
+  },
+  {
+    "text": "Cổ phiếu VCB tăng trần 4 phiên liên tiếp sau kết quả kinh doanh quý 3 vượt dự báo của CTCK.",
+    "label": "positive"
+  },
+  {
+    "text": "Ngành thép Việt Nam phục hồi mạnh nhờ nhu cầu xây dựng hạ tầng tăng và giá nguyên liệu hạ nhiệt.",
+    "label": "positive"
+  },
+  {
+    "text": "MBB được nâng hạng tín nhiệm lên mức BB+, chi phí vốn dự kiến giảm đáng kể trong năm tới.",
+    "label": "positive"
+  },
+  {
+    "text": "Lợi nhuận ròng quý 2 của VIC tăng gấp đôi so với cùng kỳ, chủ yếu từ mảng bất động sản.",
+    "label": "positive"
+  },
+  {
+    "text": "SSI báo cáo doanh thu môi giới tăng 45% trong 6 tháng đầu năm nhờ thị trường chứng khoán sôi động.",
+    "label": "positive"
+  },
+  {
+    "text": "GAS ghi nhận doanh thu kỷ lục sau khi ký gia hạn hợp đồng cung cấp khí với giá ưu đãi dài hạn.",
+    "label": "positive"
+  },
+  {
+    "text": "REE hoàn thành dự án điện tái tạo đúng tiến độ, dự kiến bổ sung 200 tỷ đồng lợi nhuận mỗi năm.",
+    "label": "positive"
+  },
+  {
+    "text": "Lợi nhuận sau thuế giảm mạnh do chi phí nguyên vật liệu tăng đột biến và tỷ giá bất lợi.",
+    "label": "negative"
+  },
+  {
+    "text": "HPG thông báo tạm dừng một lò cao do nhu cầu thép xây dựng trong nước sụt giảm nghiêm trọng.",
+    "label": "negative"
+  },
+  {
+    "text": "Cổ phiếu NVL mất 30% giá trị trong tháng qua sau khi ban lãnh đạo bị khởi tố liên quan trái phiếu.",
+    "label": "negative"
+  },
+  {
+    "text": "VPB trích lập dự phòng rủi ro tín dụng cao kỷ lục trong bối cảnh nợ xấu bất động sản tăng mạnh.",
+    "label": "negative"
+  },
+  {
+    "text": "MWG phải đóng cửa hơn 100 điểm bán lẻ do chi phí thuê mặt bằng leo thang và doanh số sụt giảm.",
+    "label": "negative"
+  },
+  {
+    "text": "Ngành dệt may chịu áp lực từ đơn hàng xuất khẩu giảm 40% do sức mua tại Mỹ và EU yếu đi.",
+    "label": "negative"
+  },
+  {
+    "text": "PLX báo lỗ quý đầu tiên sau 10 năm do chênh lệch giá nhập khẩu và giá bán lẻ xăng dầu trong nước.",
+    "label": "negative"
+  },
+  {
+    "text": "DIG bị tạm ngừng giao dịch sau khi Ủy ban Chứng khoán phát hiện sai phạm trong công bố thông tin.",
+    "label": "negative"
+  },
+  {
+    "text": "Thị trường bất động sản tiếp tục đóng băng, tồn kho căn hộ tại TP.HCM tăng lên mức cao nhất 5 năm.",
+    "label": "negative"
+  },
+  {
+    "text": "Lãi suất liên ngân hàng tăng vọt lên 6% gây áp lực thanh khoản cho các ngân hàng tầm trung.",
+    "label": "negative"
+  },
+  {
+    "text": "Ban lãnh đạo HPG cho biết sẽ họp vào tháng tới để thảo luận kế hoạch mở rộng sản xuất năm sau.",
+    "label": "neutral"
+  },
+  {
+    "text": "ĐHCĐ thường niên của VNM dự kiến diễn ra vào ngày 25/4, thảo luận kế hoạch kinh doanh năm nay.",
+    "label": "neutral"
+  },
+  {
+    "text": "FPT công bố cơ cấu lại ban điều hành, bổ nhiệm Phó Tổng Giám đốc mới phụ trách mảng quốc tế.",
+    "label": "neutral"
+  },
+  {
+    "text": "Ủy ban Chứng khoán Nhà nước phát hành thông tư hướng dẫn mới về công bố thông tin định kỳ.",
+    "label": "neutral"
+  },
+  {
+    "text": "TCB thông báo phát hành 50 triệu cổ phiếu ESOP cho cán bộ nhân viên theo chương trình hàng năm.",
+    "label": "neutral"
+  },
+  {
+    "text": "Ngân hàng Nhà nước họp định kỳ vào tuần tới, thị trường chờ đợi tín hiệu về chính sách tiền tệ.",
+    "label": "neutral"
+  },
+  {
+    "text": "GAS ký biên bản ghi nhớ hợp tác với đối tác Hàn Quốc, chi tiết hợp đồng chưa được công bố.",
+    "label": "neutral"
+  },
+  {
+    "text": "VHM hoàn thành bàn giao 2.000 căn hộ trong quý 3 đúng theo kế hoạch đã công bố từ đầu năm.",
+    "label": "neutral"
+  },
+  {
+    "text": "Chỉ số VN-Index dao động trong biên độ hẹp, thanh khoản thị trường ở mức trung bình tuần này.",
+    "label": "neutral"
+  },
+  {
+    "text": "Bộ Tài chính đang xem xét điều chỉnh khung thuế thu nhập doanh nghiệp theo lộ trình đã đề xuất.",
+    "label": "neutral"
+  }
+]

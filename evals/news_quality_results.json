@@ -1,0 +1,83 @@
+{
+  "results": [
+    {
+      "id": "A1",
+      "name": "temporal_conflict",
+      "passed": true,
+      "conflict_flagged": true,
+      "cites_new_date": false,
+      "response_snippet": "Các nguồn không thống nhất:  \n- [cafef, tin 01/08] cho rằng HPG báo cáo lợi nhuận Q2 **t"
+    },
+    {
+      "id": "A2",
+      "name": "source_conflict",
+      "passed": true,
+      "conflict_flagged": true,
+      "mentions_both_sources": true,
+      "response_snippet": "1.  **Phân tích yêu cầu của người dùng**:\n    *   Vai trò: Chuyên gia phân tích tài chính doanh nghiệp.\n    *   GUARD 1: Không đưa ra lời khuyên đầu tư (mua/bán/giữ).\n    *   GUARD 2: Trích dẫn nguồn chính xác. Mỗi đoạn có thẻ [BCTC ...] hoặc [TIN TỨC ...]. Vì chỉ có tin tức, phải sử dụng định dạng "
+    },
+    {
+      "id": "A3",
+      "name": "stale_as_current",
+      "passed": true,
+      "avoids_recent_word": true,
+      "cites_old_date": true,
+      "response_snippet": "Có. Theo tin ngày **06/08/2026**, HPG đã ký hợp đồng cung cấp thép cho dự án metro TP.HCM (nguồn: cafef)."
+    },
+    {
+      "id": "A4",
+      "name": "dedup",
+      "passed": true,
+      "expected": 2,
+      "got": 2,
+      "kept": [
+        "HPG ký hợp đồng thép lớn với đối tác Nhật Bản",
+        "VNM tăng giá sản phẩm sữa do chi phí đầu vào tăng"
+      ]
+    },
+    {
+      "id": "B1",
+      "name": "empty_news_warn",
+      "passed": true,
+      "returned_empty": true,
+      "note": "WARN print tested in pipeline; collection correctly returned []"
+    },
+    {
+      "id": "B3b",
+      "name": "model_isolation",
+      "passed": true,
+      "news_embed_model": "bge-m3",
+      "ollama_embed_env": "bge-m3",
+      "note": "If FAIL: news_chunks was indexed with different model than query uses"
+    },
+    {
+      "id": "B4",
+      "name": "time_filter",
+      "passed": true,
+      "days_0_count": 0,
+      "days_3650_count": 5,
+      "note": "days=0 must return 0 (no future articles). days=3650 must not crash."
+    },
+    {
+      "id": "C1",
+      "name": "source_attribution",
+      "passed": true,
+      "mentions_bctc_source": true,
+      "mentions_news_source": true,
+      "response_snippet": "Chúng ta cần trả lời: \"Lợi nhuận HPG hiện tại và dự báo là bao nhiêu?\" Dựa trên tài liệu:\n\n- [BCTC 2025] Lợi nhuận sau thuế HPG năm 2025: 14.074 tỷ đồng.\n- [TIN TỨC 2026-08-26] HPG dự kiến lợi nhuận 2026 đạt 16.000 tỷ đồng theo chia sẻ của CEO tại ĐHCĐ. (nguồn: cafef)\n\nLưu ý về thời gian: Hiện tại? "
+    },
+    {
+      "id": "C3",
+      "name": "additive_value",
+      "passed": true,
+      "news_adds_info": true,
+      "bctc_lacks_info": true,
+      "bctc_only_snippet": "1.  **Analyze the User's Request**:\n    *   Target: HPG (Hoa Phat Group).\n    *   Question: \"HPG có sự kiện hoặc thay đổi gì đáng chú ý gần đây?\" (Does HPG have any notable recent events or changes?)\n    *   Constraint: Only rely on the provided documents. If information is insufficient, say so clearly.\n\n2.  **Analyze the Provided Documents**:\n    *   [BCTC 2025] Doanh thu thuần HPG 2025: 156.832 tỷ đồng. (Revenue 2025: 156.832 billion VND)\n    *   There are no [TIN TỨC ...] segments provided in the prompt.\n\n3.  **Evaluate against GUARD 1 (Investment advice)**:\n    *   No buying/selling/holdin",
+      "with_news_snippet": "1.  **Phân tích yêu cầu của người dùng**:\n    *   Vai trò: Chuyên gia phân tích tài chính doanh nghiệp.\n    *   Guard 1: Tuyệt đối không đưa ra lời khuyên mua/bán/nắm giữ cổ phiếu.\n    *   Guard 2: Trích dẫn nguồn và thời gian. Nếu xung đột, nêu rõ. Nếu tin cũ hơn 14 ngày, ghi rõ ngày thay thế.\n    *   Nhiệm vụ: Phân tích thông tin từ tài liệu được cung cấp để trả lời. Nếu không đủ, nói rõ.\n    *   Câu hỏi: HPG có sự kiện hoặc thay đổi gì đáng chú ý gần đây?\n    *   Tài liệu cung cấp:\n        *   [BCTC 2025] Doanh thu thuần HPG 2025: 156.832 tỷ đồng.\n        *   [TIN TỨC 2026-08-26] HPG vừa kh"
+    }
+  ],
+  "summary": {
+    "passed": 9,
+    "total": 9
+  }
+}

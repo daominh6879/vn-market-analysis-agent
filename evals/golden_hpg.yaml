@@ -198,3 +198,47 @@ questions:
     source_page: null
     source_doc: null
     group: out_of_scope
+
+  # ── news pipeline check (5) ───────────────────────────────────────────────────
+  # Không có ground truth. Check: sources_used phải chứa [TIN TỨC].
+  # Chỉ pass khi news_chunks đã được index và wire vào pipeline.
+
+  - id: n01
+    question: "Có tin tức gì liên quan đến HPG trong 30 ngày gần nhất?"
+    answer: ""
+    source_page: null
+    source_doc: null
+    group: news
+    check: sources_used_contains_news
+
+  - id: n02
+    question: "Ngành thép Việt Nam đang đối mặt với những thách thức gì hiện nay?"
+    answer: ""
+    source_page: null
+    source_doc: null
+    group: news
+    check: sources_used_contains_news
+
+  - id: n03
+    question: "Có sự kiện kinh tế nào ảnh hưởng đến thị trường chứng khoán Việt Nam gần đây?"
+    answer: ""
+    source_page: null
+    source_doc: null
+    group: news
+    check: sources_used_contains_news
+
+  - id: n04
+    question: "Tình hình kinh doanh của các doanh nghiệp thép lớn như VNSteel, Hòa Phát ra sao?"
+    answer: ""
+    source_page: null
+    source_doc: null
+    group: news
+    check: sources_used_contains_news
+
+  - id: n05
+    question: "Lãi suất và chính sách tiền tệ có ảnh hưởng gì đến doanh nghiệp sản xuất không?"
+    answer: ""
+    source_page: null
+    source_doc: null
+    group: news
+    check: sources_used_contains_news

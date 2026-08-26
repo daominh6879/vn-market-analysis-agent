@@ -177,6 +177,77 @@ def ask_with_hybrid_rerank(
     return resp.text, contexts
 
 
+def ask_with_rag_fusion(
+    question: str,
+    collection: str,
+    embed_model: str,
+    bm25_retriever,
+    n_sub_queries: int = 4,
+    top_k: int = 5,
+) -> tuple[str, list[str]]:
+    """Full RAG-Fusion pipeline: decompose → multi-retrieve → RRF → analyze."""
+    from rag.rag_fusion_graph import run_rag_fusion
+    result = run_rag_fusion(
+        query=question,
+        collection=collection,
+        embed_model=embed_model,
+        bm25_retriever=bm25_retriever,
+        top_k=top_k,
+        n_sub_queries=n_sub_queries,
+    )
+    report = result.get("report", result.get("analysis", ""))
+    contexts = result.get("fused_chunks", [])
+    return report, contexts
+
+
+def ask_with_router_sql(
+    client,
+    question: str,
+    collection: str,
+    embed_model: str,
+    bm25_retriever,
+) -> tuple[str, list[str]]:
+    """Route question → SQL agent (số_liệu) or hybrid_rerank (diễn_giải/cả_hai) or refusal."""
+    from rag.router import classify
+    from rag.sql_agent import execute_safe, SecurityError, SQLAgentError
+
+    route = classify(question, client=client)
+
+    if route.label == "ngoài_phạm_vi":
+        return "Câu hỏi này nằm ngoài phạm vi của hệ thống tài chính HPG.", []
+
+    if route.label == "số_liệu":
+        try:
+            result = execute_safe(question, client=client)
+            return result.format_answer(), [result.as_context()]
+        except (SecurityError, SQLAgentError) as exc:
+            return f"Không thể thực thi SQL: {exc}", []
+
+    if route.label == "diễn_giải":
+        return ask_with_hybrid_rerank(client, question, collection, embed_model, bm25_retriever)
+
+    # cả_hai: SQL result + RAG context, then LLM combines
+    sql_context = ""
+    try:
+        sql_result = execute_safe(question, client=client)
+        sql_context = sql_result.as_context()
+    except (SecurityError, SQLAgentError):
+        pass
+
+    rag_answer, rag_contexts = ask_with_hybrid_rerank(
+        client, question, collection, embed_model, bm25_retriever
+    )
+    contexts = ([sql_context] if sql_context else []) + rag_contexts
+    context_block = "\n\n---\n\n".join(contexts)
+    system = (
+        "Bạn là trợ lý tài chính. Dựa vào dữ liệu và tài liệu dưới đây để trả lời. "
+        "Nếu thông tin không có, nói rõ 'Không có trong tài liệu'.\n\n"
+        f"DỮ LIỆU:\n{context_block}"
+    )
+    resp = client.generate([Message(role="user", content=question)], max_tokens=512, system=system)
+    return resp.text, contexts
+
+
 def ask_with_bm25(client, question: str, bm25_retriever) -> tuple[str, list[str]]:
     """Retrieve context via BM25 then call model."""
     contexts = bm25_retriever.search(question, top_k=5)
@@ -403,9 +474,9 @@ def main() -> None:
                         default=os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
                         help="Ollama embed model for RAG retrieval (used with --collection)")
     parser.add_argument("--retriever",
-                        choices=["vector", "bm25", "hybrid_weighted", "hybrid_rrf", "hybrid_rerank"],
+                        choices=["vector", "bm25", "hybrid_weighted", "hybrid_rrf", "hybrid_rerank", "rag_fusion", "router_sql"],
                         default="vector",
-                        help="Retrieval method: vector (default), bm25, hybrid_weighted, hybrid_rrf, hybrid_rerank")
+                        help="Retrieval method: vector (default), bm25, hybrid_weighted, hybrid_rrf, hybrid_rerank, rag_fusion, router_sql")
     parser.add_argument("--vn-tokenize",
                         action="store_true",
                         help="BM25 only: use underthesea Vietnamese word tokenization")
@@ -417,7 +488,7 @@ def main() -> None:
     provider = os.environ.get("LLM_PROVIDER", "anthropic")
     rag_mode = bool(args.collection)
     bm25_retriever = None
-    if rag_mode and args.retriever in ("bm25", "hybrid_weighted", "hybrid_rrf", "hybrid_rerank"):
+    if rag_mode and args.retriever in ("bm25", "hybrid_weighted", "hybrid_rrf", "hybrid_rerank", "rag_fusion", "router_sql"):
         from rag.retrieval_bm25 import BM25Retriever
         bm25_retriever = BM25Retriever(
             collection=args.collection,
@@ -432,6 +503,12 @@ def main() -> None:
         elif args.retriever in ("hybrid_weighted", "hybrid_rrf", "hybrid_rerank"):
             tok = "vn_tokenize" if args.vn_tokenize else "raw_split"
             mode_label = f"{args.retriever} (BM25 {tok} + vector) — {args.collection}"
+        elif args.retriever == "rag_fusion":
+            tok = "vn_tokenize" if args.vn_tokenize else "raw_split"
+            mode_label = f"rag_fusion (multi-query N=4, BM25 {tok} + vector) — {args.collection}"
+        elif args.retriever == "router_sql":
+            tok = "vn_tokenize" if args.vn_tokenize else "raw_split"
+            mode_label = f"router_sql (classify → SQL | hybrid_rerank) — {args.collection}"
         else:
             mode_label = f"vector — {args.collection}"
     print(f"Provider      : {provider}")
@@ -442,10 +519,11 @@ def main() -> None:
         print(f"RAGAS judge   : {args.ollama_model}  embed: {args.ollama_embed_model}")
     print()
 
-    all_eval_qs = [q for q in questions if q["group"] not in ("no_answer", "out_of_scope")]
+    all_eval_qs = [q for q in questions if q["group"] not in ("no_answer", "out_of_scope", "news")]
     skipped = [q for q in all_eval_qs if not q.get("indexed", True)]
     eval_qs = [] if args.only_refusal else [q for q in all_eval_qs if q.get("indexed", True)]
     refusal_qs = [q for q in questions if q["group"] in ("no_answer", "out_of_scope")]
+    news_qs = [q for q in questions if q["group"] == "news"]
     if skipped:
         print(f"Skipped (indexed=false): {len(skipped)} câu {[q['id'] for q in skipped]}")
 
@@ -454,7 +532,15 @@ def main() -> None:
     for q in eval_qs:
         print(f"  {q['id']:6s} [{q['group']:<20}]", end="", flush=True)
         t0 = time.perf_counter()
-        if rag_mode and args.retriever == "hybrid_rerank":
+        if rag_mode and args.retriever == "router_sql":
+            answer, contexts = ask_with_router_sql(
+                client, q["question"], args.collection, args.embed, bm25_retriever,
+            )
+        elif rag_mode and args.retriever == "rag_fusion":
+            answer, contexts = ask_with_rag_fusion(
+                q["question"], args.collection, args.embed, bm25_retriever,
+            )
+        elif rag_mode and args.retriever == "hybrid_rerank":
             answer, contexts = ask_with_hybrid_rerank(
                 client, q["question"], args.collection, args.embed, bm25_retriever,
             )
@@ -485,7 +571,15 @@ def main() -> None:
     for q in refusal_qs:
         print(f"  {q['id']:6s} [{q['group']:<20}]", end="", flush=True)
         t0 = time.perf_counter()
-        if rag_mode and args.retriever == "hybrid_rerank":
+        if rag_mode and args.retriever == "router_sql":
+            answer, _ = ask_with_router_sql(
+                client, q["question"], args.collection, args.embed, bm25_retriever,
+            )
+        elif rag_mode and args.retriever == "rag_fusion":
+            answer, _ = ask_with_rag_fusion(
+                q["question"], args.collection, args.embed, bm25_retriever,
+            )
+        elif rag_mode and args.retriever == "hybrid_rerank":
             answer, _ = ask_with_hybrid_rerank(
                 client, q["question"], args.collection, args.embed, bm25_retriever,
             )
@@ -511,6 +605,42 @@ def main() -> None:
         if refusal_results else 1.0
     )
 
+    # ── news pipeline check ──
+    news_check_results: list[dict] = []
+    if news_qs and rag_mode and args.retriever == "rag_fusion":
+        from rag.rag_fusion_graph import run_rag_fusion
+        print(f"\nNews pipeline check ({len(news_qs)} questions):")
+        for q in news_qs:
+            print(f"  {q['id']:6s} [{q['group']:<8}]", end="", flush=True)
+            t0 = time.perf_counter()
+            try:
+                state = run_rag_fusion(
+                    query=q["question"],
+                    collection=args.collection,
+                    embed_model=args.embed,
+                    bm25_retriever=bm25_retriever,
+                )
+                sources = state.get("sources_used", [])
+                passed = any("TIN TỨC" in s for s in sources)
+            except Exception as e:
+                sources = []
+                passed = False
+                print(f" [ERROR: {e}]", end="")
+            elapsed = time.perf_counter() - t0
+            print(f" {'PASS' if passed else 'FAIL'}  sources={sources}  {elapsed:.1f}s")
+            news_check_results.append({
+                "id": q["id"],
+                "passed": passed,
+                "sources_used": sources,
+            })
+    elif news_qs:
+        print(f"\nNews check skipped — requires --retriever rag_fusion")
+
+    news_pass_rate = (
+        sum(r["passed"] for r in news_check_results) / len(news_check_results)
+        if news_check_results else None
+    )
+
     # ── RAGAS ──
     ragas_scores: dict = {}
     if not args.skip_ragas and samples:
@@ -518,8 +648,13 @@ def main() -> None:
         ragas_scores = compute_ragas(samples, args.ragas_provider, args.ollama_model, args.ollama_embed_model)
 
     all_scores = {**ragas_scores, "refusal_pass_rate": refusal_rate}
+    if news_pass_rate is not None:
+        all_scores["news_pipeline_pass_rate"] = news_pass_rate
     print_markdown_table(all_scores)
     print(f"\nRefusal: {sum(r['passed'] for r in refusal_results)}/{len(refusal_results)} passed")
+    if news_check_results:
+        n_pass = sum(r["passed"] for r in news_check_results)
+        print(f"News pipeline: {n_pass}/{len(news_check_results)} passed")
 
     # ── save results ──
     output = {

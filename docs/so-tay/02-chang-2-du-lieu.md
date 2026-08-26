@@ -514,6 +514,300 @@
 
 ---
 
+### Bài 12B · Tin tức tài chính — cào, lưu, index, sentiment 🔴
+**~2.5 ngày**
+
+**Bối cảnh.** Bài 12 tách số liệu ra SQL. Nhưng câu "Tại sao HPG giảm hôm nay?" hay "Có tin gì ảnh hưởng đến giá thép tuần này?" không thể trả lời từ BCTC — cần tin tức thời sự. Bài này thêm **đường dữ liệu thứ ba**: tin tức CafeF/VnExpress, lưu Postgres, index Qdrant collection riêng, kèm Financial PhraseBank làm eval cho sentiment.
+
+**Để hiểu gì.** RAG tài chính đầy đủ cần 3 đường song song: (1) số liệu → SQL, (2) văn bản báo cáo → vector search, (3) tin tức realtime → vector search có time-filter. Thiếu đường 3, agent không giải thích được biến động giá.
+
+**Làm gì.**
+
+**Bắt đầu từ đâu:**
+1. Tạo migration và xác nhận bảng tồn tại:
+   ```bash
+   psql $DATABASE_URL -f infra/migrations/005_news_articles.sql
+   psql $DATABASE_URL -c "\d news_articles"
+   ```
+2. Lấy danh sách ticker HOSE/HNX từ vnstock — cần trước khi viết scraper:
+   ```python
+   from vnstock import Listing
+   symbols = Listing().all_symbols()["symbol"].tolist()
+   # Lưu vào data/known_tickers.txt, một mã mỗi dòng
+   ```
+3. Kiểm tra RSS hoạt động:
+   ```python
+   import feedparser
+   feed = feedparser.parse("https://cafef.vn/rss/chung-khoan.rss")
+   print(len(feed.entries), feed.entries[0].title)
+   ```
+   Thấy title tiếng Việt là OK. Nếu 403/empty → dùng VnExpress RSS trước.
+
+**Chi tiết từng việc:**
+
+- **`infra/migrations/005_news_articles.sql`** — đã tạo. Kiểm tra lại: URL là UNIQUE, `indexed_at` mặc định NULL (incremental logic dựa vào đây).
+
+- **Tạo Qdrant collection `news_chunks` trước khi upsert lần đầu.** Dùng cùng dimension với `hpg_chunks` (phải cùng embedding model):
+  ```python
+  from qdrant_client.models import Distance, VectorParams
+
+  if not qdrant_client.collection_exists("news_chunks"):
+      qdrant_client.create_collection(
+          collection_name="news_chunks",
+          vectors_config=VectorParams(size=EMBED_DIM, distance=Distance.COSINE),
+      )
+  ```
+  `EMBED_DIM` lấy từ config — cùng giá trị với `hpg_chunks`, nếu khác thì 2 collection không thể dùng cùng search logic.
+
+- **Viết `data/news_scraper.py`** — RSS từ 2 nguồn:
+  - `https://cafef.vn/rss/chung-khoan.rss`
+  - `https://vnexpress.net/rss/kinh-doanh.rss`
+
+  **Chuẩn hóa `published_at` về UTC ngay khi parse** — không lưu string raw:
+  ```python
+  from datetime import datetime, timezone
+
+  def parse_published(entry) -> str:
+      if hasattr(entry, "published_parsed") and entry.published_parsed:
+          dt = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
+          return dt.isoformat()
+      # fallback: thời điểm scrape
+      return datetime.now(timezone.utc).isoformat()
+  ```
+
+  **Clean HTML trước khi lưu** — RSS body thường có `<p>`, `&amp;`, `&nbsp;`:
+  ```python
+  import html, re
+
+  def clean_html(text: str) -> str:
+      text = html.unescape(text)
+      text = re.sub(r"<[^>]+>", " ", text)
+      text = re.sub(r"\s+", " ", text).strip()
+      return text
+  ```
+
+  **Tối thiểu body 80 ký tự** — một số RSS entry chỉ có tiêu đề lặp lại trong summary:
+  ```python
+  body = clean_html(e.get("summary", ""))
+  if len(body) < 80:
+      body = clean_html(e.title)   # dùng title thay thế
+  ```
+
+  **Cấu trúc hàm chính:**
+  ```python
+  RSS_SOURCES = [
+      ("https://cafef.vn/rss/chung-khoan.rss", "cafef"),
+      ("https://vnexpress.net/rss/kinh-doanh.rss", "vnexpress"),
+  ]
+
+  def scrape_rss(url: str, source: str) -> list[dict]:
+      try:
+          feed = feedparser.parse(url)
+      except Exception as e:
+          print(f"[WARN] scrape_rss failed for {source}: {e}")
+          return []
+      results = []
+      for e in feed.entries:
+          body = clean_html(e.get("summary", ""))
+          if len(body) < 80:
+              body = clean_html(e.title)
+          results.append({
+              "url": e.link,
+              "title": clean_html(e.title),
+              "body": body,
+              "source": source,
+              "published_at": parse_published(e),
+              "tickers": extract_tickers(e.title),
+          })
+      return results
+  ```
+
+- **Trích xuất ticker từ tiêu đề — pattern matching, không LLM:**
+  ```python
+  import re
+  from pathlib import Path
+
+  KNOWN_TICKERS: set[str] = set(
+      Path("data/known_tickers.txt").read_text().splitlines()
+  )
+  TICKER_RE = re.compile(r'\b([A-Z]{2,4})\b')
+
+  def extract_tickers(title: str) -> list[str]:
+      return [m for m in TICKER_RE.findall(title) if m in KNOWN_TICKERS]
+  ```
+  `data/known_tickers.txt` lấy từ bước khởi động (vnstock `Listing().all_symbols()`).
+
+- **Upsert vào Postgres + UPDATE `indexed_at` sau khi Qdrant thành công:**
+  ```python
+  def save_article(conn, article: dict) -> bool:
+      """Trả True nếu mới, False nếu đã tồn tại."""
+      cur = conn.cursor()
+      cur.execute("""
+          INSERT INTO news_articles (url, title, body, source, published_at, tickers)
+          VALUES (%s, %s, %s, %s, %s, %s)
+          ON CONFLICT (url) DO NOTHING
+          RETURNING id
+      """, (article["url"], article["title"], article["body"],
+            article["source"], article["published_at"], article["tickers"]))
+      return cur.fetchone() is not None
+
+  def mark_indexed(conn, url: str):
+      conn.execute(
+          "UPDATE news_articles SET indexed_at = NOW() WHERE url = %s", (url,)
+      )
+  ```
+  Gọi `mark_indexed` **sau khi** Qdrant upsert thành công. Nếu Qdrant fail, `indexed_at` giữ NULL → lần chạy sau tự retry.
+
+- **Index vào `news_chunks`** — embed `title + body`, dedup bằng `url_hash`:
+  ```python
+  import hashlib, uuid
+
+  def url_to_uuid(url: str) -> str:
+      h = hashlib.md5(url.encode()).hexdigest()
+      return str(uuid.UUID(h))
+
+  def index_article(article: dict, embed_fn) -> None:
+      vec = embed_fn(f"{article['title']}\n{article['body']}")
+      qdrant_client.upsert(
+          collection_name="news_chunks",
+          points=[PointStruct(
+              id=url_to_uuid(article["url"]),
+              vector=vec,
+              payload={
+                  "source":       article["source"],
+                  "published_at": article["published_at"],
+                  "tickers":      article["tickers"],
+                  "url":          article["url"],
+                  "title":        article["title"],
+              }
+          )]
+      )
+  ```
+
+  **Tìm kiếm có time-filter:**
+  ```python
+  from datetime import datetime, timedelta, timezone
+
+  def search_news(query_vec, days: int, limit: int = 5) -> list:
+      cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+      return qdrant_client.search(
+          collection_name="news_chunks",
+          query_vector=query_vec,
+          query_filter=Filter(must=[
+              FieldCondition(key="published_at", range=DatetimeRange(gte=cutoff))
+          ]),
+          limit=limit,
+      )
+  ```
+  **Không cần BM25 cho `news_chunks`** — tin tức ngắn, thường truy vấn theo chủ đề + thời gian, time-filter + vector là đủ. BM25 chỉ giúp khi cần khớp chính xác từ khoá như tên mã trong câu dài; với tiêu đề ngắn, vector đã đủ.
+
+- **Data retention — tránh tăng vô hạn:** Xóa bài cũ hơn 90 ngày định kỳ (chạy trong Dagster):
+  ```python
+  def purge_old_articles(conn, days_to_keep: int = 90):
+      conn.execute("""
+          DELETE FROM news_articles
+          WHERE published_at < NOW() - INTERVAL '%s days'
+      """, (days_to_keep,))
+  ```
+  Đồng thời xóa điểm Qdrant tương ứng bằng filter `published_at < cutoff`. Không cần xóa ngay lập tức — chạy weekly là đủ.
+
+- **Financial PhraseBank — eval sentiment:**
+
+  ⚠️ **Đúng tên dataset**: `financial_phrasebank` (không phải `ProsusAI/finbert` — cái đó là model).
+  ```python
+  from datasets import load_dataset
+  ds = load_dataset("financial_phrasebank", "sentences_allagree")
+  # 2264 câu tiếng Anh, nhãn: 0=negative, 1=neutral, 2=positive
+  ```
+  Viết `evals/eval_sentiment.py` — feed 200 câu ngẫu nhiên qua LLM zero-shot, đo accuracy. Ngưỡng chấp nhận: ≥ 0.70.
+
+  **Tạo `data/sentiment_shots_vi.json`** — 30 câu tiếng Việt, 10 mỗi nhãn, kiểm tra tay:
+  ```json
+  [
+    {
+      "text": "Doanh thu thuần của HPG tăng 23% so với cùng kỳ, vượt kỳ vọng thị trường.",
+      "label": "positive"
+    },
+    {
+      "text": "Lợi nhuận sau thuế giảm mạnh do chi phí nguyên vật liệu tăng đột biến.",
+      "label": "negative"
+    },
+    {
+      "text": "Ban lãnh đạo HPG cho biết sẽ họp vào tháng tới để thảo luận kế hoạch năm sau.",
+      "label": "neutral"
+    }
+  ]
+  ```
+  30 câu phải **đa dạng**: tin KQKD, tin ngành, tin vĩ mô, tin nhân sự. Không toàn câu về HPG.
+
+- **Thêm 5 câu hỏi tin tức vào `evals/golden_hpg.yaml`** — để đo đường 3 có hoạt động không:
+  ```yaml
+  - question: "Có tin tức gì về HPG trong 30 ngày gần nhất?"
+    answer: ""          # không có đáp án cố định — chỉ kiểm tra sources_used có [TIN TỨC]
+    group: "news"
+    check: "sources_used_contains_news"
+  - question: "Ngành thép Việt Nam đang đối mặt với thách thức gì?"
+    answer: ""
+    group: "news"
+    check: "sources_used_contains_news"
+  ```
+  Cập nhật `evals/run.py` để nhận dạng `check: sources_used_contains_news` và đánh giá đúng.
+
+- **Tích hợp vào Bài 13 (Dagster)** — thêm 2 asset và 1 job purge:
+  ```python
+  @asset(retry_policy=RetryPolicy(max_retries=3, delay=60))
+  def news_raw(): ...          # scrape RSS → upsert news_articles (save_article)
+
+  @asset(deps=[news_raw])
+  def news_indexed(): ...      # index_article + mark_indexed cho URL chưa indexed
+
+  @asset
+  def news_purge(): ...        # purge_old_articles(days_to_keep=90)
+  ```
+  Lịch `news_raw` + `news_indexed`: mỗi 6 giờ. Lịch `news_purge`: weekly.
+
+- **Wiring `news_chunks` vào pipeline chính** — đây là bước nối cuối cùng. Nếu bỏ qua, `news_chunks` có dữ liệu nhưng pipeline `rag/rag_fusion_graph.py` vẫn không dùng đến. Sửa `make_multi_retrieve_node`:
+  ```python
+  async def _gather():
+      tasks = [
+          _retrieve_one(sq, "hpg_chunks", embed_model, bm25_retriever)
+          for sq in sub_queries
+      ]
+      tasks += [
+          _retrieve_news(sq, days=30)
+          for sq in sub_queries[:2]   # top 2, tránh over-fetch
+      ]
+      return await asyncio.gather(*tasks)
+  ```
+  `_retrieve_news(query, days)` — query `news_chunks` có `DatetimeRange` filter, tag `[TIN TỨC YYYY-MM-DD]` qua `tag_source`.
+
+  **Kiểm chứng**: chạy pipeline câu liên quan tin tức → `state["sources_used"]` phải có entry prefix `[TIN TỨC`. Nếu không → wiring chưa hoạt động.
+
+**Xong khi.**
+- [ ] Postgres có ≥ 100 bài, không bài nào duplicate, `published_at` đều là UTC
+- [ ] Qdrant `news_chunks` tồn tại, tìm được với time-filter 7 ngày
+- [ ] `mark_indexed` hoạt động — chạy lại Dagster job, số bài `indexed_at IS NULL` về 0
+- [ ] `eval_sentiment.py` chạy trên `financial_phrasebank`, accuracy ≥ 0.70, ghi vào `NOTES.md`
+- [ ] `data/sentiment_shots_vi.json` — 30 câu, 10 mỗi nhãn, đã kiểm tra tay
+- [ ] 5 câu tin tức trong `golden_hpg.yaml`, `run.py` pass với check `sources_used_contains_news`
+- [ ] **Pipeline chính có `[TIN TỨC]` trong `sources_used`** khi hỏi câu liên quan tin tức
+
+**Tự trả lời được.**
+- Vì sao URL là dedup key tốt hơn title?
+- Nếu không chuẩn hóa UTC, time-filter sai thế nào?
+- Vì sao `indexed_at` phải update **sau** Qdrant upsert thành công, không phải trước?
+- Vì sao không cần BM25 cho `news_chunks` nhưng lại cần cho `hpg_chunks`?
+- Vì sao 30 câu tiếng Việt riêng thay vì dùng thẳng `financial_phrasebank` tiếng Anh?
+- Vì sao `news_chunks` cần wiring riêng vào `multi_retrieve_node` thay vì chỉ có tool `search_financial_news` ở bài 19B?
+
+**Cái bẫy.**
+1. `e.get("published", "")` lưu raw string — timezone CafeF và VnExpress khác nhau → `DatetimeRange` filter sai âm thầm. Phải dùng `entry.published_parsed`.
+2. **Build `news_chunks` xong nhưng quên wire vào pipeline** — tool `search_financial_news` (bài 19B) cho agent gọi thủ công; wiring `_retrieve_news` vào `multi_retrieve_node` mới làm tin tức tự động xuất hiện trong mọi phân tích.
+3. `ProsusAI/finbert` là model, không phải dataset. Dataset đúng: `load_dataset("financial_phrasebank", "sentences_allagree")`.
+4. Không check `collection_exists` trước khi upsert → crash `KeyError` lần đầu chạy trên môi trường mới.
+
+---
+
 ### Bài 13 · Biến script thành pipeline tự chạy 🟡
 **~2 ngày**
 

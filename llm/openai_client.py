@@ -30,6 +30,7 @@ class OpenAIClient(LLMClient):
         max_tokens: int = 1024,
         system: str | None = None,
         tools: list[dict] | None = None,
+        temperature: float | None = None,
     ) -> LLMResponse:
         msgs = self._build_messages(messages, system)
         kwargs: dict = {
@@ -37,6 +38,8 @@ class OpenAIClient(LLMClient):
             "max_tokens": max_tokens,
             "messages": msgs,
         }
+        if temperature is not None:
+            kwargs["temperature"] = temperature
         if tools:
             def _to_openai(t: dict) -> dict:
                 fn = {k: v for k, v in t.items() if k not in ("input_schema", "strict")}
@@ -59,17 +62,29 @@ class OpenAIClient(LLMClient):
         choice = resp.choices[0]
         msg = choice.message
         text = msg.content or ""
+        # DeepSeek reasoning models: content may be empty; answer lives in reasoning_content
+        if not text.strip():
+            text = getattr(msg, "reasoning_content", None) or ""
+        # Strip inline <think>...</think> blocks (deepseek-chat thinking mode)
+        import re as _re
+        text = _re.sub(r"<think>.*?</think>", "", text, flags=_re.DOTALL).strip()
 
         tool_calls: list[ToolCall] = []
+        import json
         for tc in msg.tool_calls or []:
-            import json
-            tool_calls.append(
-                ToolCall(
-                    id=tc.id,
-                    name=tc.function.name,
-                    input=json.loads(tc.function.arguments),
-                )
-            )
+            raw = tc.function.arguments or "{}"
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                # Model returned truncated/malformed JSON (often from low max_tokens).
+                # Attempt partial repair: find last complete key-value by truncating to last '}'.
+                import re as _re2
+                repaired = raw[: raw.rfind("}") + 1] if "}" in raw else "{}"
+                try:
+                    parsed = json.loads(repaired)
+                except json.JSONDecodeError:
+                    parsed = {}
+            tool_calls.append(ToolCall(id=tc.id, name=tc.function.name, input=parsed))
 
         return LLMResponse(
             text=text,
