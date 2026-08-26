@@ -1,4 +1,18 @@
 {
-  "accuracy": 0.9,
-  "n": 30
+  "accuracy": 0.965,
+  "n": 200,
+  "per_class": {
+    "positive": {
+      "n": 50,
+      "acc": 0.98
+    },
+    "neutral": {
+      "n": 122,
+      "acc": 0.951
+    },
+    "negative": {
+      "n": 28,
+      "acc": 1.0
+    }
+  }
 }

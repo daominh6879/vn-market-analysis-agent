@@ -81,10 +81,22 @@ decompose → multi_retrieve → rrf_fuse → analyze → report
 
 ```
 hpg_chunks:   BM25 (underthesea VN tokenize) + vector (Qdrant) → RRF → top 20
-news_chunks:  vector search + DatetimeRange filter (30 ngày)
+news_chunks:  vector search + DatetimeRange filter (30 ngày) → classify_sentiment() on-the-fly
 Postgres:     query_postgres_facts() → financial_facts
 Web:          Tavily.invoke(query) → 3 articles
 ```
+
+### Sentiment trong news_chunks
+
+Sentiment **không** được lưu vào Qdrant payload (quá đắt khi index hàng loạt).  
+Thay vào đó, `_retrieve_news()` gọi `classify_sentiment()` trên mỗi chunk vừa lấy về (~5 calls/query):
+
+```
+_retrieve_news() → top 5 payloads → classify_sentiment(payload["text"]) → tag vào chunk
+→ "[TIN TỨC 2026-08-20 | sentiment: negative] Thép giảm mạnh (nguồn: cafef.vn)"
+```
+
+`analyze_node` thấy tag → tổng hợp được: "3/5 tin negative, 1 neutral, 1 positive".
 
 ---
 
@@ -131,7 +143,7 @@ câu hỏi → classify (LLM) → label
 | Tag | Nguồn | Ghi chú |
 |---|---|---|
 | `RAG corpus` | hpg_chunks (PDF embed) | Không có prefix trong raw text |
-| `TIN TỨC YYYY-MM-DD` | news_chunks nội bộ | Đã thu thập, kiểm soát được |
+| `TIN TỨC YYYY-MM-DD \| sentiment: X` | news_chunks nội bộ | Sentiment classify lúc retrieve (không lưu Qdrant) |
 | `GIÁ LỊCH SỬ` | Postgres financial_facts + stock_prices | vnstock hoặc PDF extract |
 | `WEB` | Tavily real-time | Chưa kiểm chứng — LLM phải ghi `(Nguồn: Web)` |
 
@@ -182,3 +194,4 @@ news_articles (url, title, body, source, published_at, tickers[], indexed_at)
 | 18 | Router + SQL tích hợp vào rag_fusion |
 | — | Thêm Dagster assets vnstock_financials + vnstock_prices |
 | — | Phân biệt source tags: WEB vs TIN TỨC vs RAG corpus |
+| — | Sentiment classify at retrieve time (không lưu Qdrant payload) — `classify_sentiment()` trong `_retrieve_news()` |

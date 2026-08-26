@@ -37,10 +37,37 @@ try:
 except ImportError:
     pass
 
+# ── constants ─────────────────────────────────────────────────────────────────
+
 COLLECTION = "news_chunks"
 QDRANT_URL = "http://localhost:6333"
 OLLAMA_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 DEFAULT_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+VALID_SENTIMENTS = frozenset({"positive", "neutral", "negative"})
+
+from llm.factory import create_client  # noqa: E402 — module-level for patching
+from llm.types import Message  # noqa: E402
+
+
+# ── sentiment (classify at retrieve time, not index time) ─────────────────────
+
+def classify_sentiment(text: str) -> str:
+    """Zero-shot sentiment for Vietnamese financial text."""
+    try:
+        client = create_client()
+        resp = client.generate(
+            [Message(role="user", content=text[:500])],
+            max_tokens=10,
+            system=(
+                "Bạn là classifier tài chính. Phân loại cảm xúc của đoạn tin tức tài chính sau.\n"
+                "Trả lời đúng một từ: positive, neutral, hoặc negative.\n"
+                "Không giải thích. Không dấu câu."
+            ),
+        )
+        label = resp.text.strip().lower().split()[0] if resp.text.strip() else "neutral"
+        return label if label in VALID_SENTIMENTS else "neutral"
+    except Exception:
+        return "neutral"
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -95,10 +122,7 @@ def ensure_news_collection(embed_model: str = DEFAULT_EMBED_MODEL) -> QdrantClie
 # ── indexing ──────────────────────────────────────────────────────────────────
 
 def index_article(client: QdrantClient, article: dict, embed_model: str) -> None:
-    """Embed + upsert one article into news_chunks. Idempotent via url hash.
-
-    Stores "text" field (same as hpg_chunks convention) for forward compatibility.
-    """
+    """Embed + upsert one article into news_chunks. Idempotent via url hash."""
     text = f"{article['title']}\n{article['body']}"
     vec = _embed(text, embed_model)
     client.upsert(
@@ -108,7 +132,7 @@ def index_article(client: QdrantClient, article: dict, embed_model: str) -> None
                 id=_url_to_uuid(article["url"]),
                 vector=vec,
                 payload={
-                    "text":         text,          # same field name as hpg_chunks
+                    "text":         text,
                     "title":        article["title"],
                     "source":       article["source"],
                     "published_at": article["published_at"],

@@ -116,7 +116,7 @@ async def _retrieve_news(query: str, embed_model: str, days: int = 30, top_k: in
     Uses NEWS_EMBED_MODEL env var (OLLAMA_EMBED_MODEL), NOT the hpg_chunks embed_model.
     news_chunks was indexed with its own model — mixing models causes dim mismatch.
     """
-    from rag.news_index import search_news_by_text, DEFAULT_EMBED_MODEL as NEWS_EMBED_MODEL
+    from rag.news_index import search_news_by_text, classify_sentiment, DEFAULT_EMBED_MODEL as NEWS_EMBED_MODEL
 
     loop = asyncio.get_event_loop()
     payloads = await loop.run_in_executor(
@@ -138,7 +138,9 @@ async def _retrieve_news(query: str, embed_model: str, days: int = 30, top_k: in
         source = p.get("source", "")
         tickers = p.get("tickers", [])
         ticker_hint = f" [{', '.join(tickers)}]" if tickers else ""
-        results.append(f"[TIN TỨC {date}] {title}{ticker_hint} (nguồn: {source})")
+        text = p.get("text", title)
+        sentiment = classify_sentiment(text)
+        results.append(f"[TIN TỨC {date} | sentiment: {sentiment}] {title}{ticker_hint} (nguồn: {source})")
     return results
 
 

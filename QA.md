@@ -30,6 +30,31 @@ Bài 14 cho thấy BM25 MISS `q08` (bảng số), vector có thể tìm được
 
 ---
 
+## Sentiment analysis là gì? Mục đích và ảnh hưởng tới project?
+
+**Q:** Sentiment là gì, dùng để làm gì, có cần thiết cho project này không?
+
+**A:** Sentiment analysis = phân loại cảm xúc của một câu văn bản thành `positive / neutral / negative`.
+
+Trong tài chính (financial sentiment):
+- `positive`: "Lợi nhuận HPG tăng mạnh quý 3" → thị trường phản ứng tốt
+- `neutral`: "HPG công bố BCTC quý 2" → thông tin trung tính
+- `negative`: "HPG lỗ do giá thép giảm" → tín hiệu xấu
+
+**`eval_sentiment.py` dùng dataset Financial PhraseBank** (Malo et al. 2014) — 4846 câu tiếng Anh, đánh giá LLM zero-shot classify đúng bao nhiêu.
+
+**Ảnh hưởng tới project hiện tại: không đáng kể.**  
+Pipeline RAG của project tập trung vào retrieval + generation từ BCTC + news — không dùng sentiment score ở bất kỳ bước nào.
+
+**Khi nào sentiment có ích:**
+- Tag news articles với label trước khi index → filter "chỉ lấy tin tiêu cực về HPG"
+- Tóm tắt xu hướng sentiment thị trường theo thời gian
+- Input feature cho mô hình dự báo giá (bài sau)
+
+**Kết luận:** `eval_sentiment.py` là bài học độc lập về LLM classification, không phải core pipeline. Skip nếu không có task sentiment cụ thể.
+
+---
+
 ## Qdrant là gì?
 
 **Qdrant** là vector database — lưu trữ và tìm kiếm vector (embedding).
