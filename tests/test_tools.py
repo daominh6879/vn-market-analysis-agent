@@ -387,12 +387,15 @@ class TestDetectProvider:
         from tools.providers import _detect_provider, VciDirectProvider
         assert isinstance(_detect_provider("VNM"), VciDirectProvider)
 
-    def test_vn_index_routes_to_yfinance(self):
-        from tools.providers import _detect_provider, YFinanceProvider
-        # HOSE/VNINDEX/VN30 are market indices → yfinance (VCI doesn't support indices)
-        assert isinstance(_detect_provider("HOSE"), YFinanceProvider)
-        assert isinstance(_detect_provider("VNINDEX"), YFinanceProvider)
-        assert isinstance(_detect_provider("VN30"), YFinanceProvider)
+    def test_vn_index_routes_to_vci_via_proxy(self):
+        from tools.providers import _detect_provider, VciDirectProvider, resolve_ticker
+        # VNINDEX/HOSE/VN30 → proxy to VN30 → VciDirectProvider
+        assert resolve_ticker("VNINDEX") == "VN30"
+        assert resolve_ticker("HOSE") == "VN30"
+        assert resolve_ticker("VN30") == "VN30"  # passthrough
+        assert isinstance(_detect_provider("VNINDEX"), VciDirectProvider)
+        assert isinstance(_detect_provider("HOSE"), VciDirectProvider)
+        assert isinstance(_detect_provider("VN30"), VciDirectProvider)
 
     def test_intl_ticker_4_chars_aapl_is_yfinance(self):
         from tools.price import _detect_provider

@@ -184,34 +184,30 @@ class YFinanceProvider(PriceProvider):
 
 # ── Provider selection ────────────────────────────────────────────────────────
 
-# VN market indices → Yahoo Finance symbols (VCI API doesn't support indices)
+# VN market index aliases → VN30 proxy via VCI (VNINDEX unavailable on public APIs).
+# VN30 is the best available proxy: top-30 market cap, correlation ~0.99 with VNINDEX.
 _VN_INDEX_ALIASES: dict[str, str] = {
-    "VNINDEX":  "^VNINDEX",
-    "VN-INDEX": "^VNINDEX",
-    "VN30":     "^VN30",
-    "VN100":    "^VN100",
-    "HNX":      "^HNX",
-    "HNX30":    "^HNX30",
-    "UPCOM":    "^UPCOM",
-    "HOSE":     "^VNINDEX",  # HOSE composite = VNINDEX
+    "VNINDEX":  "VN30",
+    "VN-INDEX": "VN30",
+    "HOSE":     "VN30",
+    "VN100":    "VN30",
+    "HNX":      "HNX30",  # HNX30 works on VCI; HNX broad index doesn't
+    "UPCOM":    "VN30",
 }
 
 
 def resolve_ticker(ticker: str) -> str:
-    """Map VN index names to yfinance symbols. Stock tickers pass through unchanged."""
+    """Map VN index aliases to tradable VCI symbols. Stock tickers pass through."""
     return _VN_INDEX_ALIASES.get(ticker.strip().upper(), ticker.strip().upper())
 
 
 def _detect_provider(ticker: str) -> PriceProvider:
     """
-    Chọn provider theo format ticker:
-    VN market index (VNINDEX, VN30...) → YFinanceProvider (^VNINDEX alias)
-    2–4 ký tự, không dấu chấm           → VciDirectProvider (VN stock, VND)
-    Có dấu chấm hoặc >4 ký tự           → YFinanceProvider (quốc tế, USD)
+    Chọn provider theo format ticker (dùng resolved ticker để detect):
+    2–4 ký tự, không dấu chấm → VciDirectProvider (VN stock hoặc VN30/HNX30)
+    Có dấu chấm hoặc >4 ký tự  → YFinanceProvider (quốc tế, USD)
     """
-    t = ticker.strip().upper()
-    if t in _VN_INDEX_ALIASES:
-        return YFinanceProvider()
-    if "." not in t and len(t) <= 4:
+    resolved = resolve_ticker(ticker)
+    if "." not in resolved and len(resolved) <= 4:
         return VciDirectProvider()
     return YFinanceProvider()
