@@ -8,9 +8,7 @@ RAG pipeline for Vietnamese financial documents (HPG BCTC). 43 lessons across 8 
 
 ---
 
-## Python scripts — never run yourself
-
-**Always ask the user to run Python scripts.** Paste the exact command, wait for output.
+## Python scripts — never run yourself unless user ask
 
 ```
 # Example pattern — ask user to run:

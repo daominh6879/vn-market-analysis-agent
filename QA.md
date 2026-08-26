@@ -401,6 +401,38 @@ Hệ quả: query "quý 3" vs corpus chứa "quý ba" → vẫn miss dù đã to
 
 ---
 
+## RAG-Fusion — Multi-Query + RRF
+
+**Q:** RAG-Fusion là gì và tại sao dùng nó thay vì single-query hybrid?
+
+**A:** RAG-Fusion = sinh N sub-queries từ câu gốc bằng LLM → chạy hybrid retrieval song song cho từng câu → gộp tất cả kết quả bằng RRF.
+
+Vấn đề single-query không giải quyết được: câu hỏi tài chính phức tạp như "Phân tích HPG Q1 2024" thực ra cần nhiều góc thông tin cùng lúc — số liệu cụ thể, so sánh kỳ trước, bối cảnh ngành, sự kiện thị trường. Một vector duy nhất không bắt được cả bốn góc. Multi-query dùng LLM để decompose thành 4 sub-queries, mỗi câu đại diện một góc.
+
+Tại sao không dùng reranker thay thế? Reranker chỉ chọn lại từ candidates đã có — không thêm được thông tin mới vào pool. Multi-query mở rộng không gian tìm kiếm trước, reranker thu hẹp sau. Hai cơ chế khác nhau.
+
+---
+
+**Q:** RAG-Fusion ảnh hưởng thế nào lên pipeline HPG?
+
+**A:** Ba thay đổi thực chất:
+
+1. **recall@5 tăng 0.857 → 0.952** — 2 câu `table_lookup` từng miss (q08, q31) nay tìm đúng. Những câu này hỏi số liệu cụ thể nằm sâu trong bảng — sub-query "so sánh kỳ trước" mới bắt được chunk đúng mà single query bỏ qua.
+
+2. **Latency tăng 2.8s → 8.1s p95** — thêm 1 LLM call (sub-query gen ~2s) + N lần retrieval song song (~3s). Không dùng được cho use-case cần phản hồi <3s.
+
+3. **Context đa nguồn** — pipeline giờ kéo Postgres (chỉ số tài chính từ vnstock) + Tavily (tin tức real-time) vào cùng context với RAG corpus. LLM nhận thông tin từ 3 nguồn thay vì 1, có nhãn nguồn rõ ràng (`[BCTC]`, `[GIÁ LỊCH SỬ]`, `[TIN TỨC]`).
+
+---
+
+**Q:** Khi nào multi-query KHÔNG giúp được?
+
+**A:** Câu hỏi tra cứu đơn giản như "HPG ROE 2024 là bao nhiêu?" — chỉ cần 1 chunk duy nhất. Model sinh 4 sub-queries nhưng tất cả xoay quanh cùng một số liệu → 4 lần retrieval trả về phần lớn chunks giống nhau → RRF không thêm được diversity. Tốn thêm 5s và 1 LLM call mà gain = 0.
+
+Dấu hiệu nhận ra: khi sub-queries của model đều hỏi về cùng một số liệu cụ thể, không có góc nhìn khác nhau thực sự.
+
+---
+
 ## Bài 10 — Xoá tài liệu & kiểm toán
 
 **Q:** Vì sao không xoá record khỏi Postgres khi xoá tài liệu?
@@ -418,6 +450,28 @@ Hệ quả: query "quý 3" vs corpus chứa "quý ba" → vẫn miss dù đã to
 **Q:** Tại sao yêu cầu kiểm toán là bắt buộc với sản phẩm tài chính?
 
 **A:** Nếu HPG thu hồi báo cáo 2024 vì số liệu sai → cơ quan quản lý hỏi *"hệ thống anh đã dừng trả lời từ báo cáo đó từ khi nào?"* — phải trả lời được bằng timestamp cụ thể. `deleted_at` quan trọng hơn "tiết kiệm 1 dòng trong DB". Đây là yêu cầu pháp lý, không phải tính năng tuỳ chọn.
+
+---
+
+## Bài 18 — Router prompt cần khai báo data sources, không chỉ mô tả abstract
+
+**Q:** Router phân loại 80% lần đầu — cải thiện bằng cách nào mà không thêm few-shot examples?
+
+**A:** Lỗi chủ yếu do model không biết data sources nào tồn tại. Ví dụ: model biết giá cổ phiếu là "market data" → tự phân loại `ngoài_phạm_vi`, nhưng thực ra `stock_prices` table có trong DB. Fix: khai báo explicit schema trong system prompt (`stock_prices table EXISTS: ticker, trade_date, close_adj`) → model biết đường đi. Nguyên tắc: **router prompt = map của data landscape, không phải tổng quát về loại câu hỏi**.
+
+---
+
+## Bài 18 — Tại sao SQL agent cần 4 lớp bảo mật, không phải chỉ 1?
+
+**Q:** Readonly role đã đủ chưa? Cần thêm sqlglot, LIMIT, timeout làm gì?
+
+**A:** Mỗi lớp chặn thứ khác nhau:
+- **Readonly role** chặn DML ngay tại DB — nhưng nếu LLM sinh `SELECT * FROM pg_shadow` thì role không giúp được (pg_shadow là SELECT).
+- **sqlglot** chặn forbidden tables, multiple statements, unicode tricks — nhưng không chặn slow query.
+- **LIMIT 1000** ngăn full-table dump qua SELECT — nhưng không chặn `pg_sleep(10)`.
+- **timeout 5s** kill query chậm — nhưng không phân tích cú pháp SQL.
+
+Không có lớp nào đủ một mình. Defense-in-depth: lớp sau bắt những gì lớp trước bỏ qua.
 
 ---
 

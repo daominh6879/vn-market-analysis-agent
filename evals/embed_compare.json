@@ -1,0 +1,35 @@
+{
+  "models": [
+    "nomic-embed-text",
+    "bge-m3",
+    "mxbai-embed-large"
+  ],
+  "results": {
+    "nomic-embed-text": {
+      "refusal_pass_rate": 1.0
+    },
+    "bge-m3": {
+      "refusal_pass_rate": 0.8
+    },
+    "mxbai-embed-large": {
+      "refusal_pass_rate": 0.8
+    }
+  },
+  "index_stats": {
+    "nomic-embed-text": {
+      "collection": "hpg_emb_nomic_embed_text",
+      "n_chunks": 260,
+      "index_secs": 610.3470507999955
+    },
+    "bge-m3": {
+      "collection": "hpg_emb_bge_m3",
+      "n_chunks": 260,
+      "index_secs": 841.9209061000001
+    },
+    "mxbai-embed-large": {
+      "collection": "hpg_emb_mxbai_embed_large",
+      "n_chunks": 260,
+      "index_secs": 712.4592395
+    }
+  }
+}

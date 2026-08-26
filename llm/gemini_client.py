@@ -27,8 +27,11 @@ class GeminiClient(LLMClient):
         max_tokens: int = 1024,
         system: str | None = None,
         tools: list[dict] | None = None,
+        temperature: float | None = None,
     ) -> LLMResponse:
         contents, config = self._build_request(messages, max_tokens, system, tools)
+        if temperature is not None:
+            config.temperature = temperature
         t0 = time.perf_counter()
         try:
             resp = self._client.models.generate_content(

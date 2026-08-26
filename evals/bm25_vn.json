@@ -1,0 +1,198 @@
+{
+  "scores": {
+    "refusal_pass_rate": 1.0
+  },
+  "samples": [
+    {
+      "id": "q08",
+      "group": "table_lookup",
+      "question": "Đầu tư tài chính dài hạn (khoản đầu tư vào công ty con) của Công ty mẹ HPG tại ngày 31/12/2025 là bao nhiêu?",
+      "answer": "Không có trong tài liệu.",
+      "contexts": [
+        "toán hiện hành. X ũ Đầu tư vào côngty con V Công ty con là các công ty do Công ty kiểm soát. Việc kiểm soát dat được khi Côngty có kha năng »s kiểm soát các chính sách tài chínhvà hoạt động của các công ty nhận đầu tư nhằm thu được tợi ích từ hoạt động của các công ty này. Các khoản đầu tư vào côngty con được trình bày trong Bảng cân đối kế toán theo giá gốc trừ đi các khoản dự phòng giảm giá (nếu có). Dự phòng giảm giá của các khoản đầu tư được thực hiện khi có bằng chứng chắc chắn cho thấy có sự suy giảm giá trị của các khoản đầu tư này tại ngày kết thúc năm tài chính.",
+        "Công ty chưa đánh giá giá trị hợp lý của các khoản dau tư tài chính tại ngày kết thúc năm tài chính do các quy định kế toán hiện hành chưa có hướng dẫn cụ thể về việc xác định giá trị hợp lý của các khoản đầu tư<sup>tàichínhvàocác công</sup> ty chưa niêm yết. \n\n(i) \n\nTheo Thông báo số 245/TB-SGDHCM của Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh ngày 30 tháng01 năm 2028 về việc niêm yết và ngày giao dịch đầu tiên cổ phiếu của Côngty Cổ phần Phát triển Nông nghiệp Hòa Phát, mã chứng khoán HPA, ngày niêm yết có hiệu lực là ngày 29 tháng 01 năm 2026, ngày chính thức giao dịch là ngày 06 tháng 02 năm 2028 với giá tham chiếu trong ngày giao dịch đầu tiên là 41.900 VND/cổ phiếu (chi tiết tại Thuyết minh số31).",
+        "Phản ánh các khoản tiền gửi tại các ngân hàng thương mại với ky hạn gốc trên 3 (ba) tháng và ky hạn còn lại không quá 12 (mười hai) tháng, với lãi suất 5,7%/năm đến 6,7%/năm (ngày 31 tháng 12 năm 2024: từ 4,8%/năm đến 5,4%/năm). \n\n###### b. Đầu tư tài chính dài hạn",
+        "Cổ phiếu của Côngty được niêmyết trên Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh (HOSE) với mã chứng khoán là HPG từ ngày 15 tháng11 năm 2007. \n\nTổng số nhân viên của Công ty tại ngày 31 tháng 12 năm 2025 là 131 người (ngày 31 tháng 12 năm 2024: 154 người). \n\n###### Ngành nghề kinh doanh và hoạt động chính \n\nNgành nghề kinh doanh của Côngty là:",
+        "Tiền và các khoản tương đương tiền bao gồm tiền mặt tại quỹ, các khoản tiền gửi ngân hàng không kỳ hạn và các khoản đầu tư ngắn hạn (có kỳ hạn gốc không quá 3 tháng), có khả năng thanh khoản cao, dễ dàng chuyển đổi thành tiềnvà ít rủi ro liên quan đến việc biến độnggiá trị. Các khoản đầu tư tài chính \n\nCác khoản đầu tư nắm giữ đến ngày đáo hạn \n\n| 1 ì ì ì J | ì 1"
+      ],
+      "ground_truth": "97.018.349.440.000 VND (khoảng 97.018 tỷ đồng)"
+    },
+    {
+      "id": "q09",
+      "group": "text_interpretation",
+      "question": "Tổng số nhân viên của Công ty mẹ HPG tại ngày 31/12/2025 là bao nhiêu người và thay đổi thế nào so với năm 2024?",
+      "answer": "Dựa trên tài liệu cung cấp:\n\nTổng số nhân viên của Công ty (Công ty mẹ HPG) tại ngày 31 tháng 12 năm 2025 là **131 người**, giảm **23 người** so với",
+      "contexts": [
+        "Cổ phiếu của Côngty được niêmyết trên Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh (HOSE) với mã chứng khoán là HPG từ ngày 15 tháng11 năm 2007. \n\nTổng số nhân viên của Công ty tại ngày 31 tháng 12 năm 2025 là 131 người (ngày 31 tháng 12 năm 2024: 154 người). \n\n###### Ngành nghề kinh doanh và hoạt động chính \n\nNgành nghề kinh doanh của Côngty là:",
+        "- Hop đồng thuê chuyến bay ngày 01 tháng 01 năm 2026 với Công ty Cổ phần Hàng không Hải Âu với thời hạn cung cấp dịch vụ thuê chuyến bay đến ngày01 thang01 năm 2031. \n\n- Hop đồng số 66ND/2017/HD-HC ngày 14 tháng10 năm 2017 và các phụ lục kèm theo, thuê tòa nhà tại 66 Nguyễn Du, Phường Cửa Nam (trước đây là Quận Hai Bà Trưng), Thành phố Hà Nội, với thời hạn thuê từngày 14 tháng 10 năm 2017 đến ngày 13 tháng 12 năm 2032. \n\n- Hp đồng số 18/2024/TPM-TĐHP ngày 22 tháng 7 năm 2024 thuê Tòa nha văn phòng tại số22 Võ Văn Kiệt, Phường Bến Thành (trước đây là Phường Nguyễn Thái Bình, Quận 1), Thành phố Hồ Chí Minh với thời hạn thuê từ ngày 22 tháng7 năm 2024 đến ngày 22 tháng7 năm 2034.",
+        "- Hop đồng thuê đất ngày 16 tháng 6 năm 2012, thuê 633m2 đất tại 39 Nguyễn Đình Chiểu, Phường Hai Bà Trưng (trước đây là Phường Lê Đại Hành, Quận Hai Bà Trưng), Thành phố Hà Nội, với thời hạn thuêtừ ngày 07 tháng 5 năm 2012 đến ngày15 tháng 10 năm 2043. \n\n- Hop đồng số 3110/2024/HĐTN-TĐHP ngày 31 tháng 10 năm 2024, thuê 370m2 tòa nhà số68 Nguyễn Du, Phường Cửa Nam (trước đây là Quận Hai Bà Trưng), Thành phố Hà Nội, với thời hạn thuê từ ngày 01 tháng 12 năm 2024 đến ngày 30 tháng 11 năm 2029. \n\n30 \n\nCÔNG TY CỔ PHẦN TẬP ĐOÀN HÒA PHÁT THUYẾT MINH BÁO CÁO TÀI CHÍNH RIÊNG (Tiếp theo) \n\nMẪU SỐ B 09-DN \n\nZ 7 \n\n\\ ở \n\n\\ 7 / \n\n256 NGNHI 41C or tN Be \n\n22. DOANH THU VỀ CUNG CẤP DỊCH VỤ",
+        "- (ii) Ngày 28 tháng 02 năm 2025, Hội đồng Quản trị của Công ty đã thông qua Nghị quyết số 04/NQHP2025 về việc tăng vốn góp thêm 420.000.000.000 VND vào Công ty Cổ phần Sản phẩm Thép Hòa Phát. Tính đến ngày 31 tháng 12 năm 2025, Côngty đã góp đủ số vốn trên bằng tiền chuyển khoản. Theo đó, tỷ lệ lợi ích và biểu quyết của Công ty tại Công ty Cổ phần Sản phẩm Thép Hòa Phát thay đổi từ 99,9958% lên 99,9980%. \n\n- (iii) Ngày 05 tháng 5 năm 2025, Hội đồng Quản trị của Công ty đã thông qua Nghị quyết số 08/NQHP2025 về việc giảm phần vốn góp tại Công ty Cổ phần Phát triển Nông nghiệp Hòa Phát với số tiền là 249.997.980.000VND.",
+        "- (v) Ngày 05 tháng 5 năm 2025, Hội đồng Quản trị của Công ty đã thông qua Nghị quyết số 09/NQHP2025 về việc tăng vốn góp thêm 200.000.000.000 VND vào Công ty Cổ phần Điện máy Gia dụng Hòa Phát. Tính đến ngày 31 tháng 12 năm 2025, Côngty đã góp đủ số vốn theo Nghịquyết trên bằng tiền chuyển khoản. Theo đó, tỷ lệ tợi ích và biểu quyết của Công ty tại Công ty Cổ phần Điện máy gia dụng Hòa Phát thay đổi từ 99,9000% lên 99,9167%. \n\n###### Thuyết minh về khả năng so sánh thông tin trên báo cáo tài chính riêng \n\nSố liệu so sánh là số liệu của báo cáo tài chính riêng đã được kiểm toán cho năm tài chính kết thúc ngày 31 tháng 12 năm 2024. \n\n13 \n\nCÔNG TY CỔ PHẦN TẬP ĐOÀN HÒA PHÁT THUYẾT MINH BÁO CÁO TÀI CHÍNH RIÊNG (Tiếp theo) \n\nMAU SỐ B 09-DN \n\n3. \n\n( ì -1 5 : › H 1 \n\n-_› mi } J"
+      ],
+      "ground_truth": "131 người, giảm so với 154 người năm 2024"
+    },
+    {
+      "id": "q10",
+      "group": "text_interpretation",
+      "question": "Hoạt động kinh doanh chính của Công ty mẹ HPG trong năm 2025 là gì?",
+      "answer": "Hoạt động chính của Công ty mẹ HPG trong năm là kinh doanh dịch vụ cho thuê văn phòng, quảng",
+      "contexts": [
+        "Cổ phiếu của Côngty được niêmyết trên Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh (HOSE) với mã chứng khoán là HPG từ ngày 15 tháng11 năm 2007. \n\nTổng số nhân viên của Công ty tại ngày 31 tháng 12 năm 2025 là 131 người (ngày 31 tháng 12 năm 2024: 154 người). \n\n###### Ngành nghề kinh doanh và hoạt động chính \n\nNgành nghề kinh doanh của Côngty là:",
+        "uống; - Van tải hàng hóa ven biển, đường thủy nội địa và viễn dương; s - Xuat, nhập khẩu, mua bán, phân phối hàng hóa không thuộc danh mục hàng hóa cấm kinh < doanh theo quy định của Pháp luật; - San xuất gỗ dán,gỗ lang, ván ép và ván mỏng khác; d - . Đầu tư, sản xuất, kinh doanh các sản phẩm điện máy- gia dụng; ( - San xuất và kinh doanh thương mại sản phẩm điện lạnh; và á - San xuấttủ đông,tủ mát. - Hoạt động chính của Côngty trong năm là kinh doanh dịch vụ cho thuê văn phòng, quảng cáo, dịch vụ tư vấn quản lý và đầu tư tài chính. ế 7 Chu kỳ sản xuất, kinh doanh thông thường. Chu kỳ sản xuất, kinh doanh thông thường của Côngty được thực hiện trong thời gian không quá 12 N thang. %`",
+        "Công ty cũng đồng thời lập báo cáo tài chính hợp nhất trên cơ sở hợp nhất số liệu báo cáo tài chính riêng của Công ty và báo cáo tài chính của các công ty con trong một báo cáo khác. Người đọc cần đọc báo cáo tài chính riêng này cùng với báo cáo tài chính hợp nhất để thu thập các thông tin hoàn chỉnh về tình hình tài chính hợp nhất cũng như kết quả hoạt động kinh doanh hợp nhất và tình hình luu chuyển tiền tệ hợp nhất của Công ty trong năm. \n\n###### Nămtài chính \n\nNăm tài chính năm của Công ty bắt đầu từ ngày 01 tháng 01 và kết thúc vào ngày 31 tháng 12. \n\n###### HƯỚNG DẪN KẾ TOÁN MỚI ĐÃ ĐƯỢC BAN HÀNH",
+        "Chúng tôi đã kiểm toán báo cáo tài chính riêng kèm theo của Công ty Cổ phần Tập đoàn Hòa Phát (gọi tắt la “Công ty”), được lập ngày 24 tháng 3 năm 2028, từ trang 05 đến trang 39, bao gồm Bảng cân đối kếtoán tại § ngày31 tháng 12 năm 2025, Báo cáo kết quả hoạt động kinh doanh, Báo cáo lưu chuyển tiền tệ cho năm tài Ñ chính kết thúc cùng ngày và Bản thuyết minh báo cáo tài chính riêng. = „ ˆ < t Trách nhiệm của Ban Tổng Giám đốc 1 Ban Tổng Giám đốc Công ty chịu trách nhiệm lập và trình bày trung thực và hợp ly báo cáo tài chính riêng ; theo chuẩn mực kế toán, chế độ kế toán doanh nghiệp Việt Nam và các quy định pháp ly có liên quan đến việc lập và trình bày báo cáo tài chính và chịu trách nhiệm về kiểm soát nội bộ mà Ban Tổng Giám đốc xác định la cần thiết để đảm bao việc lap và trình bày",
+        "Công ty Cổ phần Tập đoàn Hòa Phát (gọi tắt là “Công ty”), tiền thân là Công<sup>ty Cổphần ThépHòa</sup> Phát được thành lập theo Giấy Chứng nhận Đăng ký Kinh doanh lần đầu số 0503000008 do Sở Kế hoạch và Đầu tư Tỉnh Hưng Yên (nay là Sở Tài chính Tỉnh Hưng Yên) cấp ngày 26 tháng<sup>10 năm2001.</sup> Theo Giấy Chứng nhận Đăng ký Kinh doanh thay đổi lần thứ 8 ngày 09 tháng 01 năm 2007, Công ty Cổ phần Thép Hòa Phát đã chuyển đổi thành Công ty Cổ phần Tập đoàn Hòa Phát. \n\nGiấy Chứng nhận Đăng ký Doanh nghiệp của Công ty đã được điều chỉnh nhiều lần và lần điều chỉnh gần nhất là lần thứ 38 ngày 11 tháng8 năm 2025 do Sở Tài chính Tỉnh Hưng Yên cấp."
+      ],
+      "ground_truth": "Kinh doanh dịch vụ cho thuê văn phòng, quảng cáo, dịch vụ tư vấn quản lý và đầu tư tài chính"
+    },
+    {
+      "id": "q11",
+      "group": "text_interpretation",
+      "question": "HPG niêm yết trên sàn giao dịch chứng khoán nào, với mã gì và từ ngày nào?",
+      "answer": "Theo tài liệu được cung cấp, cổ phiếu của Công ty được niêm yết trên **Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh (HOSE)**, với mã chứng khoán là **HPG**, từ ngày **15 tháng 11 năm 2007**.",
+      "contexts": [
+        "Cổ phiếu của Côngty được niêmyết trên Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh (HOSE) với mã chứng khoán là HPG từ ngày 15 tháng11 năm 2007. \n\nTổng số nhân viên của Công ty tại ngày 31 tháng 12 năm 2025 là 131 người (ngày 31 tháng 12 năm 2024: 154 người). \n\n###### Ngành nghề kinh doanh và hoạt động chính \n\nNgành nghề kinh doanh của Côngty là:",
+        "Theo Công văn số 237/UBCK-GSĐC ngày 10 tháng 01 năm 2026, Ủy ban Chứng khoán Nhà nước xác nhận Côngty Cổ phần Phát triển Nông nghiệp Hòa Phát đã thực hiện chào bán thành côngcổphiếu lần đầu ra công chúng và trở thành công ty đại chúng kể từ ngày 08 tháng01 năm 2026. \n\nTheo Thông báo số 245/TB-SGDHCM của Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh ngày 30 tháng01 năm 2028 về việc niêm yết và ngày giao dịch đầu tiên cổ phiếu của Côngty Cổ phần Phát triển Nông nghiệp Hòa Phát, ngày niêm yết có hiệu lực là ngày 29 tháng 01 năm 2026, ngày chính thức giao dich là ngày 06 tháng 02 năm 2026 với giá tham chiếu trong ngày giao dịch đầu tiên là 41.900 VND/cổ phiếu.",
+        "Công ty chưa đánh giá giá trị hợp lý của các khoản dau tư tài chính tại ngày kết thúc năm tài chính do các quy định kế toán hiện hành chưa có hướng dẫn cụ thể về việc xác định giá trị hợp lý của các khoản đầu tư<sup>tàichínhvàocác công</sup> ty chưa niêm yết. \n\n(i) \n\nTheo Thông báo số 245/TB-SGDHCM của Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh ngày 30 tháng01 năm 2028 về việc niêm yết và ngày giao dịch đầu tiên cổ phiếu của Côngty Cổ phần Phát triển Nông nghiệp Hòa Phát, mã chứng khoán HPA, ngày niêm yết có hiệu lực là ngày 29 tháng 01 năm 2026, ngày chính thức giao dịch là ngày 06 tháng 02 năm 2028 với giá tham chiếu trong ngày giao dịch đầu tiên là 41.900 VND/cổ phiếu (chi tiết tại Thuyết minh số31).",
+        "Theo Nghị quyết số 01/NQ-ĐHĐCĐ.2025 ngày 17 tháng 4 năm 2025 của Đại hội đồng Cổ đông và Nghị quyết số 10/NQHP-2025 ngày 05 tháng 5 năm 2025 của Hội đồng Quản trị, Công ty đã thông qua phươngán chỉ trả cổ tức năm 2024 bằng cổ phiếu cho các cố đông hiện hữu từ nguồn lợi nhuận sau thuế chưa phân phối theo tỷ lệ 20% (cổ đông sở hữu 10 cổ phiếu thường được nhận 2 cổ phiếu phát hành thêm). Ngày 27 tháng 6 năm 2025, Côngty đã chốt danh sách cổ đông để trả cổ tức bằng việc phát hành cổ phiếu. Ngày 18 tháng 7 năm 2025, Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh đã chấp thuận cho Công ty được thay đổi niêm yết liên quan đến việc phát hành cổ phiếu để trả cổ tức này. Theo đó, sốlượng chứng khoán niêm yết tăng thêm 1.279.215.655 cổ phiếu (từ 6.398.250.200 cổ phiếu lên 7.875.465.855 cổ phiếu)",
+        "Bất động sản đầutư cho thuê được khấu hao theo phương pháp đườngthẳng trên thời gian hữu dụng ước tính trong vòng 20 năm. Chỉ phí xây dựngcơ bản dở dang Các tai sản dang trong quá trình xây dựng phục vụ mục dich sản xuất, cho thuê, quản trị hoặc cho bất kỳ mục đích nào khác được ghi nhận theo giá gốc bao gồm các chi phí cần thiết để hình thành tài sản phù hợp với chính sách kế toán của Công ty. Việc tính khấu hao của các tài sản này được áp dụng giống như với các tài sản khác, bắt dau từ khi tai sản ở vào trang thái sẵn sàngsử dụng. \n\n###### Các khoản trả trước"
+      ],
+      "ground_truth": "Sở Giao dịch Chứng khoán TP. Hồ Chí Minh (HOSE), mã chứng khoán HPG, từ ngày 15 tháng 11 năm 2007"
+    },
+    {
+      "id": "q12",
+      "group": "text_interpretation",
+      "question": "Kế toán trưởng của HPG ký báo cáo tài chính riêng năm 2025 là ai và báo cáo được lập vào ngày nào?",
+      "answer": "",
+      "contexts": [
+        "###### HỘI ĐỒNG QUẢN TRỊ, BAN TỔNG GIÁM ĐỐC, BAN KIỂM SOÁT VÀ KẾ TOÁN TRƯỞNG \n\nCác thành viên của Hội đồng Quản trị, Ban Tổng Giám đốc, Ban Kiểm soát và Kế toán trưởng Côngty trong năm và đến ngày lập báo cáo này bao gồm: \n\n###### Hội đồngQuản trị",
+        "Chúng tôi đã kiểm toán báo cáo tài chính riêng kèm theo của Công ty Cổ phần Tập đoàn Hòa Phát (gọi tắt la “Công ty”), được lập ngày 24 tháng 3 năm 2028, từ trang 05 đến trang 39, bao gồm Bảng cân đối kếtoán tại § ngày31 tháng 12 năm 2025, Báo cáo kết quả hoạt động kinh doanh, Báo cáo lưu chuyển tiền tệ cho năm tài Ñ chính kết thúc cùng ngày và Bản thuyết minh báo cáo tài chính riêng. = „ ˆ < t Trách nhiệm của Ban Tổng Giám đốc 1 Ban Tổng Giám đốc Công ty chịu trách nhiệm lập và trình bày trung thực và hợp ly báo cáo tài chính riêng ; theo chuẩn mực kế toán, chế độ kế toán doanh nghiệp Việt Nam và các quy định pháp ly có liên quan đến việc lập và trình bày báo cáo tài chính và chịu trách nhiệm về kiểm soát nội bộ mà Ban Tổng Giám đốc xác định la cần thiết để đảm bao việc lap và trình bày",
+        "Công ty cũng đồng thời lập báo cáo tài chính hợp nhất trên cơ sở hợp nhất số liệu báo cáo tài chính riêng của Công ty và báo cáo tài chính của các công ty con trong một báo cáo khác. Người đọc cần đọc báo cáo tài chính riêng này cùng với báo cáo tài chính hợp nhất để thu thập các thông tin hoàn chỉnh về tình hình tài chính hợp nhất cũng như kết quả hoạt động kinh doanh hợp nhất và tình hình luu chuyển tiền tệ hợp nhất của Công ty trong năm. \n\n###### Nămtài chính \n\nNăm tài chính năm của Công ty bắt đầu từ ngày 01 tháng 01 và kết thúc vào ngày 31 tháng 12. \n\n###### HƯỚNG DẪN KẾ TOÁN MỚI ĐÃ ĐƯỢC BAN HÀNH",
+        "Ban Tổng Giám đốc Côngty có trách nhiệm lap báo cáo tài chính riêng phản ánh một cách trung thực và hợp ly tình hình tài chính của Công ty tại ngày31 tháng 12 năm 2025, cũng như kết quả hoạt động kinh doanh và tình hình tưu chuyển tiền tệ cho năm tài chính kết thúc cùng ngày, phù hợp với chuẩn mực kế toán, chế độ kế toán doanh nghiệp Việt Nam và các quy định pháp ly có liên quan đến việc lập và trình bày báo cáo tài chính. Trong việc lập báo cáo tài chính riêng này, Ban Tổng Giám đốc được yêu cầu phải: \n\n- H Lựa chọn các chính sách kế toán thích hợp và áp dụng các chính sách đó một cách nhất quán; e = Dua ra các xét đoán và ước tính một cách hợply và thận trọng;",
+        "- s Thôngtư số 195/2012/TT-BTC ngày 15 tháng 11 năm 2012 của Bộ Tài chính hướng dẫn kế toán áp dung cho đơn vị chủ đầu tu. \n\nBan Tổng Giám đốc Côngty đang đánh giá mức độ ảnh hưởng của việc áp dụng Thông tư 99 đến các báo cáo tài chính riêng của Công ty cho các kỳ kế toán trong tương lai, bắt đầu từ hoặc sau ngày 01 thang01 nam 2026. \n\n4. \n\n###### TÓM TẮT CÁC CHÍNH SÁCH KẾ TOÁN CHỦ YẾU \n\nSau đây là các chính sách kế toán chủ yếu được Công ty áp dụng trong việc lap báo cáo tài chính riêng: \n\nƯớc tính kếtoán \n\nViệc lập báo cáo tài chính riêng tuân thủ theo chuẩn mực kế toán, chế độ kế toán doanh nghiệp Việt Nam và các quy định pháp lý có liên quan đến việc lập và trình bày báo cáo tài chính yêu cầu Ban 14"
+      ],
+      "ground_truth": "Bà Phạm Thị Kim Oanh, Kế toán trưởng. Báo cáo lập ngày 24 tháng 3 năm 2026"
+    },
+    {
+      "id": "q13",
+      "group": "text_interpretation",
+      "question": "Giấy Chứng nhận Đăng ký Kinh doanh lần đầu của HPG mang số hiệu gì, do cơ quan nào cấp và vào ngày nào?",
+      "answer": "Theo tài liệu, Giấy Chứng nhận Đăng ký Kinh doanh lần đầu của HPG mang số hiệu **0503000008**, do **Sở Kế hoạch và Đầu tư Tỉnh Hưng Yên** (nay là Sở Tài chính Tỉnh Hưng Yên) cấp vào ngày **26 tháng 10 năm 2001**.",
+      "contexts": [
+        "Công ty Cổ phần Tập đoàn Hòa Phát (gọi tắt là “Công ty”), tiền thân là Công<sup>ty Cổphần ThépHòa</sup> Phát được thành lập theo Giấy Chứng nhận Đăng ký Kinh doanh lần đầu số 0503000008 do Sở Kế hoạch và Đầu tư Tỉnh Hưng Yên (nay là Sở Tài chính Tỉnh Hưng Yên) cấp ngày 26 tháng<sup>10 năm2001.</sup> Theo Giấy Chứng nhận Đăng ký Kinh doanh thay đổi lần thứ 8 ngày 09 tháng 01 năm 2007, Công ty Cổ phần Thép Hòa Phát đã chuyển đổi thành Công ty Cổ phần Tập đoàn Hòa Phát. \n\nGiấy Chứng nhận Đăng ký Doanh nghiệp của Công ty đã được điều chỉnh nhiều lần và lần điều chỉnh gần nhất là lần thứ 38 ngày 11 tháng8 năm 2025 do Sở Tài chính Tỉnh Hưng Yên cấp.",
+        "kểtừ ngày được chấp thuận này. Theo Giấy chứng nhận Đăng ký Doanh nghiệp thay đổi lần thứ 38 số 0900189284 ngày 11 tháng 8 năm 2025 được cấp bởi Sở Tài chính Tinh Hưng Yên, vốn điều lệ của Côngty là 76.754.658.500.000 VND, tổng sốcổ phiếu là 7.675.465.855 với mệnh giá 10.000 VND/cổ phiếu.",
+        "Theo Quyết định số 02/2026/QĐ-HĐQT ngày 06 tháng 01 năm 2026, Hội đồng Quản trị Công ty Cổ phần Phát triển Nông nghiệp Hòa Phátcông ty con của Công ty đã thông qua kết quảđợt chào bán cổ phiếu lần đầu ra công chúng (IPO) và việc tăng vốn điều lệ tương ứng với số cổ phiếu chào bán thành công. Theo đó, Công ty Cổ phần Phát triển Nông nghiệp Hòa Phát đã chào bán thành công 30.000.000 cổ phiếu, tương ứng với giá trị 300.000.000.000 VND theo mệnh giá. Vốn điều lệ của Công ty Cổ phần Phát triển Nông nghiệp Hòa Phát được tăng thêm tương ứng với giá trị cổ phần đã phát hành. Công ty Cổ phần Phát triển Nông nghiệp Hòa Phát đã thực hiện các thủtục và được cấp Giấy chứng nhận đăng ký doanh nghiệp sửa đổi lần 11 ngày 13 tháng 01 năm 2028 với số vốn điều tệ là 2.850.000.000.000 VND.",
+        "|Tênđơnvị|Nợithànhlap<br>va hoạtđộng|Giấychứngnhận đăngkýhoạtđộng<br>chi nhánh|\n|---|---|---|\n|Chi nhánh Công ty Cổphần Tập.<br>đoànHòa Phát tạiHàNội<br>|Số66,Đường Nguyễn.<br>Du,<br>Phường<br>Cửa<br>Nam, Thành phốHà. <br>Nội<br>|Giấy chứng nhận đăng ký hoạt động chỉ<br>nhánh số0900189284-002 đăng ký<br> ngày<br>05 tháng 9năm2002<br>|\n|Chi nhánh Công tyCổphần Tập.<br>đoàn Hòa Phat tai Thanh phốHồ<br>Chí Minh<br>|Số22,Đường Võ Văn.<br>Kiệt,<br>Phường<br>Bến<br>Thành, Thành phốHồ.<br>ChíMinh<br>|Giấy chứngnhận đăngký hoạt động chỉ<br>nhánh số0900189284-005 đăng ký<br>ngày 03 tháng 01 năm 2009<br> <br>|",
+        "<!-- Start of picture text -->\nẤN<br>S/CONG TYN<br>' Z| KIỀWTOÁN |x<br>x\\ DELOITTE /x<br>J a= S<br>PhantNanrPhong<br>Phó Tổng Giám đốc<br>Giấy chứng nhận đăng ký hành nghềkiểm toán<br>số0929-2024-001-1<br><!-- End of picture text -->\n\nBui Thi Mai Hương Kiểm toán viên Giấy chứng nhận đăng ký hành nghề kiểm toán số3829-2026-001-1 \n\n###### CÔNG TY TNHH KIỂM TOÁN DELOITTE VIỆT NAM \n\nNgày<sup>24 tháng 3 năm 2026</sup> Hà Nội, CHXHCN Việt Nam \n\n\n\n<!-- Start of picture text -->\non<br>XZ<br>*.3<br>Agt<br><!-- End of picture text -->\n\nCÔNG TY CỔ PHẦN TẬP ĐOÀN HÒA PHÁT Khu Công nghiệp Phố Nối A, Xã Nguyễn Văn Linh, \n\nMẪU SỐ B 01-DN \n\nBan hành theo Thông tư số 200/2014/TT-BTC \n\nTỉnh Hưng Yên, Việt Nam \n\nngày 22 tháng 12 năm 2014 của Bộ Tài chính \n\n###### BANG CÂN ĐỐI KẾ TOÁN"
+      ],
+      "ground_truth": "Số 0503000008, do Sở Kế hoạch và Đầu tư Tỉnh Hưng Yên cấp ngày 26 tháng 10 năm 2001"
+    },
+    {
+      "id": "q26",
+      "group": "text_interpretation",
+      "question": "Tổng số nhân viên của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu người và thay đổi thế nào so với đầu năm 2024?",
+      "answer": "Theo tài liệu, tổng số nhân viên của Công ty (HPG) tại ngày 31/12/2024 là **154 người**.\n\nTuy nhiên, tài liệu **không cung cấp số liệu về đầu năm 2024** (hoặc ngày ",
+      "contexts": [
+        "Cổ phiếu của Côngty được niêmyết trên Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh (HOSE) với mã chứng khoán là HPG từ ngày 15 tháng11 năm 2007. \n\nTổng số nhân viên của Công ty tại ngày 31 tháng 12 năm 2025 là 131 người (ngày 31 tháng 12 năm 2024: 154 người). \n\n###### Ngành nghề kinh doanh và hoạt động chính \n\nNgành nghề kinh doanh của Côngty là:",
+        "- Hop đồng thuê chuyến bay ngày 01 tháng 01 năm 2026 với Công ty Cổ phần Hàng không Hải Âu với thời hạn cung cấp dịch vụ thuê chuyến bay đến ngày01 thang01 năm 2031. \n\n- Hop đồng số 66ND/2017/HD-HC ngày 14 tháng10 năm 2017 và các phụ lục kèm theo, thuê tòa nhà tại 66 Nguyễn Du, Phường Cửa Nam (trước đây là Quận Hai Bà Trưng), Thành phố Hà Nội, với thời hạn thuê từngày 14 tháng 10 năm 2017 đến ngày 13 tháng 12 năm 2032. \n\n- Hp đồng số 18/2024/TPM-TĐHP ngày 22 tháng 7 năm 2024 thuê Tòa nha văn phòng tại số22 Võ Văn Kiệt, Phường Bến Thành (trước đây là Phường Nguyễn Thái Bình, Quận 1), Thành phố Hồ Chí Minh với thời hạn thuê từ ngày 22 tháng7 năm 2024 đến ngày 22 tháng7 năm 2034.",
+        "- Hop đồng thuê đất ngày 16 tháng 6 năm 2012, thuê 633m2 đất tại 39 Nguyễn Đình Chiểu, Phường Hai Bà Trưng (trước đây là Phường Lê Đại Hành, Quận Hai Bà Trưng), Thành phố Hà Nội, với thời hạn thuêtừ ngày 07 tháng 5 năm 2012 đến ngày15 tháng 10 năm 2043. \n\n- Hop đồng số 3110/2024/HĐTN-TĐHP ngày 31 tháng 10 năm 2024, thuê 370m2 tòa nhà số68 Nguyễn Du, Phường Cửa Nam (trước đây là Quận Hai Bà Trưng), Thành phố Hà Nội, với thời hạn thuê từ ngày 01 tháng 12 năm 2024 đến ngày 30 tháng 11 năm 2029. \n\n30 \n\nCÔNG TY CỔ PHẦN TẬP ĐOÀN HÒA PHÁT THUYẾT MINH BÁO CÁO TÀI CHÍNH RIÊNG (Tiếp theo) \n\nMẪU SỐ B 09-DN \n\nZ 7 \n\n\\ ở \n\n\\ 7 / \n\n256 NGNHI 41C or tN Be \n\n22. DOANH THU VỀ CUNG CẤP DỊCH VỤ",
+        "- (ii) Ngày 28 tháng 02 năm 2025, Hội đồng Quản trị của Công ty đã thông qua Nghị quyết số 04/NQHP2025 về việc tăng vốn góp thêm 420.000.000.000 VND vào Công ty Cổ phần Sản phẩm Thép Hòa Phát. Tính đến ngày 31 tháng 12 năm 2025, Côngty đã góp đủ số vốn trên bằng tiền chuyển khoản. Theo đó, tỷ lệ lợi ích và biểu quyết của Công ty tại Công ty Cổ phần Sản phẩm Thép Hòa Phát thay đổi từ 99,9958% lên 99,9980%. \n\n- (iii) Ngày 05 tháng 5 năm 2025, Hội đồng Quản trị của Công ty đã thông qua Nghị quyết số 08/NQHP2025 về việc giảm phần vốn góp tại Công ty Cổ phần Phát triển Nông nghiệp Hòa Phát với số tiền là 249.997.980.000VND.",
+        "Công ty Cổ phần Tập đoàn Hòa Phát (gọi tắt là “Công ty”), tiền thân là Công<sup>ty Cổphần ThépHòa</sup> Phát được thành lập theo Giấy Chứng nhận Đăng ký Kinh doanh lần đầu số 0503000008 do Sở Kế hoạch và Đầu tư Tỉnh Hưng Yên (nay là Sở Tài chính Tỉnh Hưng Yên) cấp ngày 26 tháng<sup>10 năm2001.</sup> Theo Giấy Chứng nhận Đăng ký Kinh doanh thay đổi lần thứ 8 ngày 09 tháng 01 năm 2007, Công ty Cổ phần Thép Hòa Phát đã chuyển đổi thành Công ty Cổ phần Tập đoàn Hòa Phát. \n\nGiấy Chứng nhận Đăng ký Doanh nghiệp của Công ty đã được điều chỉnh nhiều lần và lần điều chỉnh gần nhất là lần thứ 38 ngày 11 tháng8 năm 2025 do Sở Tài chính Tỉnh Hưng Yên cấp."
+      ],
+      "ground_truth": "154 người, tăng so với 127 người tại đầu năm 2024 (1/1/2024)"
+    },
+    {
+      "id": "q27",
+      "group": "text_interpretation",
+      "question": "Hoạt động kinh doanh chính của Công ty mẹ HPG trong năm 2024 là gì?",
+      "answer": "",
+      "contexts": [
+        "Cổ phiếu của Côngty được niêmyết trên Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh (HOSE) với mã chứng khoán là HPG từ ngày 15 tháng11 năm 2007. \n\nTổng số nhân viên của Công ty tại ngày 31 tháng 12 năm 2025 là 131 người (ngày 31 tháng 12 năm 2024: 154 người). \n\n###### Ngành nghề kinh doanh và hoạt động chính \n\nNgành nghề kinh doanh của Côngty là:",
+        "uống; - Van tải hàng hóa ven biển, đường thủy nội địa và viễn dương; s - Xuat, nhập khẩu, mua bán, phân phối hàng hóa không thuộc danh mục hàng hóa cấm kinh < doanh theo quy định của Pháp luật; - San xuất gỗ dán,gỗ lang, ván ép và ván mỏng khác; d - . Đầu tư, sản xuất, kinh doanh các sản phẩm điện máy- gia dụng; ( - San xuất và kinh doanh thương mại sản phẩm điện lạnh; và á - San xuấttủ đông,tủ mát. - Hoạt động chính của Côngty trong năm là kinh doanh dịch vụ cho thuê văn phòng, quảng cáo, dịch vụ tư vấn quản lý và đầu tư tài chính. ế 7 Chu kỳ sản xuất, kinh doanh thông thường. Chu kỳ sản xuất, kinh doanh thông thường của Côngty được thực hiện trong thời gian không quá 12 N thang. %`",
+        "Công ty cũng đồng thời lập báo cáo tài chính hợp nhất trên cơ sở hợp nhất số liệu báo cáo tài chính riêng của Công ty và báo cáo tài chính của các công ty con trong một báo cáo khác. Người đọc cần đọc báo cáo tài chính riêng này cùng với báo cáo tài chính hợp nhất để thu thập các thông tin hoàn chỉnh về tình hình tài chính hợp nhất cũng như kết quả hoạt động kinh doanh hợp nhất và tình hình luu chuyển tiền tệ hợp nhất của Công ty trong năm. \n\n###### Nămtài chính \n\nNăm tài chính năm của Công ty bắt đầu từ ngày 01 tháng 01 và kết thúc vào ngày 31 tháng 12. \n\n###### HƯỚNG DẪN KẾ TOÁN MỚI ĐÃ ĐƯỢC BAN HÀNH",
+        "Chúng tôi đã kiểm toán báo cáo tài chính riêng kèm theo của Công ty Cổ phần Tập đoàn Hòa Phát (gọi tắt la “Công ty”), được lập ngày 24 tháng 3 năm 2028, từ trang 05 đến trang 39, bao gồm Bảng cân đối kếtoán tại § ngày31 tháng 12 năm 2025, Báo cáo kết quả hoạt động kinh doanh, Báo cáo lưu chuyển tiền tệ cho năm tài Ñ chính kết thúc cùng ngày và Bản thuyết minh báo cáo tài chính riêng. = „ ˆ < t Trách nhiệm của Ban Tổng Giám đốc 1 Ban Tổng Giám đốc Công ty chịu trách nhiệm lập và trình bày trung thực và hợp ly báo cáo tài chính riêng ; theo chuẩn mực kế toán, chế độ kế toán doanh nghiệp Việt Nam và các quy định pháp ly có liên quan đến việc lập và trình bày báo cáo tài chính và chịu trách nhiệm về kiểm soát nội bộ mà Ban Tổng Giám đốc xác định la cần thiết để đảm bao việc lap và trình bày",
+        "###### BÁO CÁO KIỂM TOÁN ĐỘC LẬP (Tiếp theo) \n\n###### Ý kiến của Kiểm toán viên \n\nTheo ý kiến của chúng tôi, báo cáo tài chính riêng đã phản ánh trung thực và hợp lý, trên các khía cạnh trọng yếu, tình hình tài chính của Công ty tại ngày 31 tháng 12 năm 2025, cũng như kết quả hoạt động kinh doanh và tình hình tưu chuyển tiền tệ cho năm tài chính kết thúc cùng ngày, phù hợp với chuẩn mực kế toán, chế độ kế toán doanh nghiệp Việt Nam va các quy định pháp lý có liên quan đến việc lap và trình bày báo cáo tài chính. \n\n###### Vấn đề khác \n\nBáo cáo tài chính riêng cho năm tài chính kết thúc ngày 31 tháng 12 năm 2024 của Công ty đã được kiểm toán bởi một công ty kiểm toán độc lap khác, với báo cáo kiểm toán đềngày 24 tháng 3 năm 2025 đưa ra ý kiến chấp.nhận toàn phần."
+      ],
+      "ground_truth": "Kinh doanh dịch vụ cho thuê văn phòng, quảng cáo, mua bán các sản phẩm thép và đầu tư tài chính"
+    },
+    {
+      "id": "q28",
+      "group": "text_interpretation",
+      "question": "Kế toán trưởng của HPG ký báo cáo tài chính riêng năm 2024 là ai và báo cáo được lập vào ngày nào?",
+      "answer": "Không có trong tài liệu. Tài liệu chỉ đề cập đến các thành viên Hội đồng Quản trị, Ban Tổng Giám đốc, Ban Kiểm soát và Kế toán trưởng nhưng không nêu rõ tên Kế toán trưởng, cũng không có thông tin về ngày lập báo cáo tài chính riêng năm 2024.",
+      "contexts": [
+        "###### HỘI ĐỒNG QUẢN TRỊ, BAN TỔNG GIÁM ĐỐC, BAN KIỂM SOÁT VÀ KẾ TOÁN TRƯỞNG \n\nCác thành viên của Hội đồng Quản trị, Ban Tổng Giám đốc, Ban Kiểm soát và Kế toán trưởng Côngty trong năm và đến ngày lập báo cáo này bao gồm: \n\n###### Hội đồngQuản trị",
+        "Cổ phiếu của Côngty được niêmyết trên Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh (HOSE) với mã chứng khoán là HPG từ ngày 15 tháng11 năm 2007. \n\nTổng số nhân viên của Công ty tại ngày 31 tháng 12 năm 2025 là 131 người (ngày 31 tháng 12 năm 2024: 154 người). \n\n###### Ngành nghề kinh doanh và hoạt động chính \n\nNgành nghề kinh doanh của Côngty là:",
+        "Công ty cũng đồng thời lập báo cáo tài chính hợp nhất trên cơ sở hợp nhất số liệu báo cáo tài chính riêng của Công ty và báo cáo tài chính của các công ty con trong một báo cáo khác. Người đọc cần đọc báo cáo tài chính riêng này cùng với báo cáo tài chính hợp nhất để thu thập các thông tin hoàn chỉnh về tình hình tài chính hợp nhất cũng như kết quả hoạt động kinh doanh hợp nhất và tình hình luu chuyển tiền tệ hợp nhất của Công ty trong năm. \n\n###### Nămtài chính \n\nNăm tài chính năm của Công ty bắt đầu từ ngày 01 tháng 01 và kết thúc vào ngày 31 tháng 12. \n\n###### HƯỚNG DẪN KẾ TOÁN MỚI ĐÃ ĐƯỢC BAN HÀNH",
+        "- (v) Ngày 05 tháng 5 năm 2025, Hội đồng Quản trị của Công ty đã thông qua Nghị quyết số 09/NQHP2025 về việc tăng vốn góp thêm 200.000.000.000 VND vào Công ty Cổ phần Điện máy Gia dụng Hòa Phát. Tính đến ngày 31 tháng 12 năm 2025, Côngty đã góp đủ số vốn theo Nghịquyết trên bằng tiền chuyển khoản. Theo đó, tỷ lệ tợi ích và biểu quyết của Công ty tại Công ty Cổ phần Điện máy gia dụng Hòa Phát thay đổi từ 99,9000% lên 99,9167%. \n\n###### Thuyết minh về khả năng so sánh thông tin trên báo cáo tài chính riêng \n\nSố liệu so sánh là số liệu của báo cáo tài chính riêng đã được kiểm toán cho năm tài chính kết thúc ngày 31 tháng 12 năm 2024. \n\n13 \n\nCÔNG TY CỔ PHẦN TẬP ĐOÀN HÒA PHÁT THUYẾT MINH BÁO CÁO TÀI CHÍNH RIÊNG (Tiếp theo) \n\nMAU SỐ B 09-DN \n\n3. \n\n( ì -1 5 : › H 1 \n\n-_› mi } J",
+        "- s Thôngtư số 195/2012/TT-BTC ngày 15 tháng 11 năm 2012 của Bộ Tài chính hướng dẫn kế toán áp dung cho đơn vị chủ đầu tu. \n\nBan Tổng Giám đốc Côngty đang đánh giá mức độ ảnh hưởng của việc áp dụng Thông tư 99 đến các báo cáo tài chính riêng của Công ty cho các kỳ kế toán trong tương lai, bắt đầu từ hoặc sau ngày 01 thang01 nam 2026. \n\n4. \n\n###### TÓM TẮT CÁC CHÍNH SÁCH KẾ TOÁN CHỦ YẾU \n\nSau đây là các chính sách kế toán chủ yếu được Công ty áp dụng trong việc lap báo cáo tài chính riêng: \n\nƯớc tính kếtoán \n\nViệc lập báo cáo tài chính riêng tuân thủ theo chuẩn mực kế toán, chế độ kế toán doanh nghiệp Việt Nam và các quy định pháp lý có liên quan đến việc lập và trình bày báo cáo tài chính yêu cầu Ban 14"
+      ],
+      "ground_truth": "Bà Phạm Thị Kim Oanh, Kế toán trưởng. Báo cáo lập ngày 24 tháng 3 năm 2025"
+    },
+    {
+      "id": "q29",
+      "group": "table_lookup",
+      "question": "Đầu tư tài chính dài hạn (khoản đầu tư vào công ty con) của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu?",
+      "answer": "",
+      "contexts": [
+        "toán hiện hành. X ũ Đầu tư vào côngty con V Công ty con là các công ty do Công ty kiểm soát. Việc kiểm soát dat được khi Côngty có kha năng »s kiểm soát các chính sách tài chínhvà hoạt động của các công ty nhận đầu tư nhằm thu được tợi ích từ hoạt động của các công ty này. Các khoản đầu tư vào côngty con được trình bày trong Bảng cân đối kế toán theo giá gốc trừ đi các khoản dự phòng giảm giá (nếu có). Dự phòng giảm giá của các khoản đầu tư được thực hiện khi có bằng chứng chắc chắn cho thấy có sự suy giảm giá trị của các khoản đầu tư này tại ngày kết thúc năm tài chính.",
+        "Công ty chưa đánh giá giá trị hợp lý của các khoản dau tư tài chính tại ngày kết thúc năm tài chính do các quy định kế toán hiện hành chưa có hướng dẫn cụ thể về việc xác định giá trị hợp lý của các khoản đầu tư<sup>tàichínhvàocác công</sup> ty chưa niêm yết. \n\n(i) \n\nTheo Thông báo số 245/TB-SGDHCM của Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh ngày 30 tháng01 năm 2028 về việc niêm yết và ngày giao dịch đầu tiên cổ phiếu của Côngty Cổ phần Phát triển Nông nghiệp Hòa Phát, mã chứng khoán HPA, ngày niêm yết có hiệu lực là ngày 29 tháng 01 năm 2026, ngày chính thức giao dịch là ngày 06 tháng 02 năm 2028 với giá tham chiếu trong ngày giao dịch đầu tiên là 41.900 VND/cổ phiếu (chi tiết tại Thuyết minh số31).",
+        "Phản ánh các khoản tiền gửi tại các ngân hàng thương mại với ky hạn gốc trên 3 (ba) tháng và ky hạn còn lại không quá 12 (mười hai) tháng, với lãi suất 5,7%/năm đến 6,7%/năm (ngày 31 tháng 12 năm 2024: từ 4,8%/năm đến 5,4%/năm). \n\n###### b. Đầu tư tài chính dài hạn",
+        "Cổ phiếu của Côngty được niêmyết trên Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh (HOSE) với mã chứng khoán là HPG từ ngày 15 tháng11 năm 2007. \n\nTổng số nhân viên của Công ty tại ngày 31 tháng 12 năm 2025 là 131 người (ngày 31 tháng 12 năm 2024: 154 người). \n\n###### Ngành nghề kinh doanh và hoạt động chính \n\nNgành nghề kinh doanh của Côngty là:",
+        "Tiền và các khoản tương đương tiền bao gồm tiền mặt tại quỹ, các khoản tiền gửi ngân hàng không kỳ hạn và các khoản đầu tư ngắn hạn (có kỳ hạn gốc không quá 3 tháng), có khả năng thanh khoản cao, dễ dàng chuyển đổi thành tiềnvà ít rủi ro liên quan đến việc biến độnggiá trị. Các khoản đầu tư tài chính \n\nCác khoản đầu tư nắm giữ đến ngày đáo hạn \n\n| 1 ì ì ì J | ì 1"
+      ],
+      "ground_truth": "80.585.847.420.000 VND (khoảng 80.586 tỷ đồng)"
+    },
+    {
+      "id": "q30",
+      "group": "table_lookup",
+      "question": "Lợi nhuận sau thuế TNDN của Công ty mẹ HPG năm 2024 là bao nhiêu?",
+      "answer": "",
+      "contexts": [
+        "Cổ phiếu của Côngty được niêmyết trên Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh (HOSE) với mã chứng khoán là HPG từ ngày 15 tháng11 năm 2007. \n\nTổng số nhân viên của Công ty tại ngày 31 tháng 12 năm 2025 là 131 người (ngày 31 tháng 12 năm 2024: 154 người). \n\n###### Ngành nghề kinh doanh và hoạt động chính \n\nNgành nghề kinh doanh của Côngty là:",
+        "Theo Nghị quyết số 01/NQ-ĐHĐCĐ.2025 ngày 17 tháng 4 năm 2025 của Đại hội đồng Cổ đông và Nghị quyết số 10/NQHP-2025 ngày 05 tháng 5 năm 2025 của Hội đồng Quản trị, Công ty đã thông qua phươngán chỉ trả cổ tức năm 2024 bằng cổ phiếu cho các cố đông hiện hữu từ nguồn lợi nhuận sau thuế chưa phân phối theo tỷ lệ 20% (cổ đông sở hữu 10 cổ phiếu thường được nhận 2 cổ phiếu phát hành thêm). Ngày 27 tháng 6 năm 2025, Côngty đã chốt danh sách cổ đông để trả cổ tức bằng việc phát hành cổ phiếu. Ngày 18 tháng 7 năm 2025, Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh đã chấp thuận cho Công ty được thay đổi niêm yết liên quan đến việc phát hành cổ phiếu để trả cổ tức này. Theo đó, sốlượng chứng khoán niêm yết tăng thêm 1.279.215.655 cổ phiếu (từ 6.398.250.200 cổ phiếu lên 7.875.465.855 cổ phiếu)",
+        "(i) Theo Nghị quyết của Đại hội đồng cổ đông số 01/NQ-ĐHĐCĐ.2025 ngày 17 tháng4 năm 2025, Công ty đã thực hiện trích Quỹ khen thưởng, phúc tợi từ Lợi nhuận sau thuế năm 2024. \n\n26 \n\nCÔNG TY CỔ PHẦN TẬP ĐOÀN HÒA PHÁT THUYẾT MINH BÁO CÁO TÀI CHÍNH RIÊNG (Tiếp theo) \n\nÑ MẪU SỐ B 09-DN \n\n\\ r J \n\n| i N ` P A \n\n` ` E >Z \n\n###### 18. VAY NGẮN HAN \n\n||Sốđầu năm|Trong năm|Sốcuốinăm|\n|---|---|---|---|\n||VND|VND|VND|\n||Giá trị/Sốcó<br>khảnăng trảnợ|Tăng<br>Giảm|Giá trị/Sốcó khả<br>năngtrảnợ|\n|Vayngắn hạn từcác bên<br>|-|6.044.500.000.000 5.644.500.000.000|400.000.000.000|\n|liênquan(Chitiếttại||||\n|<br>thuyết minh số29) (i)||||\n||-|6.044.500.000.0005.644.500.000.000|400.000.000.000|",
+        "Thuế thu nhập doanh nghiệp thể hiện tổng giá trị của sốthuế phải trả hiện tại và sốthuế hoãn lai. \n\nSố thuế phải trả hiện tại được tính dựa trên thu nhập tính thuế trong năm. Thu nhập tinh thuế khác với lợi nhuận trước thuế được trình bày trên Báo cáo kết quả hoạt động kinh doanh vì thu nhập tính thuế không bao gồm các khoản thu nhập hay chi phi tính thuế hoặc được khấu trừ trong các năm khác và ngoài ra không bao gồm các chỉ tiêu không chịu thuế hoặc không được khấu trừ. \n\n19 \n\nCÔNG TY CỔ PHẦN TẬP ĐOÀN HÒA PHÁT THUYẾT MINH BÁO CÁO TÀI CHÍNH RIÊNG (Tiếp theo) \n\nMẪU SỐ B 09-DN \n\nPy= TY ñ A ¬ ụ á",
+        "Thang dư vốn cổ phần được ghi nhận theo số chênh lệch giữa giá phát hành và mệnh giá cổ phiếu khi phát hành lần đầu hoặc phát hành bổ sung, chênh lệch giữa giá tái phát hành và giá trị sổ sách của cổ phiếu quỹ. Chi phí trực tiếp liên quan đến việc phát hành bổ sung cổ phiếu và tái phát hành cổ phiếu quỹ được ghi giảm thang dư vốn cổ phần. \n\n###### Phân chia loi nhuận \n\nLợi nhuận thuần sau thuế thu nhập doanh nghiệp có thể được chia cho các cổ đông sau khi được Đại hội đồng Cổ đông phê duyệt và sau khi đã trích lập các quỹ dự phòng theo Điều tệ của Công ty và các quy định của pháp luật Việt Nam. \n\nCông ty phân phối lợi nhuận thuần sau thuế thu nhập doanh nghiệp của Công ty theo đề nghị của Hội đồng Quản trị và được các cổ đông phê duyệt tại Đại hội đồng cổ đông thường niên. \n\nÑ Ñ rate"
+      ],
+      "ground_truth": "10.247.400.472.100 VND (khoảng 10.247,40 tỷ đồng)"
+    }
+  ],
+  "refusal_results": [
+    {
+      "id": "q21",
+      "group": "no_answer",
+      "passed": true,
+      "answer": "Không có trong tài liệu."
+    },
+    {
+      "id": "q22",
+      "group": "no_answer",
+      "passed": true,
+      "answer": "Không có trong tài liệu."
+    },
+    {
+      "id": "q23",
+      "group": "no_answer",
+      "passed": true,
+      "answer": "Không có trong tài liệu. Các tài liệu được cung cấp chỉ đề cập đến việc tăng/giảm vốn góp tại các công ty con và ngành nghề kinh doanh, không có thông tin về sản lượng thép thô sản xuất trong năm 2025."
+    },
+    {
+      "id": "q24",
+      "group": "out_of_scope",
+      "passed": true,
+      "answer": "Không có trong tài liệu."
+    },
+    {
+      "id": "q25",
+      "group": "out_of_scope",
+      "passed": true,
+      "answer": "Không có trong tài liệu"
+    }
+  ],
+  "provider": "deepseek",
+  "retriever": "bm25",
+  "collection": "hpg_structural",
+  "vn_tokenize": true,
+  "ollama_judge": "qwen3:8b"
+}

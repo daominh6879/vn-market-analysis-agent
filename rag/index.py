@@ -2,14 +2,17 @@
 rag/index.py — Index văn bản đã parse vào Qdrant (idempotent — Bài 9).
 
 Usage:
-    python rag/index.py --input outputs/hpg_pymupdf.md --collection hpg_fixed_512 --strategy fixed
-    python rag/index.py --input outputs/hpg_pymupdf.md --collection hpg_structural --strategy structural
-    python rag/index.py --input outputs/hpg_pymupdf.md --collection hpg_hierarchical --strategy hierarchical
-    python rag/index.py --input outputs/hpg_pymupdf.md --all-strategies
-    python rag/index.py --input outputs/hpg_pymupdf.md --collection hpg_fixed_512 --strategy fixed --metadata ticker=HPG,year=2025
+    python rag/index.py --input outputs/hpg_pymupdf.md --strategy structural --metadata ticker=HPG,year=2025
+    python rag/index.py --input outputs/hpg_pymupdf.md --strategy fixed
+    python rag/index.py --input outputs/hpg_pymupdf.md --all-strategies --metadata ticker=HPG,year=2025
+    python rag/index.py --input outputs/hpg_pymupdf.md --collection my_custom_name --strategy fixed
+
+Collection name auto-built as: {ticker}_{version}_{strategy_short}_{meta|nometa}
+  e.g. hpg_b7_structural_meta, hpg_b7_fixed_nometa
+Override with --collection.
 
 Idempotent: chạy nhiều lần với cùng file → count và IDs trong Qdrant không đổi.
-- doc_id = sha256(content)[:16] — xác định từ nội dung
+- doc_id = sha256(content)[:16]
 - chunk_id = UUID5(namespace, f"{doc_id}_{i:04d}") — deterministic UUID
 - Trước khi upsert: xoá chunk cũ của doc_id này
 - Collection chỉ tạo nếu chưa có, không drop
@@ -19,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import sys
 import time
 import uuid
@@ -38,26 +42,51 @@ from qdrant_client.models import (
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(ROOT / ".env", override=True)
+except ImportError:
+    pass
+
 from rag.chunking import chunk_fixed, chunk_structural, chunk_hierarchical, prepend_metadata
 from data.db import get_conn
 
-QDRANT_URL = "http://localhost:6333"
-OLLAMA_URL = "http://localhost:11434"
+# ── Config from env ───────────────────────────────────────────────────────────
 
-# Namespace cố định cho UUID5 — đảm bảo determinism giữa các lần chạy
+QDRANT_URL        = os.environ.get("QDRANT_URL", "http://localhost:6333")
+OLLAMA_URL        = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+DEFAULT_EMBED     = os.environ.get("OLLAMA_EMBED_MODEL", "bge-m3")
+DEFAULT_TICKER    = os.environ.get("TICKER", "hpg").lower()
+DEFAULT_VERSION   = os.environ.get("INDEX_VERSION", "b7")
+
+FIXED_SIZE        = int(os.environ.get("CHUNK_FIXED_SIZE", "512"))
+FIXED_OVERLAP     = int(os.environ.get("CHUNK_FIXED_OVERLAP", "64"))
+STRUCTURAL_MAX    = int(os.environ.get("CHUNK_STRUCTURAL_MAX_SIZE", "800"))
+
+# ── Constants ─────────────────────────────────────────────────────────────────
+
 _CHUNK_NS = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
 
-STRATEGIES = {
-    "fixed":        lambda t: chunk_fixed(t, size=512, overlap=64),
-    "structural":   lambda t: chunk_structural(t, max_size=800),
-    "hierarchical": lambda t: [h.child for h in chunk_hierarchical(t)],
+STRATEGY_SHORT = {
+    "fixed":        "fixed",
+    "structural":   "structural",
+    "hierarchical": "hier",
 }
 
-ALL_STRATEGY_COLLECTIONS = {
-    "fixed":        "hpg_fixed_512",
-    "structural":   "hpg_structural",
-    "hierarchical": "hpg_hierarchical",
-}
+
+def make_strategies() -> dict:
+    return {
+        "fixed":        lambda t: chunk_fixed(t, size=FIXED_SIZE, overlap=FIXED_OVERLAP),
+        "structural":   lambda t: chunk_structural(t, max_size=STRUCTURAL_MAX),
+        "hierarchical": lambda t: [h.child for h in chunk_hierarchical(t)],
+    }
+
+
+def build_collection_name(ticker: str, version: str, strategy: str, has_meta: bool) -> str:
+    """Construct canonical collection name from components."""
+    short = STRATEGY_SHORT[strategy]
+    suffix = "meta" if has_meta else "nometa"
+    return f"{ticker.lower()}_{version}_{short}_{suffix}"
 
 
 # ── Embedding ─────────────────────────────────────────────────────────────────
@@ -86,7 +115,6 @@ def get_embed_dim(model: str) -> int:
 # ── Qdrant helpers ────────────────────────────────────────────────────────────
 
 def ensure_collection(client: QdrantClient, name: str, dim: int) -> None:
-    """Tạo collection nếu chưa có. Không drop collection đã tồn tại."""
     existing = {c.name for c in client.get_collections().collections}
     if name not in existing:
         client.create_collection(
@@ -112,7 +140,6 @@ def recreate_collection(client: QdrantClient, name: str, dim: int) -> None:
 
 
 def delete_doc_chunks(client: QdrantClient, collection: str, doc_id: str) -> None:
-    """Xoá tất cả chunk của doc_id này trước khi upsert lại."""
     try:
         client.delete(
             collection_name=collection,
@@ -162,8 +189,8 @@ def run(
         doc_id = hashlib.sha256(text.encode()).hexdigest()[:16]
 
     t0 = time.perf_counter()
-    chunker = STRATEGIES[strategy]
-    chunks = chunker(text)
+    strategies = make_strategies()
+    chunks = strategies[strategy](text)
     print(f"  doc_id={doc_id}  strategy={strategy}  chunks={len(chunks)}")
 
     dim = get_embed_dim(embed_model)
@@ -174,14 +201,12 @@ def run(
     elapsed = time.perf_counter() - t0
     print(f"  done in {elapsed:.1f}s")
 
-    # Bài 10: đăng ký vào Postgres documents (upsert — idempotent)
     _register_doc(doc_id, source_uri=source_uri or text[:80], collection=collection)
     print()
     return len(chunks)
 
 
 def _register_doc(doc_id: str, source_uri: str, collection: str) -> None:
-    """Upsert vào bảng documents. Nếu đã có → cập nhật indexed_at, reset status='active'."""
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
@@ -212,43 +237,41 @@ def parse_meta(raw: str | None) -> dict | None:
 
 
 def main() -> None:
+    strategies = make_strategies()
+
     parser = argparse.ArgumentParser(description="Index parsed text into Qdrant (idempotent)")
     parser.add_argument("--input", required=True, help="Path to parsed markdown file")
-    parser.add_argument("--collection", help="Qdrant collection name")
-    parser.add_argument(
-        "--strategy", choices=list(STRATEGIES), help="Chunking strategy"
-    )
-    parser.add_argument(
-        "--all-strategies", action="store_true",
-        help="Index all 3 strategies into their default collection names"
-    )
-    parser.add_argument(
-        "--embed", default="bge-m3", help="Ollama embedding model"
-    )
-    parser.add_argument(
-        "--metadata",
-        help="Metadata to prepend to each chunk, e.g. ticker=HPG,year=2025",
-    )
+    parser.add_argument("--collection", help="Override collection name (default: auto-built from ticker/version/strategy/meta)")
+    parser.add_argument("--strategy", choices=list(strategies), help="Chunking strategy")
+    parser.add_argument("--all-strategies", action="store_true", help="Index all 3 strategies")
+    parser.add_argument("--embed", default=DEFAULT_EMBED, help="Ollama embedding model")
+    parser.add_argument("--ticker", default=DEFAULT_TICKER, help="Ticker symbol (default: $TICKER env)")
+    parser.add_argument("--version", default=DEFAULT_VERSION, help="Index version tag (default: $INDEX_VERSION env)")
+    parser.add_argument("--metadata", help="Metadata prepended to each chunk, e.g. ticker=HPG,year=2025")
     args = parser.parse_args()
 
     text = Path(args.input).read_text(encoding="utf-8")
     meta = parse_meta(args.metadata)
-    client = QdrantClient("localhost", port=6333)
+    client = QdrantClient(url=QDRANT_URL)
     doc_id = hashlib.sha256(text.encode()).hexdigest()[:16]
 
     print(f"Input       : {args.input}  ({len(text):,} chars)")
     print(f"doc_id      : {doc_id}")
     print(f"Embed model : {args.embed}")
+    print(f"Ticker      : {args.ticker}  version: {args.version}")
     print(f"Metadata    : {meta}\n")
 
     if args.all_strategies:
-        for strategy, collection in ALL_STRATEGY_COLLECTIONS.items():
+        for strategy in strategies:
+            collection = args.collection or build_collection_name(args.ticker, args.version, strategy, bool(meta))
             print(f"── {strategy} → {collection} ──")
             run(text, collection, strategy, args.embed, meta, client, doc_id=doc_id, source_uri=args.input)
     else:
-        if not args.collection or not args.strategy:
-            parser.error("--collection and --strategy required unless --all-strategies")
-        run(text, args.collection, args.strategy, args.embed, meta, client, doc_id=doc_id, source_uri=args.input)
+        if not args.strategy:
+            parser.error("--strategy required unless --all-strategies")
+        collection = args.collection or build_collection_name(args.ticker, args.version, args.strategy, bool(meta))
+        print(f"── {args.strategy} → {collection} ──")
+        run(text, collection, args.strategy, args.embed, meta, client, doc_id=doc_id, source_uri=args.input)
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ class LLMClient(ABC):
         max_tokens: int = 1024,
         system: str | None = None,
         tools: list[dict] | None = None,
+        temperature: float | None = None,
     ) -> LLMResponse: ...
 
     @abstractmethod

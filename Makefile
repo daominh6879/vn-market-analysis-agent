@@ -1,4 +1,4 @@
-.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn
+.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly
 
 up:
 	docker compose up -d
@@ -117,3 +117,36 @@ eval-bm25:
 eval-bm25-vn:
 	uv run python evals/run.py --retriever bm25 --collection hpg_structural --vn-tokenize --skip-ragas --out evals/bm25_vn.json
 
+# Bài 15 — Hybrid Fusion
+eval-fusion:
+	uv run python evals/eval_fusion.py
+
+eval-hybrid-rrf:
+	uv run python evals/run.py --retriever hybrid_rrf --collection hpg_structural --vn-tokenize --skip-ragas --out evals/hybrid_rrf.json
+
+eval-hybrid-weighted:
+	uv run python evals/run.py --retriever hybrid_weighted --collection hpg_structural --vn-tokenize --skip-ragas --out evals/hybrid_weighted.json
+
+# Bài 16 — Reranker
+eval-reranker:
+	uv run python evals/eval_reranker.py --collection hpg_structural --candidate-k 30 --skip-512 --out evals/reranker_results.json
+
+# Bài 16b — RAG-Fusion (multi-query + RRF)
+demo-rag-fusion:
+	python rag/demo_rag_fusion.py
+
+eval-rag-fusion:
+	python evals/eval_rag_fusion.py
+
+eval-rag-fusion-run:
+	uv run python evals/run.py --collection hpg_b7_structural_meta --embed bge-m3 --retriever rag_fusion --skip-ragas
+
+# Bài 17 — Tenant Isolation
+migrate-readonly:
+	python -c "from data.db import run_migration; run_migration('infra/migrations/004_readonly_role.sql')"
+
+test-tenant:
+	uv run pytest tests/test_tenant_isolation.py -v
+
+run-dagster:
+	dagster dev -f pipeline/assets.py

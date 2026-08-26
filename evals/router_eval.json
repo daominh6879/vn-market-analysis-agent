@@ -1,0 +1,247 @@
+{
+  "accuracy": 1.0,
+  "correct": 30,
+  "total": 30,
+  "results": [
+    {
+      "id": "r01",
+      "question": "Hoạt động kinh doanh chính của Công ty mẹ HPG trong năm 2025 là gì?",
+      "expected": "diễn_giải",
+      "got": "diễn_giải",
+      "correct": true,
+      "reason": "Câu hỏi hỏi về mô tả hoạt động kinh doanh chính của công ty mẹ, là thông tin định tính được nêu trực tiếp trong báo cáo tài chính."
+    },
+    {
+      "id": "r02",
+      "question": "Đơn vị kiểm toán báo cáo tài chính HPG năm 2025 là ai?",
+      "expected": "diễn_giải",
+      "got": "diễn_giải",
+      "correct": true,
+      "reason": "Câu hỏi hỏi về đơn vị kiểm toán của HPG năm 2025, thông tin này được nêu trực tiếp trong báo cáo tài chính, không cần truy vấn cơ sở dữ liệu."
+    },
+    {
+      "id": "r03",
+      "question": "HPG niêm yết trên sàn giao dịch chứng khoán nào và từ ngày nào?",
+      "expected": "diễn_giải",
+      "got": "diễn_giải",
+      "correct": true,
+      "reason": "Câu hỏi hỏi về sàn niêm yết và ngày niêm yết của HPG — thông tin pháp lý/đăng ký được nêu trực tiếp trong báo cáo, không cần truy vấn tổng hợp cơ sở dữ liệu."
+    },
+    {
+      "id": "r04",
+      "question": "Kế toán trưởng ký báo cáo tài chính HPG năm 2025 là ai?",
+      "expected": "diễn_giải",
+      "got": "diễn_giải",
+      "correct": true,
+      "reason": "Câu hỏi hỏi về thông tin người ký báo cáo (kế toán trưởng) được nêu trực tiếp trong tài liệu báo cáo tài chính, không cần truy vấn cơ sở dữ liệu."
+    },
+    {
+      "id": "r05",
+      "question": "Số lượng nhân viên Công ty mẹ HPG tại ngày 31/12/2025 là bao nhiêu người?",
+      "expected": "diễn_giải",
+      "got": "diễn_giải",
+      "correct": true,
+      "reason": "Câu hỏi về số lượng nhân viên công ty mẹ HPG được nêu trực tiếp trong báo cáo tài chính, không cần truy vấn tổng hợp từ CSDL."
+    },
+    {
+      "id": "r06",
+      "question": "Giấy chứng nhận đăng ký kinh doanh của HPG được cấp vào ngày nào?",
+      "expected": "diễn_giải",
+      "got": "diễn_giải",
+      "correct": true,
+      "reason": "The question asks about HPG's business registration certificate date, which is legal registration information stated directly in the report documents."
+    },
+    {
+      "id": "r07",
+      "question": "HPG có bao nhiêu công ty con cấp 1 tại ngày 31/12/2024?",
+      "expected": "diễn_giải",
+      "got": "diễn_giải",
+      "correct": true,
+      "reason": "Câu hỏi về số lượng công ty con cấp 1 của HPG được nêu trực tiếp trong danh mục công ty con của báo cáo tài chính, không cần truy vấn tổng hợp từ cơ sở dữ liệu."
+    },
+    {
+      "id": "r08",
+      "question": "Báo cáo tài chính HPG năm 2025 được lập theo chuẩn mực kế toán nào?",
+      "expected": "diễn_giải",
+      "got": "diễn_giải",
+      "correct": true,
+      "reason": "Câu hỏi hỏi về chuẩn mực kế toán được nêu trực tiếp trong báo cáo tài chính, cần tra cứu văn bản/tài liệu chứ không cần truy vấn số liệu."
+    },
+    {
+      "id": "r09",
+      "question": "Top 5 mã cổ phiếu có ROE cao nhất năm 2024 trong database?",
+      "expected": "số_liệu",
+      "got": "số_liệu",
+      "correct": true,
+      "reason": "Yêu cầu xếp hạng top-N (top 5 mã ROE cao nhất) trên toàn bộ database, cần truy vấn SQL chứ không tra cứu văn bản."
+    },
+    {
+      "id": "r10",
+      "question": "Giá cổ phiếu HPG đạt mức cao nhất vào ngày nào trong năm 2024?",
+      "expected": "số_liệu",
+      "got": "số_liệu",
+      "correct": true,
+      "reason": "Câu hỏi yêu cầu truy vấn ngày giá cổ phiếu HPG cao nhất trong 2024, cần SQL trên bảng stock_prices chứ không phải tra cứu văn bản."
+    },
+    {
+      "id": "r11",
+      "question": "Tổng số kỳ báo cáo của HPG có trong database là bao nhiêu?",
+      "expected": "số_liệu",
+      "got": "số_liệu",
+      "correct": true,
+      "reason": "Câu hỏi yêu cầu đếm số kỳ báo cáo của HPG trong database, cần truy vấn SQL để đếm số bản ghi."
+    },
+    {
+      "id": "r12",
+      "question": "Kỳ nào HPG có lợi nhuận sau thuế cao nhất trong tất cả các kỳ đã có dữ liệu?",
+      "expected": "số_liệu",
+      "got": "số_liệu",
+      "correct": true,
+      "reason": "Question asks for the period with the highest net profit after tax across all data, which requires SQL aggregation over the financial_facts database."
+    },
+    {
+      "id": "r13",
+      "question": "Tổng tài sản HPG tăng bao nhiêu VND từ năm 2024 sang 2025 theo DB?",
+      "expected": "số_liệu",
+      "got": "số_liệu",
+      "correct": true,
+      "reason": "Câu hỏi yêu cầu tính chênh lệch tổng tài sản HPG giữa hai năm từ database, cần truy vấn SQL so sánh giữa các kỳ."
+    },
+    {
+      "id": "r14",
+      "question": "Giá trị trung bình của close_adj HPG trong quý 4 năm 2024?",
+      "expected": "số_liệu",
+      "got": "số_liệu",
+      "correct": true,
+      "reason": "Câu hỏi yêu cầu tính giá trị trung bình của close_adj từ bảng stock_prices theo quý, cần truy vấn SQL để tổng hợp."
+    },
+    {
+      "id": "r15",
+      "question": "Liệt kê tất cả các metric_code có trong DB cho HPG năm 2024.",
+      "expected": "số_liệu",
+      "got": "số_liệu",
+      "correct": true,
+      "reason": "Câu hỏi yêu cầu liệt kê các metric_code từ cơ sở dữ liệu có cấu trúc cho HPG năm 2024, cần truy vấn SQL chứ không phải tra cứu văn bản."
+    },
+    {
+      "id": "r16",
+      "question": "Doanh thu thuần HPG tăng trưởng bao nhiêu phần trăm từ 2024 sang 2025 theo DB?",
+      "expected": "số_liệu",
+      "got": "số_liệu",
+      "correct": true,
+      "reason": "Câu hỏi yêu cầu tính toán phần trăm tăng trưởng doanh thu thuần HPG giữa hai kỳ từ dữ liệu có cấu trúc trong DB, cần truy vấn và tính toán số liệu."
+    },
+    {
+      "id": "r17",
+      "question": "Tổng tài sản HPG năm 2025 là bao nhiêu và tăng trưởng này phản ánh chiến lược gì?",
+      "expected": "cả_hai",
+      "got": "cả_hai",
+      "correct": true,
+      "reason": "Câu hỏi cần cả số liệu tổng tài sản HPG năm 2025 từ cơ sở dữ liệu lẫn giải thích chiến lược tăng trưởng từ tài liệu báo cáo."
+    },
+    {
+      "id": "r18",
+      "question": "So sánh lợi nhuận sau thuế 2024 và 2025 của HPG và giải thích nguyên nhân thay đổi.",
+      "expected": "cả_hai",
+      "got": "cả_hai",
+      "correct": true,
+      "reason": "Câu hỏi vừa cần truy vấn số liệu lợi nhuận sau thuế 2024 và 2025 từ cơ sở dữ liệu, vừa cần diễn giải nguyên nhân thay đổi từ tài liệu báo cáo."
+    },
+    {
+      "id": "r19",
+      "question": "Phân tích cơ cấu tài sản HPG năm 2025 dựa trên số liệu bảng cân đối kế toán.",
+      "expected": "cả_hai",
+      "got": "cả_hai",
+      "correct": true,
+      "reason": "Câu hỏi cần truy vấn số liệu các khoản mục bảng cân đối kế toán từ database (cơ cấu tài sản) kết hợp với giải thích/phân tích từ báo cáo tài chính của HPG."
+    },
+    {
+      "id": "r20",
+      "question": "ROE của HPG năm 2025 là bao nhiêu và điều đó nói lên điều gì về hiệu quả kinh doanh?",
+      "expected": "cả_hai",
+      "got": "cả_hai",
+      "correct": true,
+      "reason": "Câu hỏi cần cả con số ROE năm 2025 từ cơ sở dữ liệu lẫn giải thích định tính về hiệu quả kinh doanh từ tài liệu."
+    },
+    {
+      "id": "r21",
+      "question": "Vốn chủ sở hữu HPG năm 2025 tăng thêm bao nhiêu so với 2024 và nguyên nhân?",
+      "expected": "cả_hai",
+      "got": "cả_hai",
+      "correct": true,
+      "reason": "Câu hỏi cần số liệu vốn chủ sở hữu 2025 vs 2024 từ database (tính toán chênh lệch) kết hợp giải thích nguyên nhân từ báo cáo/tài liệu."
+    },
+    {
+      "id": "r22",
+      "question": "Xu hướng giá cổ phiếu HPG năm 2024 và mối liên hệ với kết quả kinh doanh.",
+      "expected": "cả_hai",
+      "got": "cả_hai",
+      "correct": true,
+      "reason": "Câu hỏi cần truy vấn dữ liệu giá cổ phiếu HPG năm 2024 từ bảng stock_prices kết hợp với số liệu kết quả kinh doanh và giải thích mối tương quan."
+    },
+    {
+      "id": "r23",
+      "question": "Tỷ lệ nợ trên vốn chủ sở hữu HPG 2025 và đánh giá rủi ro tài chính.",
+      "expected": "cả_hai",
+      "got": "cả_hai",
+      "correct": true,
+      "reason": "Câu hỏi cần số liệu nợ/vốn chủ sở hữu từ database và kèm đánh giá rủi ro tài chính từ tài liệu báo cáo."
+    },
+    {
+      "id": "r24",
+      "question": "Giá thép HRC trên thị trường quốc tế tháng 12/2025 là bao nhiêu USD/tấn?",
+      "expected": "ngoài_phạm_vi",
+      "got": "ngoài_phạm_vi",
+      "correct": true,
+      "reason": "Câu hỏi về giá thép HRC trên thị trường quốc tế là dữ liệu giá hàng hóa không nằm trong báo cáo tài chính hay cơ sở dữ liệu của hệ thống."
+    },
+    {
+      "id": "r25",
+      "question": "Cổ phiếu HPG có nên mua vào thời điểm này không?",
+      "expected": "ngoài_phạm_vi",
+      "got": "ngoài_phạm_vi",
+      "correct": true,
+      "reason": "Câu hỏi xin lời khuyên đầu tư (\"có nên mua không\") nằm ngoài phạm vi dữ liệu báo cáo tài chính và cơ sở dữ liệu."
+    },
+    {
+      "id": "r26",
+      "question": "Công nghệ lò cao nào HPG đang dùng tại khu liên hợp thép Dung Quất?",
+      "expected": "ngoài_phạm_vi",
+      "got": "ngoài_phạm_vi",
+      "correct": true,
+      "reason": "Câu hỏi về công nghệ lò cao tại khu liên hợp thép Dung Quất là chi tiết vận hành/sản xuất, không nằm trong báo cáo tài chính hay cơ sở dữ liệu số liệu."
+    },
+    {
+      "id": "r27",
+      "question": "Sản lượng thép thô HPG sản xuất trong năm 2025 là bao nhiêu tấn?",
+      "expected": "ngoài_phạm_vi",
+      "got": "ngoài_phạm_vi",
+      "correct": true,
+      "reason": "Câu hỏi về sản lượng thép thô (tấn) là chi tiết sản xuất/vận hành không có trong báo cáo tài chính hay cơ sở dữ liệu tài chính/giá cổ phiếu."
+    },
+    {
+      "id": "r28",
+      "question": "Tỷ lệ cổ tức HPG dự kiến chi trả cho năm 2026 là bao nhiêu?",
+      "expected": "ngoài_phạm_vi",
+      "got": "ngoài_phạm_vi",
+      "correct": true,
+      "reason": "Câu hỏi về tỷ lệ cổ tức dự kiến năm 2026 là thông tin dự phóng/chính sách chưa công bố, không nằm trong báo cáo tài chính hay cơ sở dữ liệu."
+    },
+    {
+      "id": "r29",
+      "question": "Doanh thu của Hòa Sen Group năm 2025 là bao nhiêu?",
+      "expected": "ngoài_phạm_vi",
+      "got": "ngoài_phạm_vi",
+      "correct": true,
+      "reason": "Câu hỏi hỏi về doanh thu của Hòa Sen Group (HSG), một công ty khác không nằm trong dữ liệu HPG của hệ thống."
+    },
+    {
+      "id": "r30",
+      "question": "Giá thép HPG tại thị trường miền Nam tháng 1/2026 là bao nhiêu?",
+      "expected": "ngoài_phạm_vi",
+      "got": "ngoài_phạm_vi",
+      "correct": true,
+      "reason": "Giá thép thị trường là dữ liệu hàng hóa/giá thị trường không nằm trong báo cáo tài chính hay cơ sở dữ liệu."
+    }
+  ]
+}

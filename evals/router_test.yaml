@@ -1,0 +1,138 @@
+# evals/router_test.yaml — 30 test questions for router accuracy eval (Bài 18).
+# Expected: router classifies ≥ 90% correctly (≥ 27/30).
+#
+# Labels:
+#   diễn_giải     — qualitative, lookup from document text
+#   số_liệu       — requires SQL aggregation/ranking over DB
+#   cả_hai        — needs both SQL result + textual context
+#   ngoài_phạm_vi — out of scope, not in any data source
+
+questions:
+
+  # ── diễn_giải (8) ────────────────────────────────────────────────────────────
+
+  - id: r01
+    question: "Hoạt động kinh doanh chính của Công ty mẹ HPG trong năm 2025 là gì?"
+    expected: diễn_giải
+
+  - id: r02
+    question: "Đơn vị kiểm toán báo cáo tài chính HPG năm 2025 là ai?"
+    expected: diễn_giải
+
+  - id: r03
+    question: "HPG niêm yết trên sàn giao dịch chứng khoán nào và từ ngày nào?"
+    expected: diễn_giải
+
+  - id: r04
+    question: "Kế toán trưởng ký báo cáo tài chính HPG năm 2025 là ai?"
+    expected: diễn_giải
+
+  - id: r05
+    question: "Số lượng nhân viên Công ty mẹ HPG tại ngày 31/12/2025 là bao nhiêu người?"
+    expected: diễn_giải
+
+  - id: r06
+    question: "Giấy chứng nhận đăng ký kinh doanh của HPG được cấp vào ngày nào?"
+    expected: diễn_giải
+
+  - id: r07
+    question: "HPG có bao nhiêu công ty con cấp 1 tại ngày 31/12/2024?"
+    expected: diễn_giải
+
+  - id: r08
+    question: "Báo cáo tài chính HPG năm 2025 được lập theo chuẩn mực kế toán nào?"
+    expected: diễn_giải
+
+  # ── số_liệu (8) ──────────────────────────────────────────────────────────────
+
+  - id: r09
+    question: "Top 5 mã cổ phiếu có ROE cao nhất năm 2024 trong database?"
+    expected: số_liệu
+
+  - id: r10
+    question: "Giá cổ phiếu HPG đạt mức cao nhất vào ngày nào trong năm 2024?"
+    expected: số_liệu
+
+  - id: r11
+    question: "Tổng số kỳ báo cáo của HPG có trong database là bao nhiêu?"
+    expected: số_liệu
+
+  - id: r12
+    question: "Kỳ nào HPG có lợi nhuận sau thuế cao nhất trong tất cả các kỳ đã có dữ liệu?"
+    expected: số_liệu
+
+  - id: r13
+    question: "Tổng tài sản HPG tăng bao nhiêu VND từ năm 2024 sang 2025 theo DB?"
+    expected: số_liệu
+
+  - id: r14
+    question: "Giá trị trung bình của close_adj HPG trong quý 4 năm 2024?"
+    expected: số_liệu
+
+  - id: r15
+    question: "Liệt kê tất cả các metric_code có trong DB cho HPG năm 2024."
+    expected: số_liệu
+
+  - id: r16
+    question: "Doanh thu thuần HPG tăng trưởng bao nhiêu phần trăm từ 2024 sang 2025 theo DB?"
+    expected: số_liệu
+
+  # ── cả_hai (7) ───────────────────────────────────────────────────────────────
+
+  - id: r17
+    question: "Tổng tài sản HPG năm 2025 là bao nhiêu và tăng trưởng này phản ánh chiến lược gì?"
+    expected: cả_hai
+
+  - id: r18
+    question: "So sánh lợi nhuận sau thuế 2024 và 2025 của HPG và giải thích nguyên nhân thay đổi."
+    expected: cả_hai
+
+  - id: r19
+    question: "Phân tích cơ cấu tài sản HPG năm 2025 dựa trên số liệu bảng cân đối kế toán."
+    expected: cả_hai
+
+  - id: r20
+    question: "ROE của HPG năm 2025 là bao nhiêu và điều đó nói lên điều gì về hiệu quả kinh doanh?"
+    expected: cả_hai
+
+  - id: r21
+    question: "Vốn chủ sở hữu HPG năm 2025 tăng thêm bao nhiêu so với 2024 và nguyên nhân?"
+    expected: cả_hai
+
+  - id: r22
+    question: "Xu hướng giá cổ phiếu HPG năm 2024 và mối liên hệ với kết quả kinh doanh."
+    expected: cả_hai
+
+  - id: r23
+    question: "Tỷ lệ nợ trên vốn chủ sở hữu HPG 2025 và đánh giá rủi ro tài chính."
+    expected: cả_hai
+
+  # ── ngoài_phạm_vi (7) ────────────────────────────────────────────────────────
+
+  - id: r24
+    question: "Giá thép HRC trên thị trường quốc tế tháng 12/2025 là bao nhiêu USD/tấn?"
+    expected: ngoài_phạm_vi
+
+  - id: r25
+    question: "Cổ phiếu HPG có nên mua vào thời điểm này không?"
+    expected: ngoài_phạm_vi
+
+  - id: r26
+    question: "Công nghệ lò cao nào HPG đang dùng tại khu liên hợp thép Dung Quất?"
+    expected: ngoài_phạm_vi
+
+  - id: r27
+    question: "Sản lượng thép thô HPG sản xuất trong năm 2025 là bao nhiêu tấn?"
+    expected: ngoài_phạm_vi
+
+  - id: r28
+    question: "Tỷ lệ cổ tức HPG dự kiến chi trả cho năm 2026 là bao nhiêu?"
+    expected: ngoài_phạm_vi
+
+  - id: r29
+    question: "Doanh thu của Hòa Sen Group năm 2025 là bao nhiêu?"
+    expected: ngoài_phạm_vi
+
+  - id: r30
+    question: "Giá thép HPG tại thị trường miền Nam tháng 1/2026 là bao nhiêu?"
+    expected: ngoài_phạm_vi

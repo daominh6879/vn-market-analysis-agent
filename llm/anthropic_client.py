@@ -25,8 +25,11 @@ class AnthropicClient(LLMClient):
         max_tokens: int = 1024,
         system: str | None = None,
         tools: list[dict] | None = None,
+        temperature: float | None = None,
     ) -> LLMResponse:
         kwargs = self._build_kwargs(messages, model, max_tokens, system, tools)
+        if temperature is not None:
+            kwargs["temperature"] = temperature
         t0 = time.perf_counter()
         try:
             resp = self._client.messages.create(**kwargs)

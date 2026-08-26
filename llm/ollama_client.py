@@ -37,8 +37,11 @@ class OllamaClient(LLMClient):
         max_tokens: int = 1024,
         system: str | None = None,
         tools: list[dict] | None = None,
+        temperature: float | None = None,
     ) -> LLMResponse:
         payload = self._build_payload(messages, model, max_tokens, system, tools, stream=False)
+        if temperature is not None:
+            payload["options"]["temperature"] = temperature
         t0 = time.perf_counter()
         try:
             resp = httpx.post(

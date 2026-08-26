@@ -346,3 +346,65 @@
 - Vì sao **không được chặn bằng regex**?
 
 **Cái bẫy.** Nếu 10 prompt của bạn đều bị chặn ngay từ lần đầu, bạn chưa tấn công đủ mạnh — thử comment SQL, unicode, truy vấn lồng.
+
+---
+
+## Tổng kết Chặng 3 · Tìm kiếm
+
+### Hành trình qua 6 bài
+
+Chặng 3 bắt đầu từ một câu hỏi đơn giản — *"tìm kiếm ngữ nghĩa có đủ không?"* — và kết thúc ở một hệ thống biết mình không đủ và biết khi nào cần dùng công cụ khác.
+
+| Bài | Câu hỏi được trả lời | Kết quả thực đo |
+|-----|---------------------|----------------|
+| 14 · BM25 | Vector search bỏ sót câu nào? | 3 nhóm từ khoá thắng rõ (tra số, mã cổ phiếu, ngày tháng) |
+| 15 · Fusion | Cộng điểm hai loại tìm kiếm thế nào? | hit@5 tăng từ 7 lên **13/21** (+86%) với weighted_sum |
+| 16 · Reranker | Thêm tầng đọc lại có giúp không? | Reranker 11/21 — *kém hơn fusion*, chậm 4× |
+| 16b · RAG-Fusion | Một truy vấn có đủ không? | recall@5 0.952 (+11%), chi phí +1 LLM call/câu |
+| 17 · Multi-tenant | Cách ly dữ liệu đặt ở đâu? | Filter tại query time; cache key phải prefix tenant_id |
+| 18 · Router + SQL | RAG có thể trả lời mọi câu không? | Không — nhóm "top N / xếp hạng" cần SQL, không phải RAG |
+
+### Ba bài học cốt lõi
+
+**1. Không có retriever nào thắng mọi câu hỏi.**
+BM25 thắng tra số chính xác. Vector thắng câu ngữ nghĩa. Fusion lấy điểm mạnh của cả hai. Reranker không giúp được khi chunks đã đủ tốt. Đây là kết quả thực nghiệm, không phải lý thuyết.
+
+**2. Kiến trúc quan trọng hơn prompt.**
+Ba ví dụ trong chặng này:
+- Lọc tenant *sau* retrieval → lỗ hổng bảo mật + mất chất lượng. Phải lọc *bên trong* Qdrant.
+- Regex chặn SQL injection → bị qua mặt bởi comment và unicode. Phải dùng AST (sqlglot).
+- Prompt cẩn thận không ngăn được model bịa số → phải dùng SQL + readonly role.
+
+**3. Biết giới hạn của công cụ mình đang dùng.**
+Vector search tìm theo *nghĩa* — không tổng hợp dữ liệu cấu trúc. Câu "top 5 mã ROE cao nhất" không phải câu khó, mà là câu sai kiến trúc nếu đưa vào vector search. Router không phải tính năng tùy chọn — đây là điều kiện để hệ thống trả lời đúng loại câu hỏi đúng.
+
+### Pipeline cuối chặng 3
+
+```
+Câu hỏi
+    │
+    ▼
+Router (4 nhãn)
+    │
+    ├─ diễn_giải ──→ BM25 + Vector ──→ Fusion ──→ Reranker ──→ LLM
+    │
+    ├─ số_liệu ───→ SQL agent (readonly, sqlglot, LIMIT, timeout) ──→ kết quả
+    │
+    ├─ cả_hai ────→ SQL + RAG ──→ LLM tổng hợp
+    │
+    └─ ngoài_phạm_vi ──→ từ chối
+```
+
+### Số đo tích lũy
+
+| Cấu hình | hit@5 | Ghi chú |
+|---|---|---|
+| Vector đơn lẻ | 7/21 | Baseline bài 14 |
+| + BM25 fusion | **13/21** | +86%, winner của chặng |
+| + Reranker | 11/21 | Không cải thiện trên data này |
+| + RAG-Fusion | recall@5 0.952 | Câu phức tạp, tốn thêm 1 LLM call |
+| + Router/SQL | nhóm số_liệu đúng | Câu aggregation không còn bị bịa |
+
+### Chặng tiếp theo
+
+Chặng 4 chuyển từ *tìm kiếm* sang *hệ thống hoàn chỉnh*: API, streaming, feedback loop, và monitoring. Pipeline ở cuối chặng 3 là nền tảng — chặng 4 bọc nó thành sản phẩm có thể vận hành.

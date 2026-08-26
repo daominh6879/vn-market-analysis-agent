@@ -50,20 +50,135 @@
   python -m tools.cli price FPT
   python -m tools.cli ohlcv HPG 30
   python -m tools.cli indicators VNM
+  python -m tools.cli price-intl AAPL   # mã quốc tế, bài 19 mở rộng
   ```
 
-- **Viết unit test trong `tests/test_tools.py`** — mock hoàn toàn, không gọi mạng.
+- **Mở rộng: `get_historical_ohlcv_intl(ticker, days)` cho mã quốc tế** — dùng `yfinance` thay vì `vnstock`. Cùng interface `PriceProvider`, chỉ khác implementation:
+  ```bash
+  uv add yfinance
+  ```
+  ```python
+  class YFinanceProvider(PriceProvider):
+      """Dùng yfinance cho mã NYSE/NASDAQ (AAPL, TSLA, NVDA...)."""
+
+      def fetch_price(self, ticker: str) -> float:
+          import yfinance as yf
+          hist = yf.Ticker(ticker).history(period="5d")
+          if hist.empty:
+              raise ValueError(f"Không có dữ liệu cho '{ticker}'")
+          return float(hist["Close"].iloc[-1])
+
+      def fetch_history(self, ticker: str, days: int) -> pd.DataFrame:
+          import yfinance as yf
+          hist = yf.Ticker(ticker).history(period=f"{days + 10}d")
+          if hist.empty:
+              raise ValueError(f"Không có dữ liệu cho '{ticker}'")
+          hist = hist.reset_index()
+          hist = hist.rename(columns={
+              "Date": "time", "Open": "open", "High": "high",
+              "Low": "low", "Close": "close", "Volume": "volume"
+          })
+          return hist[["time", "open", "high", "low", "close", "volume"]].tail(days)
+  ```
+  Tự chọn provider theo ticker format: mã 2–4 chữ in hoa không có dấu chấm → `VnstockProvider`; có dấu chấm hoặc dài hơn 4 ký tự → `YFinanceProvider`.
+
+  **Lưu ý:** yfinance trả giá USD, vnstock trả giá VND — **không so sánh thẳng**. Tag rõ đơn vị tiền tệ trong output text của `calculate_indicators`.
+
+- **Viết unit test trong `tests/test_tools.py`** — mock hoàn toàn cả `VnstockProvider` và `YFinanceProvider`, không gọi mạng.
 
 **Xong khi.**
-- [ ] CLI chạy cho 5 mã (gồm 2 mã thanh khoản thấp) → kết quả hợp lý
+- [ ] CLI chạy cho 5 mã VN (gồm 2 mã thanh khoản thấp) → kết quả hợp lý
+- [ ] CLI chạy cho 2 mã quốc tế (AAPL, TSLA) → kết quả hợp lý
 - [ ] RSI của bạn đối chiếu với TradingView/CafeF → sai lệch nhỏ
-- [ ] Test xanh, không cần mạng
+- [ ] Test xanh cho cả 2 provider, không cần mạng
 
 **Tự trả lời được.**
 - Thử với **mã mới lên sàn** (dưới 14 phiên) — hàm trả về gì?
 - Vì sao trả về text mô tả tốt hơn trả về số thô cho model đọc?
+- Tại sao yfinance và vnstock không thể dùng cùng một `PriceProvider` implementation nhưng có thể dùng cùng một interface?
 
 **Cái bẫy.** `pandas-ta` trả `NaN` im lặng khi không đủ dữ liệu. `NaN` đi vào prompt sẽ khiến model bịa — và bạn sẽ tìm lỗi ở prompt trong khi lỗi ở dữ liệu.
+
+Bẫy thứ hai với yfinance: giá VND (vnstock) và USD (yfinance) trong cùng một prompt không có tag đơn vị → model so sánh sai đơn vị mà không báo lỗi.
+
+---
+
+### Bài 19B · Tool tìm tin tức và phân tích sentiment 🔴
+**~1 ngày**
+
+**Bối cảnh.** Tool giá (Bài 19) trả lời "giá bao nhiêu". Nhưng "tại sao" và "xu hướng" cần tin tức. Bài này thêm 2 tool: tìm tin tức từ Qdrant `news_chunks` (xây ở Bài 12B) + phân tích cảm xúc thị trường dùng few-shot từ `data/sentiment_shots_vi.json`. Không có 2 tool này, agent bị mù với context thị trường.
+
+**Phụ thuộc:** Bài 12B phải chạy xong, Qdrant `news_chunks` có dữ liệu, `data/sentiment_shots_vi.json` đã tạo.
+
+**Để hiểu gì.** Tool không chỉ là "kết nối API". Tool là câu hỏi được làm rõ: trong bao nhiêu ngày? về mã nào? sentiment tổng là gì? Trả text mô tả ngữ cảnh — không trả raw list bài báo.
+
+**Làm gì.**
+
+**Bắt đầu từ đâu:**
+1. Thêm 2 hàm vào `tools/price.py`.
+2. Chạy thử ngay (phải có news data từ bài 12B):
+   ```bash
+   python -c "from tools.price import search_financial_news; print(search_financial_news('HPG', 7))"
+   ```
+
+**Chi tiết từng việc:**
+
+- **`search_financial_news(ticker, days=7) -> str`** — tìm trong `news_chunks`:
+  ```python
+  def search_financial_news(ticker: str, days: int = 7,
+                             provider: PriceProvider | None = None) -> str:
+      """
+      Tìm tin tức tài chính về ticker trong N ngày gần nhất.
+      Trả text mô tả: '[nguồn | ngày] tiêu đề — tóm tắt'.
+      """
+      if not ticker.strip():
+          raise ValueError("ticker không được rỗng")
+      if days < 1 or days > 365:
+          raise ValueError("days phải từ 1 đến 365")
+      # query Qdrant news_chunks với time-filter
+      # dedup theo URL, lấy top 5
+      # format thành string cho model đọc
+  ```
+  Trả dạng:
+  ```
+  [CafeF | 2025-08-24] HPG đạt lợi nhuận kỷ lục Q2 — Tập đoàn Hòa Phát...
+  [VnExpress | 2025-08-23] Giá thép xây dựng tăng — HPG hưởng lợi...
+  ```
+  Nếu không có tin: `"Không có tin tức về {ticker} trong {days} ngày gần nhất."`
+
+- **`analyze_market_sentiment(ticker, days=7) -> str`** — few-shot LLM:
+  ```python
+  def analyze_market_sentiment(ticker: str, days: int = 7) -> str:
+      """
+      Phân tích cảm xúc thị trường về ticker từ tin tức gần nhất.
+      Trả: nhãn (tích cực/tiêu cực/trung tính) kèm lý do ngắn gọn.
+      """
+      # 1. Lấy 5 tiêu đề qua search_financial_news
+      # 2. Load few-shot từ data/sentiment_shots_vi.json
+      # 3. Gọi LLM với few-shot prompt
+      # 4. Trả text: "Xu hướng TÍCh CỰC — 3/5 tin đề cập kết quả kinh doanh tốt..."
+  ```
+  Nếu không có tin: `"Không đủ tin tức để phân tích sentiment cho {ticker}."`
+
+- **Cập nhật `tools/cli.py`:**
+  ```bash
+  python -m tools.cli news HPG --days 7
+  python -m tools.cli sentiment HPG
+  ```
+
+- **Cập nhật `tests/test_tools.py`** — mock Qdrant và LLM hoàn toàn, không gọi mạng.
+
+**Xong khi.**
+- [ ] `search_financial_news('HPG', 7)` trả ≥ 1 tin (cần data từ bài 12B)
+- [ ] `analyze_market_sentiment('HPG')` trả text có nhãn tích cực/tiêu cực/trung tính
+- [ ] Cả 2 hàm trả string mô tả thay vì raise hoặc trả empty khi không có tin
+- [ ] Mock tests xanh
+
+**Tự trả lời được.**
+- Vì sao dedup theo URL trước khi đưa vào prompt?
+- `analyze_market_sentiment` dùng few-shot thay vì zero-shot — tại sao quan trọng với tài chính tiếng Việt?
+
+**Cái bẫy.** Nếu không có time-filter, agent trả tin 2 năm cũ cho câu hỏi "tuần này". Model không tự biết tin nào cũ — nó tin hoàn toàn vào tool.
 
 ---
 
