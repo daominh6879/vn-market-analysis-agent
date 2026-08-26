@@ -224,32 +224,107 @@ class YFinanceProvider(PriceProvider):
         return hist[["time", "open", "high", "low", "close", "volume"]].tail(days).reset_index(drop=True)
 
 
+# ── SsiIndexProvider ──────────────────────────────────────────────────────────
+
+# VN broad indices available via SSI iBoard history endpoint.
+_SSI_INDEX_CODES = frozenset({"VNINDEX", "VN30", "HNX", "HNX30", "UPCOM"})
+
+
+class SsiIndexProvider(PriceProvider):
+    """
+    Fetch real VNINDEX/HNX/UPCOM OHLCV from SSI iBoard.
+    Endpoint: https://iboard-query.ssi.com.vn/v2/stock/second-chart
+    Returns VND points (not price, but same DataFrame shape for compatibility).
+    """
+
+    _URL = "https://iboard-query.ssi.com.vn/v2/stock/second-chart"
+    _HEADERS = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Referer": "https://iboard.ssi.com.vn/",
+        "Origin": "https://iboard.ssi.com.vn",
+    }
+
+    def _fetch_ohlcv(self, symbol: str, count_back: int) -> pd.DataFrame:
+        import httpx
+
+        to_ts = int(datetime.now().timestamp())
+        # SSI uses Unix timestamps; 86400 * (count_back + 20) gives enough buffer
+        from_ts = to_ts - 86400 * (count_back + 30)
+        params = {
+            "symbol": symbol.upper(),
+            "resolution": "1D",
+            "from": from_ts,
+            "to": to_ts,
+        }
+        resp = httpx.get(self._URL, params=params, headers=self._HEADERS, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+
+        # SSI returns {data: {t:[...], o:[...], h:[...], l:[...], c:[...], v:[...]}}
+        inner = data.get("data") or data
+        if not inner or not inner.get("t"):
+            raise ValueError(f"No data from SSI iBoard for '{symbol}'")
+
+        rows = [
+            {
+                "time":   datetime.fromtimestamp(int(ts)).strftime("%Y-%m-%d"),
+                "open":   inner["o"][i],
+                "high":   inner["h"][i],
+                "low":    inner["l"][i],
+                "close":  inner["c"][i],
+                "volume": inner["v"][i],
+            }
+            for i, ts in enumerate(inner["t"])
+        ]
+        df = pd.DataFrame(rows)
+        return df.sort_values("time").drop_duplicates(subset=["time"]).reset_index(drop=True)
+
+    def fetch_price(self, ticker: str) -> float:
+        df = self._fetch_ohlcv(ticker, count_back=5)
+        if df.empty:
+            raise ValueError(f"No price from SSI for '{ticker}'")
+        return float(df["close"].iloc[-1])
+
+    def fetch_history(self, ticker: str, days: int) -> pd.DataFrame:
+        df = self._fetch_ohlcv(ticker, count_back=days + 10)
+        if df.empty:
+            raise ValueError(f"No history from SSI for '{ticker}'")
+        return df.tail(days).reset_index(drop=True)
+
+
 # ── Provider selection ────────────────────────────────────────────────────────
 
-# VN market index aliases → VN30 proxy via VCI (VNINDEX unavailable on public APIs).
-# VN30 is the best available proxy: top-30 market cap, correlation ~0.99 with VNINDEX.
+# VN broad indices that use SsiIndexProvider (real data, not VN30 proxy).
 _VN_INDEX_ALIASES: dict[str, str] = {
-    "VNINDEX":  "VN30",
-    "VN-INDEX": "VN30",
-    "HOSE":     "VN30",
-    "VN100":    "VN30",
-    "HNX":      "HNX30",  # HNX30 works on VCI; HNX broad index doesn't
-    "UPCOM":    "VN30",
+    "VN-INDEX": "VNINDEX",
+    "HOSE":     "VNINDEX",
+    "VN100":    "VN30",    # VN100 → VN30 proxy (SSI has VN30 too)
 }
+
+# Indices served by SsiIndexProvider directly (no alias needed, use as-is).
+_SSI_DIRECT = frozenset({"VNINDEX", "VN30", "HNX", "HNX30", "UPCOM"})
 
 
 def resolve_ticker(ticker: str) -> str:
-    """Map VN index aliases to tradable VCI symbols. Stock tickers pass through."""
-    return _VN_INDEX_ALIASES.get(ticker.strip().upper(), ticker.strip().upper())
+    """Map VN index aliases to canonical SSI/VCI symbols. Stock tickers pass through."""
+    upper = ticker.strip().upper()
+    return _VN_INDEX_ALIASES.get(upper, upper)
 
 
 def _detect_provider(ticker: str) -> PriceProvider:
     """
-    Chọn provider theo format ticker (dùng resolved ticker để detect):
-    2–4 ký tự, không dấu chấm → VciDirectProvider (VN stock hoặc VN30/HNX30)
-    Có dấu chấm hoặc >4 ký tự  → YFinanceProvider (quốc tế, USD)
+    Provider routing:
+    - VN broad indices (VNINDEX/VN30/HNX/HNX30/UPCOM) → SsiIndexProvider
+    - 2–4 chars, no dot → VciDirectProvider (VN stock tickers)
+    - dot or >4 chars → YFinanceProvider (international, USD)
     """
     resolved = resolve_ticker(ticker)
+    if resolved in _SSI_DIRECT:
+        return SsiIndexProvider()
     if "." not in resolved and len(resolved) <= 4:
         return VciDirectProvider()
     return YFinanceProvider()

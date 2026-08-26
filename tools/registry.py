@@ -64,6 +64,37 @@ TOOL_REGISTRY: dict[str, dict] = {
         "cost_hint": "low",
         "side_effect": False,
     },
+    # ── Phase 3: world / commodity / crypto / FX / VN gold ──────────────────
+    "get_global_indices": {
+        "version": "1.0",
+        "timeout": 15,
+        "cost_hint": "low",
+        "side_effect": False,
+    },
+    "get_commodities": {
+        "version": "1.0",
+        "timeout": 15,
+        "cost_hint": "low",
+        "side_effect": False,
+    },
+    "get_crypto_prices": {
+        "version": "1.0",
+        "timeout": 15,
+        "cost_hint": "low",
+        "side_effect": False,
+    },
+    "get_fx_rates": {
+        "version": "1.0",
+        "timeout": 10,
+        "cost_hint": "low",
+        "side_effect": False,
+    },
+    "get_vn_gold": {
+        "version": "1.0",
+        "timeout": 15,
+        "cost_hint": "low",
+        "side_effect": False,
+    },
 }
 
 
