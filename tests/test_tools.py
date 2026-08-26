@@ -232,3 +232,191 @@ class TestCalculateIndicators:
         result = calculate_indicators(self._df(100))
         assert "nan" not in result.lower()
         assert "NaN" not in result
+
+    def test_currency_tag_vnd(self):
+        pytest.importorskip("pandas_ta")
+        result = calculate_indicators(self._df(100), currency="VND")
+        assert "VND" in result
+
+    def test_currency_tag_usd(self):
+        pytest.importorskip("pandas_ta")
+        result = calculate_indicators(self._df(100), currency="USD")
+        assert "USD" in result
+
+
+# ── YFinanceProvider ──────────────────────────────────────────────────────────
+
+from tools.price import YFinanceProvider, get_realtime_price_intl, get_historical_ohlcv_intl  # noqa: E402
+
+
+class MockYFinanceProvider(PriceProvider):
+    def __init__(self, df: pd.DataFrame | None = None, price: float = 150.0):
+        self._df = df if df is not None else _make_ohlcv()
+        self._price = price
+
+    def fetch_price(self, ticker: str) -> float:
+        return self._price
+
+    def fetch_history(self, ticker: str, days: int) -> pd.DataFrame:
+        return self._df.tail(days).reset_index(drop=True)
+
+
+class TestGetRealtimePriceIntl:
+    def test_returns_float(self):
+        p = MockYFinanceProvider(price=182.5)
+        result = get_realtime_price_intl("AAPL", provider=p)
+        assert isinstance(result, float)
+        assert result == 182.5
+
+    def test_ticker_uppercased(self):
+        calls = []
+
+        class TrackingProvider(PriceProvider):
+            def fetch_price(self, ticker):
+                calls.append(ticker)
+                return 1.0
+
+            def fetch_history(self, ticker, days):
+                return _make_ohlcv()
+
+        get_realtime_price_intl("aapl", provider=TrackingProvider())
+        assert calls[0] == "AAPL"
+
+    def test_empty_ticker_raises(self):
+        p = MockYFinanceProvider()
+        with pytest.raises(ValueError, match="ticker"):
+            get_realtime_price_intl("", provider=p)
+
+    def test_whitespace_ticker_raises(self):
+        p = MockYFinanceProvider()
+        with pytest.raises(ValueError):
+            get_realtime_price_intl("   ", provider=p)
+
+    def test_provider_error_propagates(self):
+        class BrokenProvider(PriceProvider):
+            def fetch_price(self, ticker):
+                raise ValueError("market closed")
+
+            def fetch_history(self, ticker, days):
+                return _make_ohlcv()
+
+        with pytest.raises(ValueError, match="market closed"):
+            get_realtime_price_intl("TSLA", provider=BrokenProvider())
+
+
+class TestGetHistoricalOhlcvIntl:
+    def test_returns_dataframe(self):
+        p = MockYFinanceProvider()
+        df = get_historical_ohlcv_intl("AAPL", 30, provider=p)
+        assert isinstance(df, pd.DataFrame)
+
+    def test_columns_present(self):
+        p = MockYFinanceProvider()
+        df = get_historical_ohlcv_intl("AAPL", 30, provider=p)
+        for col in ["time", "open", "high", "low", "close", "volume"]:
+            assert col in df.columns
+
+    def test_days_limit_respected(self):
+        p = MockYFinanceProvider(_make_ohlcv(60))
+        df = get_historical_ohlcv_intl("TSLA", 30, provider=p)
+        assert len(df) <= 30
+
+    def test_empty_ticker_raises(self):
+        p = MockYFinanceProvider()
+        with pytest.raises(ValueError):
+            get_historical_ohlcv_intl("", 30, provider=p)
+
+    def test_days_zero_raises(self):
+        p = MockYFinanceProvider()
+        with pytest.raises(ValueError):
+            get_historical_ohlcv_intl("AAPL", 0, provider=p)
+
+
+class TestDetectProvider:
+    """_detect_provider chọn đúng provider theo format ticker."""
+
+    def test_vn_ticker_3_chars(self):
+        from tools.price import _detect_provider, VnstockProvider
+        assert isinstance(_detect_provider("FPT"), VnstockProvider)
+
+    def test_vn_ticker_4_chars_no_dot(self):
+        from tools.price import _detect_provider, VnstockProvider
+        assert isinstance(_detect_provider("HOSE"), VnstockProvider)
+
+    def test_intl_ticker_4_chars_aapl_is_yfinance(self):
+        # AAPL is 4 chars, no dot → VnstockProvider by rule; but TSLA is 4 chars too
+        # Rule: <=4 chars no dot → VN. Test with 5-char ticker.
+        from tools.price import _detect_provider
+        assert isinstance(_detect_provider("GOOGL"), YFinanceProvider)
+
+    def test_intl_ticker_with_dot(self):
+        from tools.price import _detect_provider
+        assert isinstance(_detect_provider("BRK.B"), YFinanceProvider)
+
+    def test_intl_ticker_5_chars(self):
+        from tools.price import _detect_provider
+        assert isinstance(_detect_provider("GOOGL"), YFinanceProvider)
+
+
+class TestYFinanceProviderMock:
+    """YFinanceProvider với mock — không gọi mạng."""
+
+    def test_fetch_price_returns_float(self, monkeypatch):
+        import types
+        mock_yf = types.ModuleType("yfinance")
+
+        hist_df = _make_ohlcv(5)
+        hist_df = hist_df.rename(columns={"close": "Close"})
+
+        class MockTicker:
+            def history(self, **kwargs):
+                return hist_df
+
+        mock_yf.Ticker = lambda ticker: MockTicker()
+        monkeypatch.setitem(__import__("sys").modules, "yfinance", mock_yf)
+
+        p = YFinanceProvider()
+        price = p.fetch_price("AAPL")
+        assert isinstance(price, float)
+
+    def test_fetch_price_empty_raises(self, monkeypatch):
+        import types
+        mock_yf = types.ModuleType("yfinance")
+
+        class MockTicker:
+            def history(self, **kwargs):
+                return pd.DataFrame()
+
+        mock_yf.Ticker = lambda ticker: MockTicker()
+        monkeypatch.setitem(__import__("sys").modules, "yfinance", mock_yf)
+
+        p = YFinanceProvider()
+        with pytest.raises(ValueError, match="Không có dữ liệu"):
+            p.fetch_price("FAKE")
+
+    def test_fetch_history_returns_dataframe(self, monkeypatch):
+        import types
+        mock_yf = types.ModuleType("yfinance")
+
+        raw = pd.DataFrame({
+            "Date": [datetime(2024, 1, i + 1) for i in range(30)],
+            "Open": [100.0] * 30,
+            "High": [105.0] * 30,
+            "Low": [95.0] * 30,
+            "Close": [102.0] * 30,
+            "Volume": [1_000_000] * 30,
+        })
+
+        class MockTicker:
+            def history(self, **kwargs):
+                return raw
+
+        mock_yf.Ticker = lambda ticker: MockTicker()
+        monkeypatch.setitem(__import__("sys").modules, "yfinance", mock_yf)
+
+        p = YFinanceProvider()
+        df = p.fetch_history("AAPL", 20)
+        assert isinstance(df, pd.DataFrame)
+        for col in ["time", "open", "high", "low", "close", "volume"]:
+            assert col in df.columns
+        assert len(df) <= 20

@@ -21,3 +21,4 @@
 | Bài 11 | [docs/notes/bai-11-chat-luong.md](docs/notes/bai-11-chat-luong.md) |
 | Bài 12 | [docs/notes/bai-12-facts-sql.md](docs/notes/bai-12-facts-sql.md) |
 | Bài 13 | [docs/notes/bai-13-pipeline-dagster.md](docs/notes/bai-13-pipeline-dagster.md) |
+| Bài 19 | [docs/notes/bai-19-tools.md](docs/notes/bai-19-tools.md) |
