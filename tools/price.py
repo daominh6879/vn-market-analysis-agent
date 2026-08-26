@@ -1,163 +1,32 @@
 """
 tools/price.py — Tool giá chứng khoán (bài 19 + 19B + 20).
 
+Providers live in tools/providers.py.
 Mọi public function trả ToolResult — không raise ra ngoài,
 không trả empty list trần. Agent đọc .message để quyết định bước tiếp.
 """
 
 from __future__ import annotations
 
-import time
-from abc import ABC, abstractmethod
-from datetime import datetime, timedelta
+import json
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
+from tools.providers import (
+    PriceProvider,
+    VciDirectProvider,
+    YFinanceProvider,
+    _detect_provider,
+    _history_cache,
+    _price_cache,
+    resolve_ticker,
+)
 from tools.result import ToolResult
 
 
-# ── TTL cache ────────────────────────────────────────────────────────────────
-
-_TTL_PRICE = 5 * 60       # 5 min: realtime price — fresh enough for analysis
-_TTL_HISTORY = 60 * 60    # 1 hr: daily OHLCV — candle only finalises after close
-
-
-class _TTLCache:
-    """Simple in-memory TTL cache. Thread-unsafe — single-process dev use only."""
-
-    def __init__(self) -> None:
-        self._store: dict[Any, tuple[Any, float]] = {}
-
-    def get(self, key: Any) -> Any:
-        """Return cached value or _MISS sentinel."""
-        entry = self._store.get(key)
-        if entry is None:
-            return _MISS
-        value, expires_at = entry
-        if time.monotonic() > expires_at:
-            del self._store[key]
-            return _MISS
-        return value
-
-    def set(self, key: Any, value: Any, ttl: float) -> None:
-        self._store[key] = (value, time.monotonic() + ttl)
-
-    def clear(self) -> None:
-        self._store.clear()
-
-
-class _Miss:
-    """Sentinel for cache miss — avoids ambiguity with None values."""
-    def __repr__(self) -> str:
-        return "<MISS>"
-
-
-_MISS = _Miss()
-_price_cache = _TTLCache()
-_history_cache = _TTLCache()
-
-
-# ── Interface ────────────────────────────────────────────────────────────────
-
-class PriceProvider(ABC):
-    """Swap-able data source. Default implementation: VnstockProvider."""
-
-    @abstractmethod
-    def fetch_price(self, ticker: str) -> float:
-        """Fetch live price from upstream — called only on cache miss."""
-        ...
-
-    @abstractmethod
-    def fetch_history(self, ticker: str, days: int) -> pd.DataFrame:
-        """Fetch OHLCV history from upstream — called only on cache miss."""
-        ...
-
-    def get_price(self, ticker: str) -> float:
-        """Return price with 5-min TTL cache."""
-        key = (self.__class__.__name__, "price", ticker)
-        cached = _price_cache.get(key)
-        if not isinstance(cached, _Miss):
-            return cached
-        value = self.fetch_price(ticker)
-        _price_cache.set(key, value, _TTL_PRICE)
-        return value
-
-    def get_history(self, ticker: str, days: int) -> pd.DataFrame:
-        """Return OHLCV with 1-hour TTL cache."""
-        key = (self.__class__.__name__, "history", ticker, days)
-        cached = _history_cache.get(key)
-        if not isinstance(cached, _Miss):
-            return cached
-        value = self.fetch_history(ticker, days)
-        _history_cache.set(key, value, _TTL_HISTORY)
-        return value
-
-
-class VnstockProvider(PriceProvider):
-    """Dùng vnstock v4 (KBS source)."""
-
-    def _quote(self, ticker: str):
-        from vnstock import Quote
-        return Quote(source="kbs", symbol=ticker.upper(), show_log=False)
-
-    def fetch_price(self, ticker: str) -> float:
-        end = datetime.today().strftime("%Y-%m-%d")
-        start = (datetime.today() - timedelta(days=7)).strftime("%Y-%m-%d")
-        q = self._quote(ticker)
-        df = q.history(start=start, end=end, interval="1D")
-        if df is None or df.empty:
-            raise ValueError(f"Không có dữ liệu giá cho mã '{ticker}'")
-        return float(df["close"].iloc[-1])
-
-    def fetch_history(self, ticker: str, days: int) -> pd.DataFrame:
-        end = datetime.today().strftime("%Y-%m-%d")
-        start = (datetime.today() - timedelta(days=days + 30)).strftime("%Y-%m-%d")
-        q = self._quote(ticker)
-        df = q.history(start=start, end=end, interval="1D")
-        if df is None or df.empty:
-            raise ValueError(f"Không có dữ liệu lịch sử cho mã '{ticker}'")
-        df = df.sort_values("time").drop_duplicates(subset=["time"])
-        df = df.tail(days).reset_index(drop=True)
-        return df[["time", "open", "high", "low", "close", "volume"]]
-
-
-class YFinanceProvider(PriceProvider):
-    """Dùng yfinance cho mã NYSE/NASDAQ (AAPL, TSLA, NVDA...)."""
-
-    def fetch_price(self, ticker: str) -> float:
-        import yfinance as yf
-        hist = yf.Ticker(ticker).history(period="5d")
-        if hist.empty:
-            raise ValueError(f"Không có dữ liệu cho '{ticker}'")
-        return float(hist["Close"].iloc[-1])
-
-    def fetch_history(self, ticker: str, days: int) -> pd.DataFrame:
-        import yfinance as yf
-        hist = yf.Ticker(ticker).history(period=f"{days + 10}d")
-        if hist.empty:
-            raise ValueError(f"Không có dữ liệu cho '{ticker}'")
-        hist = hist.reset_index()
-        hist = hist.rename(columns={
-            "Date": "time", "Open": "open", "High": "high",
-            "Low": "low", "Close": "close", "Volume": "volume",
-        })
-        return hist[["time", "open", "high", "low", "close", "volume"]].tail(days).reset_index(drop=True)
-
-
-def _detect_provider(ticker: str) -> PriceProvider:
-    """Chọn provider dựa vào format ticker.
-
-    2–4 ký tự chữ in hoa, không có dấu chấm → VnstockProvider (VN).
-    Có dấu chấm hoặc dài hơn 4 ký tự → YFinanceProvider (quốc tế).
-    """
-    t = ticker.strip().upper()
-    if "." not in t and len(t) <= 4:
-        return VnstockProvider()
-    return YFinanceProvider()
-
-
-_default_provider: PriceProvider = VnstockProvider()
+_default_provider: PriceProvider = VciDirectProvider()
 
 
 def set_provider(provider: PriceProvider) -> None:
@@ -169,7 +38,6 @@ def set_provider(provider: PriceProvider) -> None:
 # ── Error mapping helper ──────────────────────────────────────────────────────
 
 def _map_upstream_error(ticker: str, exc: Exception) -> ToolResult:
-    """Map generic exception → ToolResult với status phù hợp và message có ích."""
     msg = str(exc).lower()
     if "429" in msg or "rate" in msg or "too many" in msg:
         return ToolResult(
@@ -219,9 +87,10 @@ def get_realtime_price(ticker: str, provider: PriceProvider | None = None) -> To
             message="ticker không được rỗng. Thử với mã hợp lệ như 'HPG' hoặc 'FPT'.",
         )
     t = ticker.strip().upper()
-    p = provider or _default_provider
+    resolved = resolve_ticker(t)  # VNINDEX → ^VNINDEX, stock → unchanged
+    p = provider or _detect_provider(t)
     try:
-        price = p.get_price(t)
+        price = p.get_price(resolved)
         return ToolResult(
             status="ok",
             data=price,
@@ -291,9 +160,10 @@ def get_historical_ohlcv(
             message=f"days={days} không hợp lệ. Phải >= 1. Thử days=30 hoặc days=60.",
         )
     t = ticker.strip().upper()
-    p = provider or _default_provider
+    resolved = resolve_ticker(t)  # VNINDEX → ^VNINDEX, stock → unchanged
+    p = provider or _detect_provider(t)
     try:
-        df = p.get_history(t, days)
+        df = p.get_history(resolved, days)
         return ToolResult(
             status="ok",
             data=df,
@@ -360,7 +230,7 @@ def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> ToolResult:
 
     Args:
         df: DataFrame từ get_historical_ohlcv (phải có cột 'close').
-        currency: Đơn vị tiền tệ ('VND' hoặc 'USD'). Tag vào output.
+        currency: 'VND' hoặc 'USD'. Tag vào output để model không so sánh sai đơn vị.
     """
     try:
         import pandas_ta as ta  # noqa: F401
@@ -368,7 +238,7 @@ def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> ToolResult:
         return ToolResult(
             status="upstream_error",
             data=None,
-            message="pandas-ta chưa cài. Không thể tính chỉ báo. Chạy: pip install pandas-ta rồi thử lại.",
+            message="pandas-ta chưa cài. Chạy: pip install pandas-ta rồi thử lại.",
         )
 
     if df is None or df.empty:
@@ -377,7 +247,6 @@ def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> ToolResult:
             data=None,
             message="DataFrame rỗng. Truyền vào DataFrame có dữ liệu từ get_historical_ohlcv.",
         )
-
     if "close" not in df.columns:
         return ToolResult(
             status="invalid_input",
@@ -388,7 +257,6 @@ def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> ToolResult:
     try:
         lines: list[str] = [f"[Đơn vị: {currency}]"]
 
-        # RSI(14)
         rsi_series = df.ta.rsi(length=14)
         try:
             rsi = float(rsi_series.iloc[-1]) if rsi_series is not None else float("nan")
@@ -400,7 +268,6 @@ def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> ToolResult:
             zone = "quá mua" if rsi > 70 else "quá bán" if rsi < 30 else "trung tính"
             lines.append(f"RSI(14) = {rsi:.1f} → vùng {zone}")
 
-        # MACD(12,26,9)
         macd_df = df.ta.macd(fast=12, slow=26, signal=9)
         if macd_df is None or "MACD_12_26_9" not in macd_df.columns:
             lines.append("MACD(12,26,9): không đủ dữ liệu (cần ít nhất 26 phiên)")
@@ -410,9 +277,7 @@ def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> ToolResult:
                 signal_val = float(macd_df["MACDs_12_26_9"].iloc[-1])
                 hist_val = float(macd_df["MACDh_12_26_9"].iloc[-1])
             except (TypeError, ValueError):
-                macd_val = float("nan")
-                signal_val = float("nan")
-                hist_val = float("nan")
+                macd_val = signal_val = hist_val = float("nan")
             if pd.isna(macd_val):
                 lines.append("MACD(12,26,9): không đủ dữ liệu")
             else:
@@ -422,31 +287,18 @@ def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> ToolResult:
                     f"Histogram = {hist_val:.2f} → xu hướng {trend}"
                 )
 
-        # MA(20)
-        ma20 = df.ta.sma(length=20)
-        try:
-            ma20_val = float(ma20.iloc[-1]) if ma20 is not None else float("nan")
-        except (TypeError, ValueError):
-            ma20_val = float("nan")
-        if pd.isna(ma20_val):
-            lines.append("MA(20): không đủ dữ liệu (cần ít nhất 20 phiên)")
-        else:
-            close_last = float(df["close"].iloc[-1])
-            pos = "trên" if close_last > ma20_val else "dưới"
-            lines.append(f"MA(20) = {ma20_val:,.0f} → giá đang {pos} MA20")
-
-        # MA(50)
-        ma50 = df.ta.sma(length=50)
-        try:
-            ma50_val = float(ma50.iloc[-1]) if ma50 is not None else float("nan")
-        except (TypeError, ValueError):
-            ma50_val = float("nan")
-        if pd.isna(ma50_val):
-            lines.append("MA(50): không đủ dữ liệu (cần ít nhất 50 phiên)")
-        else:
-            close_last = float(df["close"].iloc[-1])
-            pos = "trên" if close_last > ma50_val else "dưới"
-            lines.append(f"MA(50) = {ma50_val:,.0f} → giá đang {pos} MA50")
+        for length, label in [(20, "MA(20)"), (50, "MA(50)")]:
+            ma = df.ta.sma(length=length)
+            try:
+                ma_val = float(ma.iloc[-1]) if ma is not None else float("nan")
+            except (TypeError, ValueError):
+                ma_val = float("nan")
+            if pd.isna(ma_val):
+                lines.append(f"{label}: không đủ dữ liệu (cần ít nhất {length} phiên)")
+            else:
+                close_last = float(df["close"].iloc[-1])
+                pos = "trên" if close_last > ma_val else "dưới"
+                lines.append(f"{label} = {ma_val:,.0f} → giá đang {pos} {label}")
 
         result_str = "\n".join(lines)
         return ToolResult(status="ok", data=result_str, message=result_str)
@@ -461,20 +313,60 @@ def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> ToolResult:
 
 # ── Tool 4: Tin tức tài chính ─────────────────────────────────────────────────
 
+# Market indices — skip VCI price validation, use general search (no ticker filter)
+_MARKET_INDICES = frozenset({
+    "VNINDEX", "VN-INDEX", "VN30", "VN100",
+    "HOSE", "HNX", "UPCOM", "HNX30",
+})
+
+
+def _is_market_index(ticker: str) -> bool:
+    return ticker.strip().upper() in _MARKET_INDICES
+
+
+def _auto_fetch_ticker_news(ticker: str, days: int) -> None:
+    """Background fetch from cafef + tavily when ticker has no news. Non-fatal."""
+    try:
+        from data.cafef_ticker_scraper import fetch_and_save as cafef_fetch
+        from data.tavily_news import fetch_and_save as tavily_fetch
+        from rag.news_index import index_unindexed_batch
+        cafef_fetch(ticker)
+        tavily_fetch(ticker, days=max(days, 30))
+        index_unindexed_batch()
+    except Exception as e:
+        import sys
+        sys.stderr.write(f"[auto-fetch] failed for {ticker}: {e}\n")
+
+
+def _dedup_news(raw: list[dict], limit: int = 5) -> list[dict]:
+    seen_urls: set[str] = set()
+    unique: list[dict] = []
+    for item in raw:
+        url = item.get("url", "")
+        if url not in seen_urls:
+            seen_urls.add(url)
+            unique.append(item)
+        if len(unique) == limit:
+            break
+    return unique
+
+
 def search_financial_news(
     ticker: str,
     days: int = 7,
     provider: PriceProvider | None = None,  # unused — kept for interface consistency
 ) -> ToolResult:
-    """
-    Tìm tin tức tài chính về ticker trong N ngày gần nhất từ Qdrant news_chunks.
-    Luôn trả ToolResult, không raise.
+    """Tìm tin tức tài chính về ticker trong N ngày gần nhất từ Qdrant news_chunks.
+
+    ticker có thể là mã cổ phiếu (HPG, VNM) hoặc chỉ số thị trường (VNINDEX, HOSE, VN30).
+    Với chỉ số: tìm tin tức chung về thị trường, không lọc theo ticker.
+    Với mã CK chưa có news: tự động fetch từ cafef + Tavily rồi retry.
     """
     if not ticker or not ticker.strip():
         return ToolResult(
             status="invalid_input",
             data=None,
-            message="ticker không được rỗng. Thử với mã như 'HPG' hoặc 'VNM'.",
+            message="ticker không được rỗng. Thử với mã như 'HPG', 'VNM' hoặc chỉ số 'VNINDEX', 'HOSE'.",
         )
     if days < 1 or days > 365:
         return ToolResult(
@@ -482,6 +374,24 @@ def search_financial_news(
             data=None,
             message=f"days={days} không hợp lệ. Phải từ 1 đến 365. Thử days=7.",
         )
+
+    t = ticker.strip().upper()
+    market_query = _is_market_index(t)
+
+    # For stock tickers: pre-validate via VCI/yfinance
+    if not market_query:
+        p = provider or _detect_provider(t)
+        try:
+            p.get_price(t)
+        except Exception:
+            return ToolResult(
+                status="no_data",
+                data=None,
+                message=(
+                    f"Mã '{t}' không tồn tại hoặc không có dữ liệu giá. "
+                    "Kiểm tra lại mã CK. Không tìm kiếm tin tức cho mã không hợp lệ."
+                ),
+            )
 
     try:
         from rag.news_index import search_news_by_text
@@ -492,24 +402,36 @@ def search_financial_news(
             message="Không thể import rag.news_index. Kiểm tra Qdrant đang chạy và news_chunks đã được index.",
         )
 
+    # Market index → general search (no ticker filter)
+    # Stock ticker → filter by ticker
+    search_ticker = None if market_query else t
+
     try:
-        raw = search_news_by_text(ticker.strip().upper(), days=days, limit=10)
+        raw = search_news_by_text(t, days=days, limit=10, ticker=search_ticker)
     except Exception as e:
-        return _map_upstream_error(ticker.strip().upper(), e)
+        return _map_upstream_error(t, e)
 
-    # dedup by URL, keep top 5
-    seen_urls: set[str] = set()
-    unique: list[dict] = []
-    for item in raw:
-        url = item.get("url", "")
-        if url not in seen_urls:
-            seen_urls.add(url)
-            unique.append(item)
-        if len(unique) == 5:
-            break
+    unique = _dedup_news(raw, limit=5)
 
-    t = ticker.strip().upper()
+    # Auto-fetch on miss for stock tickers (not indices)
+    if not unique and not market_query:
+        _auto_fetch_ticker_news(t, days)
+        try:
+            raw2 = search_news_by_text(t, days=days, limit=10, ticker=t)
+            unique = _dedup_news(raw2, limit=5)
+        except Exception:
+            pass
+
     if not unique:
+        if market_query:
+            return ToolResult(
+                status="no_data",
+                data=None,
+                message=(
+                    f"Không có tin tức thị trường trong {days} ngày gần nhất. "
+                    "Tăng khoảng thời gian (days=30) để tìm tin tức cũ hơn."
+                ),
+            )
         return ToolResult(
             status="no_data",
             data=None,
@@ -534,25 +456,21 @@ def search_financial_news(
         lines.append(line)
 
     result_str = "\n".join(lines)
-    return ToolResult(
-        status="ok",
-        data=result_str,
-        message=result_str,
-    )
+    return ToolResult(status="ok", data=result_str, message=result_str)
 
 
 # ── Tool 5: Phân tích sentiment thị trường ────────────────────────────────────
 
 def analyze_market_sentiment(ticker: str, days: int = 7) -> ToolResult:
-    """
-    Phân tích cảm xúc thị trường về ticker từ tin tức gần nhất (few-shot LLM).
-    Luôn trả ToolResult, không raise.
+    """Phân tích cảm xúc thị trường về ticker từ tin tức gần nhất (few-shot LLM).
+
+    ticker có thể là mã cổ phiếu (HPG) hoặc chỉ số thị trường (VNINDEX, HOSE, VN30).
     """
     if not ticker or not ticker.strip():
         return ToolResult(
             status="invalid_input",
             data=None,
-            message="ticker không được rỗng. Thử với mã như 'HPG' hoặc 'VNM'.",
+            message="ticker không được rỗng. Thử với mã như 'HPG', 'VNM' hoặc chỉ số 'VNINDEX'.",
         )
     if days < 1 or days > 365:
         return ToolResult(
@@ -560,6 +478,23 @@ def analyze_market_sentiment(ticker: str, days: int = 7) -> ToolResult:
             data=None,
             message=f"days={days} không hợp lệ. Phải từ 1 đến 365. Thử days=7.",
         )
+
+    t = ticker.strip().upper()
+    market_query = _is_market_index(t)
+
+    if not market_query:
+        p = _detect_provider(t)
+        try:
+            p.get_price(t)
+        except Exception:
+            return ToolResult(
+                status="no_data",
+                data=None,
+                message=(
+                    f"Mã '{t}' không tồn tại hoặc không có dữ liệu giá. "
+                    "Kiểm tra lại mã CK. Không phân tích sentiment cho mã không hợp lệ."
+                ),
+            )
 
     try:
         from rag.news_index import search_news_by_text
@@ -570,28 +505,31 @@ def analyze_market_sentiment(ticker: str, days: int = 7) -> ToolResult:
             message="Không thể import rag.news_index. Kiểm tra Qdrant đang chạy và news_chunks đã được index.",
         )
 
+    search_ticker = None if market_query else t
     try:
-        raw = search_news_by_text(ticker.strip().upper(), days=days, limit=5)
+        raw = search_news_by_text(t, days=days, limit=5, ticker=search_ticker)
     except Exception as e:
-        return _map_upstream_error(ticker.strip().upper(), e)
+        return _map_upstream_error(t, e)
 
-    # dedup by URL
-    seen_urls: set[str] = set()
-    unique: list[dict] = []
-    for item in raw:
-        url = item.get("url", "")
-        if url not in seen_urls:
-            seen_urls.add(url)
-            unique.append(item)
+    unique = _dedup_news(raw, limit=5)
 
-    t = ticker.strip().upper()
+    # Auto-fetch on miss for stock tickers
+    if not unique and not market_query:
+        _auto_fetch_ticker_news(t, days)
+        try:
+            raw2 = search_news_by_text(t, days=days, limit=5, ticker=t)
+            unique = _dedup_news(raw2, limit=5)
+        except Exception:
+            pass
+
     if not unique:
+        label = "thị trường" if market_query else t
         return ToolResult(
             status="no_data",
             data=None,
             message=(
-                f"Không đủ tin tức để phân tích sentiment cho {t}. "
-                "Tăng khoảng thời gian (days) hoặc dùng search_financial_news để kiểm tra có tin không."
+                f"Không đủ tin tức để phân tích sentiment cho {label}. "
+                "Tăng khoảng thời gian (days) hoặc dùng search_financial_news để kiểm tra."
             ),
         )
 
@@ -606,10 +544,6 @@ def analyze_market_sentiment(ticker: str, days: int = 7) -> ToolResult:
             ),
         )
 
-    # load few-shot examples
-    import json
-    from pathlib import Path
-
     shots_path = Path(__file__).parent.parent / "data" / "sentiment_shots_vi.json"
     shots: list[dict] = []
     if shots_path.exists():
@@ -623,10 +557,11 @@ def analyze_market_sentiment(ticker: str, days: int = 7) -> ToolResult:
         if lbl in by_label:
             by_label[lbl].append(s.get("text", ""))
 
-    few_shot_lines: list[str] = []
-    for lbl, count in [("positive", 2), ("negative", 2), ("neutral", 1)]:
-        for text in by_label[lbl][:count]:
-            few_shot_lines.append(f'"{text}" → {label_vi[lbl]}')
+    few_shot_lines = [
+        f'"{text}" → {label_vi[lbl]}'
+        for lbl, count in [("positive", 2), ("negative", 2), ("neutral", 1)]
+        for text in by_label[lbl][:count]
+    ]
 
     news_block = "\n".join(f"{i + 1}. {h}" for i, h in enumerate(headlines))
     few_shot_block = "\n".join(few_shot_lines)
@@ -647,10 +582,7 @@ def analyze_market_sentiment(ticker: str, days: int = 7) -> ToolResult:
         resp = client.generate(
             [Message(role="user", content=prompt)],
             max_tokens=150,
-            system=(
-                "Bạn là chuyên gia phân tích tài chính. "
-                "Phân tích sentiment tin tức chứng khoán Việt Nam."
-            ),
+            system="Bạn là chuyên gia phân tích tài chính. Phân tích sentiment tin tức chứng khoán Việt Nam.",
         )
         result_str = resp.text.strip()
         return ToolResult(status="ok", data=result_str, message=result_str)

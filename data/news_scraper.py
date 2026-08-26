@@ -37,7 +37,17 @@ RSS_SOURCES = [
 ]
 
 _TICKERS: set[str] | None = None
-_TICKER_RE = re.compile(r"\b([A-Z]{2,4})\b")
+# High-precision: ticker in parentheses — "Hòa Phát (HPG)", "VNM (VNM)"
+_PAREN_RE = re.compile(r"\(([A-Z]{2,5})\)")
+# Fallback: bare ALL-CAPS word in title only (more noise)
+_BARE_RE = re.compile(r"\b([A-Z]{2,5})\b")
+# Common non-ticker uppercase words to exclude
+_NON_TICKERS = frozenset({
+    "USD", "VND", "EUR", "GBP", "JPY", "CNY",
+    "GDP", "CPI", "IPO", "ETF", "CEO", "CFO", "CTO",
+    "VN", "US", "UK", "EU", "FDI", "FII", "M2",
+    "TV", "PC", "IT", "AI", "EV",
+})
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 _WHITESPACE_RE = re.compile(r"\s+")
 
@@ -77,9 +87,28 @@ def parse_published(entry) -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def extract_tickers(title: str) -> list[str]:
+def extract_tickers(title: str, body: str = "") -> list[str]:
+    """Extract stock tickers from title + body.
+
+    Strategy:
+    1. Parentheses pattern in full text: "Hòa Phát (HPG)" — high precision
+    2. Bare ALL-CAPS in title only — lower precision, filtered by known list + _NON_TICKERS
+    """
     known = _load_tickers()
-    return [m for m in _TICKER_RE.findall(title) if m in known]
+    full_text = f"{title}\n{body}"
+    found: list[str] = []
+
+    # Step 1: parentheses pattern across full text (high precision)
+    for m in _PAREN_RE.findall(full_text):
+        if m in known and m not in _NON_TICKERS and m not in found:
+            found.append(m)
+
+    # Step 2: bare ALL-CAPS in title only (lower precision, only if not already found)
+    for m in _BARE_RE.findall(title):
+        if m in known and m not in _NON_TICKERS and m not in found:
+            found.append(m)
+
+    return found
 
 
 def scrape_rss(url: str, source: str) -> list[dict]:
@@ -133,7 +162,7 @@ def scrape_rss(url: str, source: str) -> list[dict]:
             "body": body,
             "source": source,
             "published_at": parse_published(e),
-            "tickers": extract_tickers(title),
+            "tickers": extract_tickers(title, body),
         })
     return results
 
@@ -200,11 +229,44 @@ def run_scrape(sources: list[tuple[str, str]], dry_run: bool = False) -> dict[st
     return stats
 
 
+def backfill_tickers() -> int:
+    """Re-extract tickers for all articles in DB using updated extract_tickers.
+
+    Updates tickers column and resets indexed_at=NULL so news_index re-embeds
+    with fresh payload. Returns count updated.
+    """
+    from data.db import get_conn
+
+    updated = 0
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT url, title, body FROM news_articles")
+            rows = cur.fetchall()
+
+        with conn.cursor() as cur:
+            for url, title, body in rows:
+                tickers = extract_tickers(title or "", body or "")
+                cur.execute(
+                    "UPDATE news_articles SET tickers = %s, indexed_at = NULL WHERE url = %s",
+                    (tickers, url),
+                )
+                updated += 1
+        conn.commit()
+
+    print(f"  backfill done — {updated} articles updated, indexed_at reset")
+    return updated
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="RSS news scraper")
     parser.add_argument("--dry-run", action="store_true", help="Print articles without saving")
     parser.add_argument("--source", choices=["cafef", "vnexpress", "vneconomy", "tinnhanhchungkhoan", "all"], default="all")
+    parser.add_argument("--backfill-tickers", action="store_true", help="Re-extract tickers for all DB articles then reset indexed_at")
     args = parser.parse_args()
+
+    if args.backfill_tickers:
+        backfill_tickers()
+        return
 
     sources = RSS_SOURCES
     if args.source != "all":

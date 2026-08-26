@@ -204,8 +204,15 @@ def search_news_by_text(
     embed_model: str = DEFAULT_EMBED_MODEL,
     days: int = 30,
     limit: int = 5,
+    ticker: str | None = None,
 ) -> list[dict]:
-    """Search news_chunks with time filter. Returns list of payload dicts."""
+    """Search news_chunks with time filter. Returns list of payload dicts.
+
+    ticker: if provided, add a MatchAny filter on the `tickers` payload field.
+    Only effective after backfill_tickers() has been run.
+    """
+    from qdrant_client.models import MatchAny
+
     client = QdrantClient(url=QDRANT_URL)
     existing = {c.name for c in client.get_collections().collections}
     if COLLECTION not in existing:
@@ -215,18 +222,19 @@ def search_news_by_text(
     # B4: always use RFC-3339 UTC format — Qdrant DatetimeRange requires it
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    must_conditions = [
+        FieldCondition(key="published_at", range=DatetimeRange(gte=cutoff)),
+    ]
+    if ticker:
+        must_conditions.append(
+            FieldCondition(key="tickers", match=MatchAny(any=[ticker.upper()]))
+        )
+
     try:
         result = client.query_points(
             collection_name=COLLECTION,
             query=qvec,
-            query_filter=Filter(
-                must=[
-                    FieldCondition(
-                        key="published_at",
-                        range=DatetimeRange(gte=cutoff),
-                    )
-                ]
-            ),
+            query_filter=Filter(must=must_conditions),
             limit=limit,
             with_payload=True,
         )

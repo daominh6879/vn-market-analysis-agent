@@ -1,4 +1,4 @@
-.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-reindex test-sentiment
+.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-fetch-ticker news-backfill news-reindex test-sentiment mcp-server mcp-inspect test-tools test-chaos
 
 up:
 	docker compose up -d
@@ -151,6 +151,19 @@ test-tenant:
 run-dagster:
 	dagster dev -f pipeline/assets.py
 
+news-fetch-ticker:
+ifndef TICKER
+	$(error Usage: make news-fetch-ticker TICKER=HPG [DAYS=7])
+endif
+	python data/cafef_ticker_scraper.py --ticker $(TICKER)
+	python data/tavily_news.py --ticker $(TICKER) --days $(or $(DAYS),7)
+	python rag/news_index.py --index-all
+
+news-backfill:
+	@echo "Re-extract tickers for all articles then re-index to Qdrant"
+	python data/news_scraper.py --backfill-tickers
+	python rag/news_index.py --index-all
+
 news-reindex:
 	@echo "Reset indexed_at → re-embed all articles"
 	python -c "from data.db import get_conn; conn=get_conn().__enter__(); conn.cursor().execute('UPDATE news_articles SET indexed_at=NULL'); conn.commit()"
@@ -158,3 +171,16 @@ news-reindex:
 
 test-sentiment:
 	pytest tests/test_sentiment.py -v
+
+# Bài 21 — MCP server
+mcp-server:
+	python tools/mcp_server.py
+
+mcp-inspect:
+	npx @modelcontextprotocol/inspector python tools/mcp_server.py
+
+test-tools:
+	pytest tests/test_tools.py -v
+
+test-chaos:
+	pytest tests/test_tool_chaos.py -v

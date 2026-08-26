@@ -29,6 +29,8 @@ Ghi chép thực nghiệm, số đo, quyết định kỹ thuật. Không giải
 - [x] Bài 19 — 3 tool giá chứng khoán: VnstockProvider + YFinanceProvider, CLI, 44 tests xanh
 - [x] Bài 19B — search_financial_news + analyze_market_sentiment, few-shot vi, 60 tests xanh
 - [x] Bài 20 — ToolResult hợp đồng lỗi: 5 status, không tool nào raise, 93 tests xanh
+- [x] Bài 21 — MCP server: 5 tool exposed, FastMCP v1, get_indicators là composite tool; VCI provider tách providers.py; index aliases ^VNINDEX
+- [ ] Bài 22 — LangGraph agent: market query vs stock query; VNINDEX OHLCV via yfinance aliases
 
 ## Pipeline hiện tại
 
@@ -60,3 +62,5 @@ Ghi chép thực nghiệm, số đo, quyết định kỹ thuật. Không giải
 | Bài 19 | [bai-19-tools.md](bai-19-tools.md) | 3 tool giá: VnstockProvider + YFinanceProvider + CLI; 44 tests xanh |
 | Bài 19B | [bai-19b-news-sentiment.md](bai-19b-news-sentiment.md) | search_financial_news + analyze_market_sentiment; few-shot vi; 60 tests xanh |
 | Bài 20 | [bai-20-tool-result.md](bai-20-tool-result.md) | ToolResult 5 status; _map_upstream_error; registry.py; 93 tests xanh |
+| Bài 21 | [bai-21-mcp-server.md](bai-21-mcp-server.md) | FastMCP server 5 tool; mcp<2 pinned; get_indicators composite; VCI refactor; VNINDEX aliases |
+| Bài 22 | [bai-22-agent-graph.md](bai-22-agent-graph.md) | LangGraph 4-node; market vs stock query detection; VNINDEX via yfinance |

@@ -380,12 +380,19 @@ class TestDetectProvider:
     """_detect_provider chọn đúng provider theo format ticker."""
 
     def test_vn_ticker_3_chars(self):
-        from tools.price import _detect_provider, VnstockProvider
-        assert isinstance(_detect_provider("FPT"), VnstockProvider)
+        from tools.providers import _detect_provider, VciDirectProvider
+        assert isinstance(_detect_provider("FPT"), VciDirectProvider)
 
     def test_vn_ticker_4_chars_no_dot(self):
-        from tools.price import _detect_provider, VnstockProvider
-        assert isinstance(_detect_provider("HOSE"), VnstockProvider)
+        from tools.providers import _detect_provider, VciDirectProvider
+        assert isinstance(_detect_provider("VNM"), VciDirectProvider)
+
+    def test_vn_index_routes_to_yfinance(self):
+        from tools.providers import _detect_provider, YFinanceProvider
+        # HOSE/VNINDEX/VN30 are market indices → yfinance (VCI doesn't support indices)
+        assert isinstance(_detect_provider("HOSE"), YFinanceProvider)
+        assert isinstance(_detect_provider("VNINDEX"), YFinanceProvider)
+        assert isinstance(_detect_provider("VN30"), YFinanceProvider)
 
     def test_intl_ticker_4_chars_aapl_is_yfinance(self):
         from tools.price import _detect_provider
@@ -498,6 +505,7 @@ class TestSearchFinancialNews:
 
     def test_no_news_returns_no_data(self, monkeypatch):
         monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: [])
+        monkeypatch.setattr("tools.price._auto_fetch_ticker_news", lambda *a, **kw: None)
         from tools.price import search_financial_news
         result = search_financial_news("HPG", 7)
         assert result.status == "no_data"
@@ -595,6 +603,7 @@ class TestAnalyzeMarketSentiment:
 
     def test_no_news_returns_no_data(self, monkeypatch):
         monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: [])
+        monkeypatch.setattr("tools.price._auto_fetch_ticker_news", lambda *a, **kw: None)
         from tools.price import analyze_market_sentiment
         result = analyze_market_sentiment("HPG", 7)
         assert result.status == "no_data"
