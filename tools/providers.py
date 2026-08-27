@@ -198,6 +198,50 @@ class VciDirectProvider(PriceProvider):
             result[sym] = df
         return result
 
+    def fetch_foreign_batch(self, tickers: list[str]) -> list[dict]:
+        """
+        Fetch live foreign buy/sell values for a batch of tickers via VCI price board.
+
+        Endpoint: POST https://trading.vietcap.com.vn/api/price/symbols/getList
+        Returns list of {ticker, buy_value, sell_value, net_value, buy_volume, sell_volume, net_volume}.
+        Raises on network error — callers should catch.
+        """
+        import httpx
+
+        url = "https://trading.vietcap.com.vn/api/price/symbols/getList"
+        payload = {"symbols": [t.upper() for t in tickers]}
+        resp = httpx.post(url, json=payload, headers=self._HEADERS, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+
+        if isinstance(data, dict) and "data" in data:
+            data = data["data"]
+        if not data:
+            return []
+
+        rows = []
+        for item in data:
+            # ticker from listingInfo.symbol
+            listing = item.get("listingInfo") or {}
+            match = item.get("matchPrice") or {}
+            ticker = (listing.get("symbol") or listing.get("ticker") or "").upper().strip()
+            if not ticker:
+                continue
+            buy_vol = float(match.get("foreignBuyVolume") or 0)
+            buy_val = float(match.get("foreignBuyValue") or 0)
+            sell_vol = float(match.get("foreignSellVolume") or 0)
+            sell_val = float(match.get("foreignSellValue") or 0)
+            rows.append({
+                "ticker": ticker,
+                "buy_value": buy_val,
+                "sell_value": sell_val,
+                "net_value": buy_val - sell_val,
+                "buy_volume": int(buy_vol),
+                "sell_volume": int(sell_vol),
+                "net_volume": int(buy_vol - sell_vol),
+            })
+        return rows
+
 
 # ── YFinanceProvider ──────────────────────────────────────────────────────────
 

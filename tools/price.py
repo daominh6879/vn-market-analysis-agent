@@ -775,7 +775,278 @@ def get_top_movers(by: str = "value", limit: int = 5) -> ToolResult:
                           message=f"Lỗi get_top_movers: {e}")
 
 
-# ── Tool 7: Phân tích sentiment thị trường ────────────────────────────────────
+# ── Tool 7: Khối ngoại mua/bán ròng ─────────────────────────────────────────
+
+def get_foreign_flows(days: int = 1) -> ToolResult:
+    """Khối ngoại mua/bán ròng toàn thị trường + top mua/top bán.
+
+    DB-first: query foreign_flows (Postgres).
+    Fallback: live VCI price board nếu DB rỗng.
+    days: số phiên giao dịch gần nhất (mặc định 1 = phiên hôm qua/gần nhất).
+    """
+    if days < 1 or days > 30:
+        return ToolResult(
+            status="invalid_input",
+            data=None,
+            message="days phải từ 1–30. Thử days=1 (phiên gần nhất).",
+        )
+
+    from tools.foreign_flow_db import (
+        query_latest_foreign_date,
+        query_market_foreign_net,
+        query_top_foreign,
+    )
+
+    target_date = query_latest_foreign_date()
+    market = query_market_foreign_net(target_date) if target_date else None
+
+    # Fallback: live VCI if DB empty
+    if market is None:
+        return _get_foreign_flows_live()
+
+    top_buyers = query_top_foreign(target_date, n=5, direction="buy") or []
+    top_sellers = query_top_foreign(target_date, n=5, direction="sell") or []
+    return _build_foreign_result(str(target_date), market["net_value"],
+                                 market["total_buy"], market["total_sell"],
+                                 top_buyers, top_sellers)
+
+
+def _get_foreign_flows_live() -> ToolResult:
+    """Live fallback: fetch current-session foreign data from VCI price board."""
+    import sys
+    from datetime import date as date_type
+    from data.hose_universe import load_hose_tickers
+    from tools.providers import VciDirectProvider
+
+    try:
+        tickers = load_hose_tickers()
+        provider = VciDirectProvider()
+        all_rows: list[dict] = []
+        for i in range(0, len(tickers), 50):
+            try:
+                all_rows.extend(provider.fetch_foreign_batch(tickers[i:i + 50]))
+            except Exception as e:
+                sys.stderr.write(f"[get_foreign_flows live] chunk {i} failed: {e}\n")
+    except Exception as e:
+        return ToolResult(
+            status="upstream_error",
+            data=None,
+            message=f"Không lấy được dữ liệu khối ngoại (DB rỗng, VCI fallback lỗi): {e}",
+        )
+
+    if not all_rows:
+        return ToolResult(
+            status="no_data",
+            data=None,
+            message=(
+                "Không có dữ liệu khối ngoại. DB rỗng và VCI không trả về dữ liệu. "
+                "Chạy: python ingest/fetch_foreign_flows.py"
+            ),
+        )
+
+    total_buy = sum(r["buy_value"] for r in all_rows)
+    total_sell = sum(r["sell_value"] for r in all_rows)
+    net = total_buy - total_sell
+    top_buyers = sorted(all_rows, key=lambda x: x["buy_value"], reverse=True)[:5]
+    top_sellers = sorted(all_rows, key=lambda x: x["sell_value"], reverse=True)[:5]
+    return _build_foreign_result(str(date_type.today()), net, total_buy, total_sell,
+                                 top_buyers, top_sellers, source="live")
+
+
+def _build_foreign_result(
+    date_str: str,
+    net_value: float,
+    total_buy: float,
+    total_sell: float,
+    top_buyers: list[dict],
+    top_sellers: list[dict],
+    source: str = "db",
+) -> ToolResult:
+    net_bn = net_value / 1e9
+    direction = "Mua ròng" if net_bn >= 0 else "Bán ròng"
+    top_buy_str = " / ".join(f"{r['ticker']} {r['buy_value']/1e9:.0f}tỷ" for r in top_buyers[:3])
+    top_sell_str = " / ".join(f"{r['ticker']} {r['sell_value']/1e9:.0f}tỷ" for r in top_sellers[:3])
+    source_tag = " (live)" if source == "live" else ""
+    summary = "\n".join([
+        f"Khối ngoại {date_str}{source_tag}: {direction} {abs(net_bn):.0f} tỷ đồng",
+        f"Mua nhiều nhất: {top_buy_str}" if top_buy_str else "Mua nhiều nhất: (không có dữ liệu)",
+        f"Bán nhiều nhất: {top_sell_str}" if top_sell_str else "Bán nhiều nhất: (không có dữ liệu)",
+    ])
+    return ToolResult(
+        status="ok",
+        data={
+            "date": date_str,
+            "market_net_value": net_value,
+            "market_net_value_bn": round(net_bn, 1),
+            "total_buy": total_buy,
+            "total_sell": total_sell,
+            "top_buyers": top_buyers,
+            "top_sellers": top_sellers,
+            "source": source,
+            "summary": summary,
+        },
+        message=summary,
+    )
+
+
+# ── Tool 8: Hiệu suất nhóm ngành ─────────────────────────────────────────────
+
+def get_sector_performance(period: str = "day") -> ToolResult:
+    """Hiệu suất theo nhóm ngành: % thay đổi weighted theo giá trị giao dịch.
+
+    Dữ liệu: JOIN ohlcv_daily × securities.sector.
+    Fallback nếu bảng securities rỗng: dùng hose_universe seed (~140 mã).
+    period: "day" (mặc định) — hiện chỉ hỗ trợ phiên gần nhất.
+    """
+    if period not in ("day",):
+        return ToolResult(
+            status="invalid_input",
+            data=None,
+            message="period phải là 'day'. Hỗ trợ thêm 'week'/'month' trong phiên bản sau.",
+        )
+
+    sectors = _query_sector_performance_db()
+    if sectors is None:
+        sectors = _query_sector_performance_fallback()
+
+    if not sectors:
+        return ToolResult(
+            status="no_data",
+            data=None,
+            message=(
+                "Chưa đủ dữ liệu để tính hiệu suất nhóm ngành. "
+                "Cần ohlcv_daily có ít nhất 2 phiên và securities/hose_universe có sector."
+            ),
+        )
+
+    lines = [
+        f"• {s['sector']}: {s['pct_change']:+.2f}% ({s['ticker_count']} mã, "
+        f"~{s['total_value_bn']:.0f} tỷ)"
+        for s in sectors
+    ]
+    summary = "Hiệu suất nhóm ngành (phiên gần nhất):\n" + "\n".join(lines)
+    return ToolResult(status="ok", data=sectors, message=summary)
+
+
+def _query_sector_performance_db() -> list[dict] | None:
+    """SQL path: JOIN ohlcv_daily × securities. Returns None on error or empty securities."""
+    try:
+        from core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                # Check securities is populated
+                cur.execute("SELECT COUNT(*) FROM securities WHERE sector IS NOT NULL")
+                if cur.fetchone()[0] == 0:
+                    return None  # trigger fallback
+
+                cur.execute(
+                    """
+                    WITH dates AS (
+                        SELECT DISTINCT date FROM ohlcv_daily ORDER BY date DESC LIMIT 2
+                    ),
+                    latest_date AS (SELECT MAX(date) AS d FROM dates),
+                    prev_date   AS (SELECT MIN(date) AS d FROM dates),
+                    changes AS (
+                        SELECT
+                            curr.ticker,
+                            s.sector,
+                            CASE WHEN prev.close > 0
+                                 THEN (curr.close - prev.close) / prev.close * 100
+                                 ELSE 0 END                             AS pct_change,
+                            curr.close * curr.volume                   AS trade_value
+                        FROM ohlcv_daily curr
+                        JOIN ohlcv_daily prev
+                            ON curr.ticker = prev.ticker
+                           AND prev.date = (SELECT d FROM prev_date)
+                        JOIN securities s ON curr.ticker = s.ticker
+                        WHERE curr.date = (SELECT d FROM latest_date)
+                          AND s.sector IS NOT NULL
+                    )
+                    SELECT
+                        sector,
+                        SUM(trade_value * pct_change) / NULLIF(SUM(trade_value), 0) AS weighted_pct,
+                        COUNT(*)                                                      AS ticker_count,
+                        SUM(trade_value)                                              AS total_value
+                    FROM changes
+                    GROUP BY sector
+                    ORDER BY weighted_pct DESC
+                    """
+                )
+                rows = cur.fetchall()
+
+        if not rows:
+            return None
+
+        return [
+            {
+                "sector": row[0],
+                "pct_change": round(float(row[1]), 2),
+                "ticker_count": int(row[2]),
+                "total_value_bn": round(float(row[3]) / 1e9, 1),
+            }
+            for row in rows
+        ]
+    except Exception as e:
+        import sys
+        sys.stderr.write(f"[get_sector_performance] DB path failed: {e}\n")
+        return None
+
+
+def _query_sector_performance_fallback() -> list[dict] | None:
+    """In-memory fallback: JOIN ohlcv_db result with hose_universe seed."""
+    try:
+        from data.hose_universe import load_hose_universe
+        from tools.ohlcv_db import query_top_by_value, query_universe_latest
+
+        universe = load_hose_universe()  # [{ticker, sector, index_member}]
+        if not universe:
+            return None
+
+        ticker_to_sector = {u["ticker"]: u["sector"] for u in universe}
+        tickers = list(ticker_to_sector.keys())
+
+        db_df = query_universe_latest(tickers)
+        if db_df is None or db_df.empty:
+            return None
+
+        # Get volume/value via top_by_value (returns close*volume)
+        val_df = query_top_by_value(tickers, limit=len(tickers))
+
+        import pandas as pd
+        db_df["sector"] = db_df["ticker"].map(ticker_to_sector)
+        db_df = db_df.dropna(subset=["sector"])
+
+        if val_df is not None and not val_df.empty:
+            val_map = val_df.set_index("ticker")["traded_value"].to_dict()
+            db_df["trade_value"] = db_df["ticker"].map(val_map).fillna(0.0)
+        else:
+            db_df["trade_value"] = db_df["close"] * 1000  # crude proxy if no volume
+
+        results = []
+        for sector, grp in db_df.groupby("sector"):
+            total_val = float(grp["trade_value"].sum())
+            if total_val > 0:
+                weighted_pct = float(
+                    (grp["pct_change"] * grp["trade_value"]).sum() / total_val
+                )
+            else:
+                weighted_pct = float(grp["pct_change"].mean())
+            results.append({
+                "sector": sector,
+                "pct_change": round(weighted_pct, 2),
+                "ticker_count": len(grp),
+                "total_value_bn": round(total_val / 1e9, 1),
+            })
+
+        results.sort(key=lambda x: x["pct_change"], reverse=True)
+        return results if results else None
+    except Exception as e:
+        import sys
+        sys.stderr.write(f"[get_sector_performance] fallback failed: {e}\n")
+        return None
+
+
+# ── Tool 9: Phân tích sentiment thị trường ───────────────────────────────────
 
 def analyze_market_sentiment(ticker: str, days: int = 7) -> ToolResult:
     """Phân tích cảm xúc thị trường về ticker từ tin tức gần nhất (few-shot LLM).

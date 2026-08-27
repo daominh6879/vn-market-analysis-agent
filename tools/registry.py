@@ -102,6 +102,19 @@ TOOL_REGISTRY: dict[str, dict] = {
         "cost_hint": "low",
         "side_effect": False,
     },
+    # ── Phase 2: foreign flows + sector performance ──────────────────────────
+    "get_foreign_flows": {
+        "version": "1.0",
+        "timeout": 10,
+        "cost_hint": "low",
+        "side_effect": False,
+    },
+    "get_sector_performance": {
+        "version": "1.0",
+        "timeout": 15,
+        "cost_hint": "low",
+        "side_effect": False,
+    },
 }
 
 

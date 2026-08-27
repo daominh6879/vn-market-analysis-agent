@@ -33,10 +33,12 @@ from tools.providers import YFinanceProvider, _detect_provider
 from tools.price import (
     analyze_market_sentiment,
     calculate_indicators,
+    get_foreign_flows,
     get_historical_ohlcv,
     get_market_breadth,
     get_market_performance,
     get_realtime_price,
+    get_sector_performance,
     search_financial_news,
 )
 
@@ -207,6 +209,36 @@ async def get_market_sentiment(ticker: str, days: int = 7) -> str:
     Nếu không đủ tin hoặc LLM lỗi, trả thông báo kèm hướng dẫn xử lý tiếp.
     """
     return await _run(analyze_market_sentiment, ticker, days, timeout=_TIMEOUT_SENTIMENT)
+
+
+_TIMEOUT_FOREIGN = 10.0
+_TIMEOUT_SECTOR = 15.0
+
+
+@mcp.tool()
+async def get_foreign_flow(days: int = 1) -> str:
+    """
+    Khối ngoại mua/bán ròng toàn thị trường HOSE phiên gần nhất.
+
+    Trả: tổng mua ròng/bán ròng (tỷ đồng), top 5 mua nhiều nhất, top 5 bán nhiều nhất.
+    Nguồn: foreign_flows (Postgres). Cần ingest/fetch_foreign_flows.py đã chạy.
+    days: số phiên gần nhất (mặc định 1).
+    """
+    return await _run(get_foreign_flows, days, timeout=_TIMEOUT_FOREIGN)
+
+
+@mcp.tool()
+async def get_sector_perf(period: str = "day") -> str:
+    """
+    Hiệu suất theo nhóm ngành (% thay đổi, weighted theo giá trị giao dịch).
+
+    Nguồn: ohlcv_daily × securities.sector (Postgres).
+    Fallback: hose_universe seed (~140 mã, ~19 ngành) nếu bảng securities rỗng.
+    period: "day" (hiện tại chỉ hỗ trợ phiên gần nhất).
+
+    Kết quả: danh sách ngành sắp xếp từ tăng mạnh → giảm mạnh.
+    """
+    return await _run(get_sector_performance, period, timeout=_TIMEOUT_SECTOR)
 
 
 def _warmup() -> None:
