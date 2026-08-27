@@ -159,7 +159,7 @@ Trích nguồn dạng [Nguồn: {data_source}] hoặc [Nguồn: CafeF/Tavily, <n
     client = create_client()
     resp = client.generate(
         [Message(role="user", content=prompt)],
-        max_tokens=2500,
+        max_tokens=4000,
         system=(
             "Bạn là chuyên gia phân tích tài chính Việt Nam. "
             "Trả lời chỉ bằng báo cáo Markdown, không có văn bản nào trước hoặc sau."

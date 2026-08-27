@@ -56,6 +56,27 @@ client = Anthropic(api_key=...)
 
 ---
 
+## Per-lesson completion rule
+
+**Every bài is not done until:**
+1. Run the real output (LLM + tools, no mocks)
+2. Read the actual output — report, plan, tool result
+3. Evaluate quality against the lesson's "Xong khi" checklist
+4. Fix any bugs found (truncation, parse errors, wrong structure)
+5. Re-run to confirm fix
+
+Do NOT mark a bài complete after tests pass. Tests prove code runs. Running + evaluating proves it works correctly.
+
+**What to evaluate per output type:**
+
+| Output | Evaluate |
+|--------|----------|
+| LLM report | All sections present, citations on every claim, no truncation, risk_verdict valid enum |
+| Plan JSON | steps count scales with query complexity, all executors in registry, no unknown depends_on, complex query ≥ medium ≥ simple steps |
+| ToolResult | status matches scenario, data shape correct (columns, row count), error path returns no_data not crash |
+
+---
+
 ## Documentation accuracy rule
 
 **Never write assumptions into NOTES.md, EXPLAIN.md, or QA.md.** Every claim must have a verified source:
