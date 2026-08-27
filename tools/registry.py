@@ -115,6 +115,19 @@ TOOL_REGISTRY: dict[str, dict] = {
         "cost_hint": "low",
         "side_effect": False,
     },
+    # ── Phase 4: indicators + candle pattern + levels ────────────────────────
+    "detect_candle_pattern": {
+        "version": "1.0",
+        "timeout": 5,
+        "cost_hint": "free",
+        "side_effect": False,
+    },
+    "find_support_resistance": {
+        "version": "1.0",
+        "timeout": 5,
+        "cost_hint": "free",
+        "side_effect": False,
+    },
 }
 
 

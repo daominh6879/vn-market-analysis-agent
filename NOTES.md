@@ -27,3 +27,6 @@
 | Bài 21 | [docs/notes/bai-21-mcp-server.md](docs/notes/bai-21-mcp-server.md) |
 | Bài 22 | [docs/notes/bai-22-agent-graph.md](docs/notes/bai-22-agent-graph.md) |
 | Bài 23 | [docs/notes/bai-23-ohlcv-db.md](docs/notes/bai-23-ohlcv-db.md) |
+| Bài 24 | [docs/notes/bai-24-daily-brief-p0-p3.md](docs/notes/bai-24-daily-brief-p0-p3.md) |
+| Bài 25 | [docs/notes/bai-25-daily-brief-p1.md](docs/notes/bai-25-daily-brief-p1.md) |
+| Bài 26 | [docs/notes/bai-26-daily-brief-p4.md](docs/notes/bai-26-daily-brief-p4.md) |

@@ -226,10 +226,12 @@ def get_historical_ohlcv_intl(
 
 def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> ToolResult:
     """
-    Tính RSI(14), MACD(12,26,9), MA(20), MA(50). Luôn trả ToolResult, không raise.
+    Tính RSI(14), MACD(12,26,9), MA(20/50/200), EMA(200), ADX(14),
+    Ichimoku Kumo position, volume vs TB 20 tuần (100 phiên).
+    Luôn trả ToolResult, không raise.
 
     Args:
-        df: DataFrame từ get_historical_ohlcv (phải có cột 'close').
+        df: DataFrame từ get_historical_ohlcv (phải có cột 'close', 'high', 'low', 'volume').
         currency: 'VND' hoặc 'USD'. Tag vào output để model không so sánh sai đơn vị.
     """
     try:
@@ -254,30 +256,33 @@ def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> ToolResult:
             message="DataFrame thiếu cột 'close'. Truyền vào DataFrame từ get_historical_ohlcv.",
         )
 
+    def _safe_float(series) -> float:
+        try:
+            v = float(series.iloc[-1]) if series is not None else float("nan")
+            return float("nan") if pd.isna(v) else v
+        except (TypeError, ValueError, IndexError):
+            return float("nan")
+
     try:
         lines: list[str] = [f"[Đơn vị: {currency}]"]
+        close_last = float(df["close"].iloc[-1])
 
-        rsi_series = df.ta.rsi(length=14)
-        try:
-            rsi = float(rsi_series.iloc[-1]) if rsi_series is not None else float("nan")
-        except (TypeError, ValueError):
-            rsi = float("nan")
+        # RSI
+        rsi = _safe_float(df.ta.rsi(length=14))
         if pd.isna(rsi):
             lines.append("RSI(14): không đủ dữ liệu (cần ít nhất 14 phiên)")
         else:
             zone = "quá mua" if rsi > 70 else "quá bán" if rsi < 30 else "trung tính"
             lines.append(f"RSI(14) = {rsi:.1f} → vùng {zone}")
 
+        # MACD
         macd_df = df.ta.macd(fast=12, slow=26, signal=9)
         if macd_df is None or "MACD_12_26_9" not in macd_df.columns:
             lines.append("MACD(12,26,9): không đủ dữ liệu (cần ít nhất 26 phiên)")
         else:
-            try:
-                macd_val = float(macd_df["MACD_12_26_9"].iloc[-1])
-                signal_val = float(macd_df["MACDs_12_26_9"].iloc[-1])
-                hist_val = float(macd_df["MACDh_12_26_9"].iloc[-1])
-            except (TypeError, ValueError):
-                macd_val = signal_val = hist_val = float("nan")
+            macd_val = _safe_float(macd_df["MACD_12_26_9"])
+            signal_val = _safe_float(macd_df["MACDs_12_26_9"])
+            hist_val = _safe_float(macd_df["MACDh_12_26_9"])
             if pd.isna(macd_val):
                 lines.append("MACD(12,26,9): không đủ dữ liệu")
             else:
@@ -287,18 +292,93 @@ def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> ToolResult:
                     f"Histogram = {hist_val:.2f} → xu hướng {trend}"
                 )
 
-        for length, label in [(20, "MA(20)"), (50, "MA(50)")]:
-            ma = df.ta.sma(length=length)
-            try:
-                ma_val = float(ma.iloc[-1]) if ma is not None else float("nan")
-            except (TypeError, ValueError):
-                ma_val = float("nan")
+        # SMA 20/50/200
+        for length, label in [(20, "MA(20)"), (50, "MA(50)"), (200, "MA(200)")]:
+            ma_val = _safe_float(df.ta.sma(length=length))
             if pd.isna(ma_val):
                 lines.append(f"{label}: không đủ dữ liệu (cần ít nhất {length} phiên)")
             else:
-                close_last = float(df["close"].iloc[-1])
                 pos = "trên" if close_last > ma_val else "dưới"
                 lines.append(f"{label} = {ma_val:,.0f} → giá đang {pos} {label}")
+
+        # EMA 200
+        ema200_val = _safe_float(df.ta.ema(length=200))
+        if pd.isna(ema200_val):
+            lines.append("EMA(200): không đủ dữ liệu (cần ít nhất 200 phiên)")
+        else:
+            pos = "trên" if close_last > ema200_val else "dưới"
+            lines.append(f"EMA(200) = {ema200_val:,.0f} → giá đang {pos} EMA(200)")
+
+        # ADX(14) — cần high/low/close
+        has_hlc = all(c in df.columns for c in ("high", "low", "close"))
+        if has_hlc:
+            adx_df = df.ta.adx(length=14)
+            adx_col = "ADX_14"
+            if adx_df is not None and adx_col in adx_df.columns:
+                adx_val = _safe_float(adx_df[adx_col])
+                if pd.isna(adx_val):
+                    lines.append("ADX(14): không đủ dữ liệu")
+                else:
+                    strength = "xu hướng mạnh" if adx_val > 25 else "xu hướng yếu/sideway"
+                    lines.append(f"ADX(14) = {adx_val:.1f} → {strength}")
+            else:
+                lines.append("ADX(14): không đủ dữ liệu")
+        else:
+            lines.append("ADX(14): thiếu cột high/low")
+
+        # Ichimoku Kumo — cần high/low (dùng pandas-ta ichimoku)
+        if has_hlc and len(df) >= 52:
+            ichi = df.ta.ichimoku()
+            # pandas-ta trả tuple (span_a_df, span_b_df) hoặc DataFrame
+            if isinstance(ichi, tuple):
+                ichi_df = ichi[0]
+            else:
+                ichi_df = ichi
+            if ichi_df is not None and not ichi_df.empty:
+                # cột IKS_9 (Senkou Span A) và IKS_26 (Senkou Span B) — tên thực tế:
+                span_a_col = next((c for c in ichi_df.columns if c.startswith("ISA")), None)
+                span_b_col = next((c for c in ichi_df.columns if c.startswith("ISB")), None)
+                if span_a_col and span_b_col:
+                    sa = _safe_float(ichi_df[span_a_col])
+                    sb = _safe_float(ichi_df[span_b_col])
+                    if not (pd.isna(sa) or pd.isna(sb)):
+                        kumo_top = max(sa, sb)
+                        kumo_bot = min(sa, sb)
+                        if close_last > kumo_top:
+                            kumo_pos = "trên Kumo (bullish)"
+                        elif close_last < kumo_bot:
+                            kumo_pos = "dưới Kumo (bearish)"
+                        else:
+                            kumo_pos = "trong Kumo (neutral)"
+                        lines.append(
+                            f"Ichimoku Kumo: SpanA={sa:,.0f}, SpanB={sb:,.0f} → giá {kumo_pos}"
+                        )
+                    else:
+                        lines.append("Ichimoku: không đủ dữ liệu")
+                else:
+                    lines.append("Ichimoku: không nhận được cột Span A/B")
+            else:
+                lines.append("Ichimoku: không đủ dữ liệu")
+        else:
+            needed = "thiếu cột high/low" if not has_hlc else "không đủ dữ liệu (cần ít nhất 52 phiên)"
+            lines.append(f"Ichimoku: {needed}")
+
+        # Volume vs TB 20 tuần (100 phiên giao dịch)
+        if "volume" in df.columns and len(df) >= 5:
+            vol_last = float(df["volume"].iloc[-1])
+            n_avg = min(100, len(df) - 1)
+            vol_avg = float(df["volume"].iloc[-1 - n_avg: -1].mean()) if n_avg > 0 else float("nan")
+            if not pd.isna(vol_avg) and vol_avg > 0:
+                vol_ratio = vol_last / vol_avg
+                if vol_ratio >= 1:
+                    vol_note = f"cao hơn TB {n_avg} phiên ~{(vol_ratio - 1) * 100:.0f}%"
+                else:
+                    vol_note = f"thấp hơn TB {n_avg} phiên ~{(1 - vol_ratio) * 100:.0f}%"
+                lines.append(f"Volume = {vol_last:,.0f} → {vol_note}")
+            else:
+                lines.append("Volume TB: không đủ dữ liệu")
+        else:
+            lines.append("Volume TB: thiếu cột volume hoặc không đủ dữ liệu")
 
         result_str = "\n".join(lines)
         return ToolResult(status="ok", data=result_str, message=result_str)
@@ -309,6 +389,67 @@ def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> ToolResult:
             data=None,
             message=f"Lỗi khi tính chỉ báo kỹ thuật: {e}. Kiểm tra DataFrame đầu vào.",
         )
+
+
+def detect_candle_pattern(df: pd.DataFrame) -> ToolResult:
+    """
+    Nhận diện mẫu nến Doji / Marubozu / Hammer trên nến cuối cùng.
+    Dùng rule thuần, không cần TA-Lib.
+
+    Args:
+        df: DataFrame OHLCV với cột open, high, low, close.
+    Returns:
+        ToolResult(data=str) — tên mẫu nến hoặc "Không xác định".
+    """
+    required = {"open", "high", "low", "close"}
+    if df is None or df.empty:
+        return ToolResult(status="invalid_input", data=None,
+                          message="DataFrame rỗng.")
+    if not required.issubset(df.columns):
+        missing = required - set(df.columns)
+        return ToolResult(status="invalid_input", data=None,
+                          message=f"Thiếu cột: {missing}. Cần open/high/low/close.")
+
+    try:
+        row = df.iloc[-1]
+        o, h, l, c = float(row["open"]), float(row["high"]), float(row["low"]), float(row["close"])
+        body = abs(c - o)
+        candle_range = h - l
+        if candle_range == 0:
+            pattern = "Không xác định (range = 0)"
+        else:
+            body_ratio = body / candle_range
+            upper_shadow = h - max(o, c)
+            lower_shadow = min(o, c) - l
+
+            # Hammer/Hanging Man checked first: long lower shadow can have tiny body
+            # that would otherwise be misclassified as Doji
+            if (
+                lower_shadow >= max(body * 2, candle_range * 0.5)
+                and upper_shadow < lower_shadow * 0.3
+                and c >= o
+            ):
+                pattern = "Hammer — râu dưới dài, tiềm năng đảo chiều tăng"
+            elif (
+                lower_shadow >= max(body * 2, candle_range * 0.5)
+                and upper_shadow < lower_shadow * 0.3
+                and c < o
+            ):
+                pattern = "Hanging Man — râu dưới dài trên đỉnh, cảnh báo đảo chiều giảm"
+            elif body_ratio > 0.85 and upper_shadow < body * 0.1 and lower_shadow < body * 0.1:
+                color = "xanh" if c >= o else "đỏ"
+                pattern = f"Marubozu {color} — thân lớn, không râu, xu hướng mạnh"
+            elif body_ratio < 0.1:
+                pattern = "Doji — thân nến rất nhỏ, do dự"
+            else:
+                pattern = "Không xác định"
+
+        msg = f"Mẫu nến (phiên cuối): {pattern}"
+        return ToolResult(status="ok", data=pattern, message=msg)
+
+    except Exception as e:
+        return ToolResult(status="upstream_error", data=None,
+                          message=f"Lỗi nhận diện mẫu nến: {e}.")
 
 
 # ── Tool 4: Tin tức tài chính ─────────────────────────────────────────────────
