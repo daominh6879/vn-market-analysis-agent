@@ -65,6 +65,69 @@ def fetch_vcb_usdvnd() -> Optional[dict]:
         return None
 
 
+def fetch_sbv_central_rate() -> Optional[float]:
+    """
+    Fetch SBV (NHNN) official USD/VND central rate (tỷ giá trung tâm).
+
+    Tries two sources in order:
+      1. VCB XML — checks for a CentralRate/Reference attribute (rarely present).
+      2. SBV website HTML — parses the exchange rate table for the USD row.
+
+    Returns float (e.g. 25615.0) or None on failure.
+    """
+    import re
+
+    # --- Source 1: VCB XML central rate attribute ---
+    try:
+        import httpx
+        from xml.etree import ElementTree as ET
+
+        resp = httpx.get(
+            "https://portal.vietcombank.com.vn/Usercontrols/TVPortal.TyGia/pXML.aspx?b=10",
+            timeout=8,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        resp.raise_for_status()
+        root = ET.fromstring(resp.content)
+        for item in root.findall(".//Exrate"):
+            if (item.get("CurrencyCode") or "").strip().upper() != "USD":
+                continue
+            for attr in ("CentralRate", "centralRate", "central_rate", "Reference"):
+                val = item.get(attr)
+                if val:
+                    cleaned = val.replace(",", "").replace(".", "")
+                    if cleaned.isdigit() and len(cleaned) >= 5:
+                        return float(cleaned)
+    except Exception as e:
+        sys.stderr.write(f"[fx_scraper] fetch_sbv_central_rate VCB source failed: {e}\n")
+
+    # --- Source 2: SBV website HTML ---
+    try:
+        import httpx
+        resp = httpx.get(
+            "https://www.sbv.gov.vn/webcenter/portal/vi/menu/fm/tghh",
+            timeout=10,
+            headers={"User-Agent": "Mozilla/5.0"},
+            follow_redirects=True,
+        )
+        text = resp.text
+        # Find USD section then extract the first 5-digit rate number
+        usd_idx = text.find("USD")
+        if usd_idx == -1:
+            usd_idx = text.find("Đô la Mỹ")
+        if usd_idx != -1:
+            snippet = text[usd_idx: usd_idx + 600]
+            matches = re.findall(r"\b(2[4-6]\s*[.,]\s*\d{3}(?:[.,]\d{1,2})?)\b", snippet)
+            for m in matches:
+                cleaned = re.sub(r"[\s.,]", "", m)
+                if len(cleaned) == 5 and cleaned.isdigit():
+                    return float(cleaned)
+    except Exception as e:
+        sys.stderr.write(f"[fx_scraper] fetch_sbv_central_rate SBV source failed: {e}\n")
+
+    return None
+
+
 def midpoint_rate(data: dict) -> float:
     """Average of buy + sell as a rough mid-market rate."""
     return round((data["buy"] + data["sell"]) / 2, 0)

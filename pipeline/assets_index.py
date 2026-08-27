@@ -6,16 +6,16 @@ Assets:
   global_quotes_ingest        — World indices, commodities, crypto, FX via yfinance/CoinGecko
 """
 
-from __future__ import annotations
+from typing import List
 
-from dagster import AssetExecutionContext, Config, asset
+from dagster import AssetExecutionContext, Config, ScheduleDefinition, asset, define_asset_job
 
 _VN_INDICES = ["VNINDEX", "HNX", "UPCOM", "VN30", "HNX30"]
 
 
 class IndexIngestConfig(Config):
     days: int = 30
-    indices: list = []  # empty = all _VN_INDICES
+    indices: List[str] = []  # empty = all _VN_INDICES
 
 
 @asset(group_name="market_data")
@@ -152,6 +152,18 @@ def global_quotes_ingest(context: AssetExecutionContext) -> dict:
     n = _upsert_market_quotes(rows_to_upsert)
     context.log.info(f"global_quotes_ingest done — {n} quotes upserted")
     return {"log": log, "quotes_upserted": n}
+
+
+market_index_ingest_job = define_asset_job(
+    name="market_index_ingest_job",
+    selection=[market_index_daily_ingest],
+)
+
+market_index_ingest_schedule = ScheduleDefinition(
+    job=market_index_ingest_job,
+    cron_schedule="0 18 * * 1-5",   # weekdays 18:00, before OHLCV at 18:30
+    name="market_index_daily_1800",
+)
 
 
 def _upsert_market_quotes(rows: list[dict]) -> int:

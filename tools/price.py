@@ -761,8 +761,9 @@ def _build_breadth_result(changes: list[dict], label: str = "VN30") -> ToolResul
     gainers_str = " | ".join(f"{g['ticker']} {g['pct_change']:+.1f}%" for g in top_gainers)
     losers_str = " | ".join(f"{l['ticker']} {l['pct_change']:+.1f}%" for l in top_losers)
 
+    total = len(changes)
     summary_lines = [
-        f"{label} breadth: {len(advances)} tăng / {len(unchanged)} đứng / {len(declines)} giảm",
+        f"{label} breadth ({total} mã): {len(advances)} tăng / {len(unchanged)} đứng / {len(declines)} giảm",
         f"Top tăng: {gainers_str}" if gainers_str else "Top tăng: (không có)",
         f"Top giảm: {losers_str}" if losers_str else "Top giảm: (không có)",
     ]
@@ -918,12 +919,15 @@ def get_top_movers(by: str = "value", limit: int = 5) -> ToolResult:
 
 # ── Tool 7: Khối ngoại mua/bán ròng ─────────────────────────────────────────
 
-def get_foreign_flows(days: int = 1) -> ToolResult:
+def get_foreign_flows(days: int = 1, as_of_date: Optional[str] = None) -> ToolResult:
     """Khối ngoại mua/bán ròng toàn thị trường + top mua/top bán.
 
     DB-first: query foreign_flows (Postgres).
     Fallback: live VCI price board nếu DB rỗng.
-    days: số phiên giao dịch gần nhất (mặc định 1 = phiên hôm qua/gần nhất).
+    days:        số phiên giao dịch gần nhất (mặc định 1 = phiên gần nhất).
+    as_of_date:  ISO date string (YYYY-MM-DD); caps MAX(date) to this value so the
+                 brief for date D doesn't accidentally show flows from date D+1 if
+                 the ingest already ran ahead.
     """
     if days < 1 or days > 30:
         return ToolResult(
@@ -938,7 +942,7 @@ def get_foreign_flows(days: int = 1) -> ToolResult:
         query_top_foreign,
     )
 
-    target_date = query_latest_foreign_date()
+    target_date = query_latest_foreign_date(as_of_date=as_of_date)
     market = query_market_foreign_net(target_date) if target_date else None
 
     # Fallback: live VCI if DB empty
@@ -1005,13 +1009,26 @@ def _build_foreign_result(
 ) -> ToolResult:
     net_bn = net_value / 1e9
     direction = "Mua ròng" if net_bn >= 0 else "Bán ròng"
-    top_buy_str = " / ".join(f"{r['ticker']} {r['buy_value']/1e9:.0f}tỷ" for r in top_buyers[:3])
-    top_sell_str = " / ".join(f"{r['ticker']} {r['sell_value']/1e9:.0f}tỷ" for r in top_sellers[:3])
     source_tag = " (live)" if source == "live" else ""
+
+    # Merge gross buy/sell into net per ticker to avoid same stock appearing in both lists
+    net_by_ticker: dict[str, float] = {}
+    for r in top_buyers:
+        net_by_ticker[r["ticker"]] = net_by_ticker.get(r["ticker"], 0) + r["buy_value"]
+    for r in top_sellers:
+        net_by_ticker[r["ticker"]] = net_by_ticker.get(r["ticker"], 0) - r["sell_value"]
+
+    net_items = sorted(net_by_ticker.items(), key=lambda x: x[1], reverse=True)
+    net_buyers = [(t, v) for t, v in net_items if v > 0][:3]
+    net_sellers = [(t, v) for t, v in net_items if v < 0][-3:]
+
+    top_buy_str = " / ".join(f"{t} {v/1e9:.0f}tỷ" for t, v in net_buyers)
+    top_sell_str = " / ".join(f"{t} {abs(v)/1e9:.0f}tỷ" for t, v in reversed(net_sellers))
+
     summary = "\n".join([
         f"Khối ngoại {date_str}{source_tag}: {direction} {abs(net_bn):.0f} tỷ đồng",
-        f"Mua nhiều nhất: {top_buy_str}" if top_buy_str else "Mua nhiều nhất: (không có dữ liệu)",
-        f"Bán nhiều nhất: {top_sell_str}" if top_sell_str else "Bán nhiều nhất: (không có dữ liệu)",
+        f"Mua ròng nhiều nhất: {top_buy_str}" if top_buy_str else "Mua ròng nhiều nhất: (không có dữ liệu)",
+        f"Bán ròng nhiều nhất: {top_sell_str}" if top_sell_str else "Bán ròng nhiều nhất: (không có dữ liệu)",
     ])
     return ToolResult(
         status="ok",

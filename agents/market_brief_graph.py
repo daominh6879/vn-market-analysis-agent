@@ -149,8 +149,10 @@ def _collect_vn(target_date: Optional[str]) -> dict:
     missing: list[str] = []
 
     # VN-Index (DB-first, fallback to market_performance)
+    # as_of_date: the brief for date D shows the session that CLOSED before D's open.
+    # If target_date is given, use it as the upper bound so yesterday's close is returned.
     vn_index_text = _MISSING
-    row = _safe(query_index_latest, "VNINDEX")
+    row = _safe(query_index_latest, "VNINDEX", target_date)
     if row:
         close = row.get("close", 0)
         chg_pts = row.get("change_pts", 0)
@@ -158,9 +160,44 @@ def _collect_vn(target_date: Optional[str]) -> dict:
         mv = row.get("matched_value", 0)
         sign = "+" if chg_pts >= 0 else ""
         mv_bn = mv / 1e9 if mv else 0
+
+        # Count consecutive up/down sessions from DB history
+        streak_note = ""
+        try:
+            from tools.index_db import query_index
+            hist_df = query_index("VNINDEX", 10)
+            if hist_df is not None and not hist_df.empty and "change_pts" in hist_df.columns:
+                changes = hist_df["change_pts"].tolist()
+                if changes:
+                    last = changes[-1]
+                    direction = last > 0
+                    streak = sum(1 for c in reversed(changes) if (c > 0) == direction and c != 0)
+                    if streak >= 2:
+                        word = "tăng" if direction else "giảm"
+                        streak_note = f" — phiên {word} thứ {streak} liên tiếp"
+        except Exception:
+            pass
+
+        # "Hụt mốc" / "Vượt mốc" check — use high/low from the row if available
+        level_note = ""
+        try:
+            row_high = row.get("high", 0) or 0
+            row_low = row.get("low", 0) or 0
+            # Check round psychological levels: 1800, 1850, 1900, 1950, 2000
+            for level in [1800, 1850, 1900, 1950, 2000, 1750, 1700]:
+                if row_high >= level > close:
+                    level_note = f", hụt mốc {level:,.0f} sau khi đã vượt trong phiên"
+                    break
+                if row_low <= level < close:
+                    level_note = f", vượt mốc {level:,.0f} thành công"
+                    break
+        except Exception:
+            pass
+
         vn_index_text = (
             f"VN-Index đóng cửa {close:,.2f} điểm ({sign}{chg_pts:.2f}đ, "
-            f"{sign}{chg_pct:.2f}%). Khớp lệnh HoSE ~{mv_bn:,.0f} tỷ đồng."
+            f"{sign}{chg_pct:.2f}%){streak_note}{level_note}. "
+            f"Khớp lệnh HoSE ~{mv_bn:,.0f} tỷ đồng."
         )
     else:
         mp_r = _safe(get_market_performance, "today", "VNINDEX")
@@ -177,7 +214,9 @@ def _collect_vn(target_date: Optional[str]) -> dict:
     breadth_r = _safe(get_market_breadth, "HOSE")
     if _ok(breadth_r):
         d = breadth_r.data
-        breadth_text = f"{d.get('advances', 0)} mã tăng / {d.get('declines', 0)} mã giảm"
+        total = d.get('advances', 0) + d.get('declines', 0) + d.get('unchanged', 0)
+        total_tag = f" ({total} mã)" if total > 0 else ""
+        breadth_text = f"{d.get('advances', 0)} mã tăng / {d.get('declines', 0)} mã giảm{total_tag}"
     else:
         breadth_text = _MISSING
         missing.append("breadth")
@@ -195,8 +234,8 @@ def _collect_vn(target_date: Optional[str]) -> dict:
         movers_text = ""
         missing.append("top_movers")
 
-    # Foreign flows
-    ff_r = _safe(get_foreign_flows, 1)
+    # Foreign flows — pass target_date so we don't pull future-date data if ingest ran ahead
+    ff_r = _safe(get_foreign_flows, 1, as_of_date=target_date or None)
     if _ok(ff_r):
         foreign_text = ff_r.message
     else:
@@ -226,27 +265,43 @@ def _collect_news(target_date: Optional[str]) -> dict:
     """Fetch news, corporate events, broker views."""
     missing: list[str] = []
 
-    # Market news (last 2 days)
-    news_r = _safe(search_financial_news, "VNINDEX", 2)
-    if _ok(news_r):
-        lines = news_r.message.split("\n")
-        news_text = lines[0][:200] if lines else _MISSING
+    # Market news — semantic search for financial relevance, then sort by recency.
+    # Pure DB recency pulls in non-market articles (politics, crime); semantic filter fixes that.
+    # Pure semantic search misses today's top stories if embedding score is low; recency sort fixes that.
+    import re as _re
+    try:
+        from rag.news_index import search_news_by_text as _snbt
+        # Broad financial market query — filters to market-relevant articles only
+        _hits = _snbt(
+            "tin tức tài chính chứng khoán thị trường Việt Nam VN-Index cổ phiếu đầu tư",
+            days=3,
+            limit=10,
+        )
+        # Sort by recency so today's top story wins over yesterday's
+        _hits.sort(key=lambda x: str(x.get("published_at", "")), reverse=True)
+        _raw_lines = [
+            f"[{_h.get('source','')} | {str(_h.get('published_at',''))[:10]}] {_h.get('title','').strip()}"
+            for _h in _hits[:5]
+            if _h.get("title", "").strip()
+        ]
+        _has_news = bool(_raw_lines)
+    except Exception:
+        _news_r = _safe(search_financial_news, "VNINDEX", 2)
+        _raw_lines = [l for l in _news_r.message.split("\n") if l.strip()] if _ok(_news_r) else []
+        _has_news = bool(_raw_lines)
+
+    if _has_news:
+        clean_lines = []
+        for l in _raw_lines[:3]:
+            cleaned = _re.sub(r"^\[[^\]]+\]\s*", "", l).strip()
+            if cleaned:
+                clean_lines.append(cleaned)
+        news_text = "\n".join(clean_lines) if clean_lines else _MISSING
     else:
         news_text = _MISSING
         missing.append("news")
 
-    # Corporate events (next 3 days)
-    ev_r = _safe(get_corporate_events, None, 3)
-    if _ok(ev_r) and ev_r.data:
-        ev_lines = ev_r.message.split("\n")
-        events_text = "; ".join(l.strip().lstrip("• ") for l in ev_lines[:3] if l.strip())
-    elif ev_r is not None and ev_r.status == "no_data":
-        events_text = "Không có sự kiện quyền trong 3 ngày tới."
-    else:
-        events_text = _MISSING
-        missing.append("corporate_events")
-
-    # Broker views for VNINDEX
+    # Broker views for VNINDEX — fetched first so it can serve as fallback for events section
     bv_r = _safe(get_broker_views, "VNINDEX", 7)
     if _ok(bv_r):
         broker_text = bv_r.message
@@ -255,6 +310,22 @@ def _collect_news(target_date: Optional[str]) -> dict:
     else:
         broker_text = _MISSING
         missing.append("broker_views")
+
+    # Corporate events — include yesterday (days_back=1) to catch same-day ex_date events
+    ev_r = _safe(get_corporate_events, None, 14, 1)
+    if _ok(ev_r) and ev_r.data:
+        ev_lines = ev_r.message.split("\n")
+        events_text = "; ".join(l.strip().lstrip("• ") for l in ev_lines[:3] if l.strip())
+    elif ev_r is not None and ev_r.status == "no_data":
+        # No rights events — fall back to broker views if available
+        if _ok(bv_r) and bv_r.data:
+            first_line = bv_r.message.split("\n")[0].strip().lstrip("• ")
+            events_text = f"Nhận định CTCK: {first_line}"
+        else:
+            events_text = "Không có sự kiện quyền trong 3 ngày tới."
+    else:
+        events_text = _MISSING
+        missing.append("corporate_events")
 
     return {
         "news_text": news_text,
@@ -279,6 +350,13 @@ def _collect_technical(target_date: Optional[str]) -> dict:
         }
 
     df = ohlcv_r.data
+    # Cap to target_date so future rows don't bleed into indicators/levels
+    if target_date:
+        try:
+            import pandas as _pd
+            df = df[_pd.to_datetime(df["date"]).dt.date <= _pd.Timestamp(target_date).date()].copy()
+        except Exception:
+            pass
 
     ind_r = _safe(calculate_indicators, df)
     tech_signals = ind_r.message if _ok(ind_r) else _MISSING
@@ -362,6 +440,85 @@ def collect_all(state: MarketBriefState) -> dict:
     }
 
 
+# ── Reasoning stripper ───────────────────────────────────────────────────────
+
+_ANSWER_MARKER = "###NHẬN ĐỊNH###"
+_END_MARKER = "###END###"
+
+# Vietnamese reasoning phrases that indicate the model is still in thinking mode
+_REASONING_PREFIXES = (
+    "Chuẩn bị", "Lưu ý:", "Cần xử lý", "Dữ liệu cung cấp",
+    "Cách xử lý", "Tốt nhất", "Có thể nói", "Xung đột",
+)
+
+
+def _strip_reasoning(text: str) -> str:
+    """Extract only the answer after ###NHẬN ĐỊNH### marker.
+
+    Fallback: if marker absent, discard leading paragraphs that look like
+    internal reasoning (contain known Vietnamese thinking-mode phrases) or
+    are too short to be real content (< 30 chars — e.g. a lone ".").
+    """
+    if _ANSWER_MARKER in text:
+        content = text.split(_ANSWER_MARKER, 1)[1]
+        # Strip trailing self-check notes after closing marker
+        if _END_MARKER in content:
+            content = content.split(_END_MARKER, 1)[0]
+        # Also strip trailing paragraphs that are reasoning/English notes
+        # (model sometimes appends "Let me check...", "P1:", "Also check" etc.)
+        _TRAILING_REASONING = (
+            "let me", "p1:", "p2:", "p3:", "check", "also check",
+            "draft:", "note:", "paragraph", "sentence count",
+        )
+        paras = [p.strip() for p in content.split("\n\n") if p.strip()]
+        # Walk from end, drop paragraphs that look like trailing meta-commentary
+        while paras:
+            last = paras[-1].lower()
+            if (
+                len(paras[-1]) < 60
+                or any(last.startswith(t) for t in _TRAILING_REASONING)
+                or last.startswith("let ")
+                or (paras[-1][0].islower() and len(paras[-1]) < 120)
+            ):
+                paras.pop()
+            else:
+                break
+        return "\n\n".join(paras).strip() if paras else content.strip()
+
+    # Marker not found — strip reasoning paragraphs heuristically
+    def _looks_like_reasoning(para: str) -> bool:
+        if len(para) < 30:
+            return True
+        first_line = (para.splitlines()[0] if para.splitlines() else para).strip()
+        # Vietnamese reasoning prefixes
+        if any(first_line.startswith(prefix) for prefix in _REASONING_PREFIXES):
+            return True
+        # English reasoning: paragraph is mostly ASCII (no Vietnamese diacritics)
+        non_ascii = sum(1 for c in para if ord(c) > 127)
+        if non_ascii < max(3, len(para) * 0.04):  # < 4% non-ASCII = English-heavy
+            return True
+        return False
+
+    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+
+    # Best signal: find paragraph that starts with "VN-Index" — content always opens there
+    _CONTENT_STARTERS = ("VN-Index", "Thị trường", "Chỉ số")
+    for i, para in enumerate(paragraphs):
+        if any(para.startswith(s) for s in _CONTENT_STARTERS):
+            # Take up to 3 consecutive content paragraphs from here
+            content_paras = [p for p in paragraphs[i:i + 5] if not _looks_like_reasoning(p)]
+            return "\n\n".join(content_paras[:3]).strip()
+
+    # Fallback: first non-reasoning paragraph
+    for i, para in enumerate(paragraphs):
+        if not _looks_like_reasoning(para):
+            return "\n\n".join(paragraphs[i:]).strip()
+
+    # Last resort: last substantial paragraph
+    substantial = [p for p in paragraphs if len(p) >= 30]
+    return substantial[-1].strip() if substantial else text
+
+
 # ── Node 2: compose_outlook ───────────────────────────────────────────────────
 
 def compose_outlook(state: MarketBriefState) -> dict:
@@ -379,7 +536,11 @@ def compose_outlook(state: MarketBriefState) -> dict:
     system_prompt = (
         "Bạn là chuyên gia phân tích kỹ thuật chứng khoán Việt Nam. "
         "Viết phần nhận định ngắn gọn, chuyên nghiệp, đúng thực tế. "
-        "KHÔNG tự bịa số liệu. Dùng đúng các số đã cung cấp."
+        "KHÔNG tự bịa số liệu. Dùng đúng các số đã cung cấp. "
+        "TUYỆT ĐỐI không viết quá trình suy nghĩ, không ghi chú nội bộ, "
+        "không giải thích bước phân tích, không nói 'Chuẩn bị', 'Lưu ý', 'Dữ liệu cung cấp', "
+        "không nhắc đến việc 'xử lý' hay 'kiểm tra' dữ liệu. "
+        "Output chỉ gồm nội dung nhận định thuần túy — viết như bài đăng mạng xã hội chuyên nghiệp."
     )
 
     user_prompt = f"""Dữ liệu phiên hôm nay:
@@ -400,12 +561,9 @@ Nhận định CTCK:
 
 Tin tức: {news}
 
-Viết phần 🎯 NHẬN ĐỊNH PHIÊN HÔM NAY (2-3 đoạn văn):
-- Đoạn 1: nhận xét kỹ thuật dựa trên chỉ báo và mẫu nến ở trên.
-- Đoạn 2: kịch bản hợp lý + nhóm cổ phiếu đáng chú ý.
-- Đoạn 3 (tuỳ chọn): lời khuyên quản trị rủi ro.
-
-Viết thẳng phần nhận định, không cần tiêu đề lại."""
+Yêu cầu: Viết 2-3 đoạn nhận định ngắn gọn (kỹ thuật → kịch bản → rủi ro). Mỗi đoạn tối đa 3-4 câu. Không dùng tiêu đề đoạn như "Đoạn 1:", "Kỹ thuật:", "Kịch bản:", "Nội dung:". Viết liền mạch như bài đăng mạng xã hội.
+Bắt buộc: Bắt đầu phần trả lời bằng đúng dòng: ###NHẬN ĐỊNH###
+Sau đó viết thẳng nội dung. Không thêm chú thích, kiểm tra, hay bình luận sau nội dung."""
 
     t0 = time.perf_counter()
     try:
@@ -421,10 +579,11 @@ Viết thẳng phần nhận định, không cần tiêu đề lại."""
 
         resp = client.generate(
             [_Msg(role="user", content=user_prompt)],
-            max_tokens=600,
+            max_tokens=2000,
+            temperature=0.0,
             system=system_prompt,
         )
-        outlook_text = resp.text.strip()
+        outlook_text = _strip_reasoning(resp.text.strip())
         elapsed = time.perf_counter() - t0
         history_entry = {
             "step": "compose_outlook",

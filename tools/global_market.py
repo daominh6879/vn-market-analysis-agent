@@ -35,19 +35,29 @@ def get_global_indices() -> ToolResult:
                               message="yfinance returned no data for world indices.")
 
         close = raw["Close"] if "Close" in raw else raw.get("close", raw)
-        close = close.dropna(how="all").tail(2)
+        close = close.dropna(how="all")
 
-        if len(close) < 2:
+        if close.empty:
             return ToolResult(status="no_data", data=None,
                               message="Insufficient history for world indices.")
+
+        # Log the date range actually returned — helps diagnose stale/wrong-day data
+        import sys
+        if not close.empty:
+            sys.stderr.write(
+                f"[get_global_indices] yfinance dates: {list(close.index.astype(str))}\n"
+            )
 
         results = []
         lines = []
         for yf_ticker, display_name in WORLD_INDICES.items():
             if yf_ticker not in close.columns:
                 continue
-            prev = float(close[yf_ticker].iloc[-2])
-            curr = float(close[yf_ticker].iloc[-1])
+            col = close[yf_ticker].dropna().tail(2)
+            if len(col) < 2:
+                continue
+            prev = float(col.iloc[-2])
+            curr = float(col.iloc[-1])
             if prev == 0:
                 continue
             pct = round((curr - prev) / prev * 100, 2)
@@ -57,6 +67,7 @@ def get_global_indices() -> ToolResult:
                 "name": display_name,
                 "close": round(curr, 2),
                 "change_pct": pct,
+                "date": str(col.index[-1].date()) if hasattr(col.index[-1], "date") else str(col.index[-1])[:10],
             })
             lines.append(f"• {display_name}: {curr:,.2f} ({sign}{pct:.2f}%)")
 
@@ -87,9 +98,9 @@ def get_commodities() -> ToolResult:
                               message="yfinance returned no commodity data.")
 
         close = raw["Close"] if "Close" in raw else raw
-        close = close.dropna(how="all").tail(2)
+        close = close.dropna(how="all")
 
-        if len(close) < 2:
+        if close.empty:
             return ToolResult(status="no_data", data=None,
                               message="Insufficient history for commodities.")
 
@@ -98,8 +109,11 @@ def get_commodities() -> ToolResult:
         for yf_ticker, meta in COMMODITIES.items():
             if yf_ticker not in close.columns:
                 continue
-            prev = float(close[yf_ticker].iloc[-2])
-            curr = float(close[yf_ticker].iloc[-1])
+            col = close[yf_ticker].dropna().tail(2)
+            if len(col) < 2:
+                continue
+            prev = float(col.iloc[-2])
+            curr = float(col.iloc[-1])
             if prev == 0:
                 continue
             pct = round((curr - prev) / prev * 100, 2)
@@ -196,19 +210,27 @@ def get_crypto_prices() -> ToolResult:
 
 def get_fx_rates() -> ToolResult:
     """
-    Fetch USD/VND exchange rates from Vietcombank.
-    Returns buy, sell, transfer rates.
+    Fetch USD/VND exchange rates: SBV central rate + Vietcombank commercial rates.
+    Returns buy, sell, transfer, and central_rate (None if SBV unavailable).
     """
     try:
-        from data.fx_scraper import fetch_vcb_usdvnd
+        from data.fx_scraper import fetch_vcb_usdvnd, fetch_sbv_central_rate
         data = fetch_vcb_usdvnd()
         if data is None:
             return ToolResult(status="no_data", data=None,
                               message="Không lấy được tỷ giá USD/VND từ Vietcombank.")
-        msg = (
-            f"USD/VND — VCB mua: {data['buy']:,.0f} | bán: {data['sell']:,.0f} | "
+
+        central = fetch_sbv_central_rate()
+        data["central_rate"] = central
+
+        lines = []
+        if central:
+            lines.append(f"Tỷ giá trung tâm (SBV): {central:,.0f} VND/USD")
+        lines.append(
+            f"Vietcombank — mua: {data['buy']:,.0f} | bán: {data['sell']:,.0f} | "
             f"CK: {data['transfer']:,.0f} VND"
         )
+        msg = "\n".join(lines)
         return ToolResult(status="ok", data=data, message=msg)
     except Exception as e:
         return ToolResult(status="upstream_error", data=None,

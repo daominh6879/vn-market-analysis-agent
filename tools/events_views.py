@@ -16,13 +16,17 @@ from tools.result import ToolResult
 def get_corporate_events(
     ticker: Optional[str] = None,
     days_ahead: int = 7,
+    days_back: int = 0,
 ) -> ToolResult:
     """
     Query upcoming corporate events from corporate_events table.
 
     Args:
         ticker:     filter by ticker; None = all tickers.
-        days_ahead: window in calendar days from today.
+        days_ahead: window in calendar days from today (forward).
+        days_back:  how many days before today to include (default 0 = today only as start).
+                    Use days_back=1 to catch same-day ex_date events that may have been
+                    stored with yesterday's date.
 
     Returns ToolResult with data as list[dict] and formatted message.
     """
@@ -30,9 +34,10 @@ def get_corporate_events(
         from data.db import get_conn
 
         today = date.today()
+        from_date = today - timedelta(days=days_back)
         until = today + timedelta(days=days_ahead)
 
-        params: list = [today, until]
+        params: list = [from_date, until]
         where = "ex_date BETWEEN %s AND %s"
         if ticker:
             where += " AND ticker = %s"

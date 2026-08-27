@@ -51,7 +51,7 @@ def fetch_and_upsert(index_code: str, days: int = _DEFAULT_DAYS) -> int:
             "change_pts":      change_pts,
             "change_pct":      change_pct,
             "matched_volume":  int(row.get("volume", 0)),
-            "matched_value":   0.0,  # SSI OHLCV chart doesn't expose total exchange value
+            "matched_value":   float(row.get("accumulated_value_vnd", 0)),
             "foreign_net":     0.0,
         })
         prev_close = close

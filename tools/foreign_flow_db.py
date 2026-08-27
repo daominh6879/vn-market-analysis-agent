@@ -94,13 +94,22 @@ def query_top_foreign(
         return None
 
 
-def query_latest_foreign_date() -> Optional[date_type]:
-    """Return most recent date in foreign_flows, or None if table empty."""
+def query_latest_foreign_date(as_of_date: Optional[str] = None) -> Optional[date_type]:
+    """Return most recent date in foreign_flows <= as_of_date (or None if table empty).
+
+    as_of_date: ISO string 'YYYY-MM-DD'. If None, returns absolute MAX(date).
+    """
     try:
         from core.db import get_conn
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT MAX(date) FROM foreign_flows")
+                if as_of_date:
+                    cur.execute(
+                        "SELECT MAX(date) FROM foreign_flows WHERE date <= %s",
+                        (as_of_date,),
+                    )
+                else:
+                    cur.execute("SELECT MAX(date) FROM foreign_flows")
                 row = cur.fetchone()
         return row[0] if row and row[0] else None
     except Exception as e:

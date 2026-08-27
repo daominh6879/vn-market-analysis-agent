@@ -398,6 +398,23 @@ from pipeline.assets_ohlcv import (
     ohlcv_ingest_job,
     ohlcv_ingest_schedule,
 )
+from pipeline.assets_index import (
+    market_index_daily_ingest,
+    global_quotes_ingest,
+    market_index_ingest_job,
+    market_index_ingest_schedule,
+)
+from pipeline.assets_market_brief import (
+    foreign_flows_ingest,
+    corporate_events_ingest,
+    daily_brief,
+    foreign_flows_job,
+    corporate_events_job,
+    daily_brief_job,
+    foreign_flows_schedule,
+    corporate_events_schedule,
+    daily_brief_schedule,
+)
 
 ingestion_job = define_asset_job(
     name="ingestion_job",
@@ -583,13 +600,19 @@ defs = Definitions(
     assets=[raw_pdf, parsed_doc, embeddings, financial_facts, delete_doc,
             news_raw, news_indexed, news_purge,
             vnstock_financials, vnstock_prices,
-            ohlcv_daily_ingest],
+            ohlcv_daily_ingest,
+            market_index_daily_ingest, global_quotes_ingest,
+            foreign_flows_ingest, corporate_events_ingest, daily_brief],
     jobs=[ingestion_job, ingestion_full_rebuild_job, delete_job,
           news_job, news_purge_job,
           vnstock_financials_job, vnstock_prices_job,
-          ohlcv_ingest_job],
+          ohlcv_ingest_job,
+          market_index_ingest_job,
+          foreign_flows_job, corporate_events_job, daily_brief_job],
     schedules=[daily_schedule, news_schedule, news_purge_schedule,
                vnstock_financials_schedule, vnstock_prices_schedule,
-               ohlcv_ingest_schedule],
+               ohlcv_ingest_schedule,
+               market_index_ingest_schedule,
+               foreign_flows_schedule, corporate_events_schedule, daily_brief_schedule],
     sensors=[minio_new_pdf_sensor],
 )

@@ -44,22 +44,59 @@ def query_index(index_code: str, days: int) -> Optional[pd.DataFrame]:
         return None
 
 
-def query_index_latest(index_code: str) -> Optional[dict]:
-    """Return most recent row as dict, or None."""
-    df = query_index(index_code, days=1)
-    if df is None or df.empty:
+def query_index_latest(index_code: str, as_of_date: Optional[str] = None) -> Optional[dict]:
+    """
+    Return most recent row for index_code as dict, or None.
+    as_of_date: ISO date string (YYYY-MM-DD) — return latest row <= that date.
+                None (default) returns the absolute latest row.
+    """
+    try:
+        from core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                if as_of_date:
+                    cur.execute(
+                        """
+                        SELECT date, open, high, low, close,
+                               change_pts, change_pct, matched_value, matched_volume, foreign_net
+                        FROM market_index_daily
+                        WHERE index_code = %s AND date < %s
+                        ORDER BY date DESC
+                        LIMIT 1
+                        """,
+                        (index_code.upper(), as_of_date),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT date, open, high, low, close,
+                               change_pts, change_pct, matched_value, matched_volume, foreign_net
+                        FROM market_index_daily
+                        WHERE index_code = %s
+                        ORDER BY date DESC
+                        LIMIT 1
+                        """,
+                        (index_code.upper(),),
+                    )
+                row = cur.fetchone()
+        if not row:
+            return None
+        cols = ["time", "open", "high", "low", "close",
+                "change_pts", "change_pct", "matched_value", "matched_volume", "foreign_net"]
+        d = dict(zip(cols, row))
+        return {
+            "index_code": index_code.upper(),
+            "date": str(d["time"]),
+            "close": float(d["close"]),
+            "change_pts": float(d["change_pts"]),
+            "change_pct": float(d["change_pct"]),
+            "matched_value": float(d["matched_value"]),
+            "matched_volume": int(d["matched_volume"]),
+            "foreign_net": float(d["foreign_net"]),
+        }
+    except Exception as e:
+        sys.stderr.write(f"[index_db] query_index_latest({index_code}) failed: {e}\n")
         return None
-    row = df.iloc[-1]
-    return {
-        "index_code": index_code.upper(),
-        "date": str(row["time"]),
-        "close": float(row["close"]),
-        "change_pts": float(row["change_pts"]),
-        "change_pct": float(row["change_pct"]),
-        "matched_value": float(row["matched_value"]),
-        "matched_volume": int(row["matched_volume"]),
-        "foreign_net": float(row["foreign_net"]),
-    }
 
 
 def upsert_index_rows(rows: list[dict]) -> int:

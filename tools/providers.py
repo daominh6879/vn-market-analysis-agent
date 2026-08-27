@@ -268,61 +268,67 @@ class YFinanceProvider(PriceProvider):
         return hist[["time", "open", "high", "low", "close", "volume"]].tail(days).reset_index(drop=True)
 
 
-# ── SsiIndexProvider ──────────────────────────────────────────────────────────
+# ── SsiIndexProvider (now backed by VCI) ─────────────────────────────────────
+#
+# SSI iBoard API (iboard-query.ssi.com.vn/v2/stock/second-chart) returns 404
+# for all paths as of 2026-08. VCI's OHLCChart endpoint serves VNINDEX/VN30/HNX
+# with the same columnar format as stock tickers, plus accumulatedValue (triệu VND).
 
-# VN broad indices available via SSI iBoard history endpoint.
 _SSI_INDEX_CODES = frozenset({"VNINDEX", "VN30", "HNX", "HNX30", "UPCOM"})
 
 
 class SsiIndexProvider(PriceProvider):
     """
-    Fetch real VNINDEX/HNX/UPCOM OHLCV from SSI iBoard.
-    Endpoint: https://iboard-query.ssi.com.vn/v2/stock/second-chart
-    Returns VND points (not price, but same DataFrame shape for compatibility).
+    Fetch VNINDEX/HNX/UPCOM OHLCV via VCI OHLCChart endpoint (same as VciDirectProvider).
+    Returns DataFrame with extra column `accumulated_value_vnd` (raw VND) for matched value.
     """
 
-    _URL = "https://iboard-query.ssi.com.vn/v2/stock/second-chart"
+    _URL = "https://trading.vietcap.com.vn/api/chart/OHLCChart/gap-chart"
     _HEADERS = {
+        "Content-Type": "application/json",
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/124.0.0.0 Safari/537.36"
         ),
-        "Referer": "https://iboard.ssi.com.vn/",
-        "Origin": "https://iboard.ssi.com.vn",
     }
 
     def _fetch_ohlcv(self, symbol: str, count_back: int) -> pd.DataFrame:
         import httpx
 
-        to_ts = int(datetime.now().timestamp())
-        # SSI uses Unix timestamps; 86400 * (count_back + 20) gives enough buffer
-        from_ts = to_ts - 86400 * (count_back + 30)
-        params = {
-            "symbol": symbol.upper(),
-            "resolution": "1D",
-            "from": from_ts,
-            "to": to_ts,
+        payload = {
+            "timeFrame": "ONE_DAY",
+            "symbols": [symbol.upper()],
+            "to": int(datetime.now().timestamp()),
+            "countBack": count_back,
         }
-        resp = httpx.get(self._URL, params=params, headers=self._HEADERS, timeout=15)
+        resp = httpx.post(self._URL, json=payload, headers=self._HEADERS, timeout=15)
         resp.raise_for_status()
         data = resp.json()
 
-        # SSI returns {data: {t:[...], o:[...], h:[...], l:[...], c:[...], v:[...]}}
-        inner = data.get("data") or data
-        if not inner or not inner.get("t"):
-            raise ValueError(f"No data from SSI iBoard for '{symbol}'")
+        if isinstance(data, dict) and "data" in data:
+            data = data["data"]
+        if not data:
+            raise ValueError(f"No data from VCI for index '{symbol}'")
+
+        item = data[0]
+        if not item.get("t"):
+            raise ValueError(f"Empty timeseries from VCI for index '{symbol}'")
+
+        # accumulatedValue unit: triệu VND → multiply by 1e6 for raw VND
+        acc_vals = item.get("accumulatedValue") or []
 
         rows = [
             {
-                "time":   datetime.fromtimestamp(int(ts)).strftime("%Y-%m-%d"),
-                "open":   inner["o"][i],
-                "high":   inner["h"][i],
-                "low":    inner["l"][i],
-                "close":  inner["c"][i],
-                "volume": inner["v"][i],
+                "time":                   datetime.fromtimestamp(int(ts)).strftime("%Y-%m-%d"),
+                "open":                   item["o"][i],
+                "high":                   item["h"][i],
+                "low":                    item["l"][i],
+                "close":                  item["c"][i],
+                "volume":                 item["v"][i],
+                "accumulated_value_vnd":  float(acc_vals[i]) * 1_000_000 if i < len(acc_vals) else 0.0,
             }
-            for i, ts in enumerate(inner["t"])
+            for i, ts in enumerate(item["t"])
         ]
         df = pd.DataFrame(rows)
         return df.sort_values("time").drop_duplicates(subset=["time"]).reset_index(drop=True)
@@ -330,13 +336,13 @@ class SsiIndexProvider(PriceProvider):
     def fetch_price(self, ticker: str) -> float:
         df = self._fetch_ohlcv(ticker, count_back=5)
         if df.empty:
-            raise ValueError(f"No price from SSI for '{ticker}'")
+            raise ValueError(f"No price from VCI index for '{ticker}'")
         return float(df["close"].iloc[-1])
 
     def fetch_history(self, ticker: str, days: int) -> pd.DataFrame:
         df = self._fetch_ohlcv(ticker, count_back=days + 10)
         if df.empty:
-            raise ValueError(f"No history from SSI for '{ticker}'")
+            raise ValueError(f"No history from VCI index for '{ticker}'")
         return df.tail(days).reset_index(drop=True)
 
 

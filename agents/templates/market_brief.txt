@@ -26,7 +26,7 @@
 
 4️⃣ {news_text}
 
-5️⃣ Lịch quyền: {events_text}
+5️⃣ Sự kiện: {events_text}
 
 🎯 NHẬN ĐỊNH PHIÊN HÔM NAY
 {outlook_text}

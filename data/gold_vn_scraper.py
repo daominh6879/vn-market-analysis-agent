@@ -1,29 +1,91 @@
 """
-data/gold_vn_scraper.py — Scrape SJC gold buy/sell prices (VND/lượng).
+data/gold_vn_scraper.py — Scrape SJC gold buy/sell prices (triệu đồng/lượng).
 
-Source: https://sjc.com.vn/xml/tygiavang.xml
+Primary source : https://giavang.org/  (aggregator — 200 OK, class="gold-price")
+Fallback       : SJC XML feed          (https://sjc.com.vn/xml/tygiavang.xml)
+                 — as of 2026-08 SJC blocks all IPs with 403; kept as last resort.
+
 Returns dict with keys: buy_vnd, sell_vnd, timestamp (ISO), source.
 Non-fatal: returns None on any error.
 """
 
 from __future__ import annotations
 
+import re
 import sys
 from datetime import datetime
 from typing import Optional
 
 
-def fetch_sjc_gold() -> Optional[dict]:
+def _parse_trieuong(raw: str) -> Optional[float]:
     """
-    Fetch SJC gold prices from public XML feed.
-    Returns:
-        {
-            "buy_vnd": float,   # triệu đồng/lượng (e.g. 147.6)
-            "sell_vnd": float,  # triệu đồng/lượng (e.g. 150.6)
-            "timestamp": str,   # ISO datetime
-            "source": "sjc",
+    Parse VN-formatted gold price to triệu đồng/lượng.
+    Formats seen:
+      "147.000 x1000đ/lượng"  → 147.000 × 1000 đ = 147 triệu
+      "147600000"              → raw VND → /1_000_000
+      "147,600,000"            → raw VND → /1_000_000
+    """
+    num_str = re.sub(r'[^\d]', '', raw.split()[0] if raw.split() else raw)
+    if not num_str:
+        return None
+    val = float(num_str)
+    # If <= 1000: already in triệu (shouldn't happen, guard)
+    if val <= 1_000:
+        return val
+    # If 3-6 digits with x1000đ unit context → val × 1000 / 1_000_000 = val / 1000
+    if val <= 999_999:
+        return round(val / 1_000, 1)
+    # Otherwise raw VND (9 digits)
+    return round(val / 1_000_000, 1)
+
+
+def _fetch_giavang_org() -> Optional[dict]:
+    """
+    Scrape https://giavang.org/ for SJC 1-lượng buy/sell.
+    HTML structure (stable):
+      <span class="gold-price">147.000 <small class="gold-unit">x1000đ/lượng</small></span>
+    First occurrence = buy (mua vào), second = sell (bán ra).
+    """
+    try:
+        import httpx
+        resp = httpx.get(
+            "https://giavang.org/",
+            timeout=10,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+            follow_redirects=True,
+        )
+        resp.raise_for_status()
+
+        prices = re.findall(
+            r'<span\s+class="gold-price">\s*([\d\.]+)\s*<small\s+class="gold-unit">x1000',
+            resp.text,
+        )
+        if len(prices) < 2:
+            sys.stderr.write(
+                f"[gold_vn_scraper] giavang.org: expected ≥2 gold-price spans, got {len(prices)}\n"
+            )
+            return None
+
+        buy_raw, sell_raw = prices[0], prices[1]
+        # "147.000" → 147000 (VN dot = thousands sep); unit = x1000đ → ×1000 / 1e6 = triệu
+        buy_vnd = float(buy_raw.replace(".", "")) / 1_000
+        sell_vnd = float(sell_raw.replace(".", "")) / 1_000
+
+        return {
+            "buy_vnd": round(buy_vnd, 1),
+            "sell_vnd": round(sell_vnd, 1),
+            "timestamp": datetime.now().isoformat(),
+            "source": "giavang.org",
         }
-    or None on error.
+    except Exception as e:
+        sys.stderr.write(f"[gold_vn_scraper] giavang.org failed: {e}\n")
+        return None
+
+
+def _fetch_sjc_xml() -> Optional[dict]:
+    """
+    Fallback: SJC public XML feed.
+    Blocked with 403 as of 2026-08 — kept for future recovery.
     """
     try:
         import httpx
@@ -37,18 +99,13 @@ def fetch_sjc_gold() -> Optional[dict]:
         resp.raise_for_status()
         root = ET.fromstring(resp.content)
 
-        # SJC XML structure: <root><item type="SJC" khu_vuc="TP.HCM" buy="..." sell="..."/></root>
-        # Find HCM SJC 1-lượng row
         for item in root.findall(".//item"):
-            name = (item.get("name") or item.get("type") or "").lower()
-            buy_raw  = item.get("buy")  or item.get("gia_mua") or ""
+            buy_raw = item.get("buy") or item.get("gia_mua") or ""
             sell_raw = item.get("sell") or item.get("gia_ban") or ""
             if not buy_raw or not sell_raw:
                 continue
-            # SJC returns prices in VND (e.g. "147,600,000" or "147600000")
             buy_vnd = float(buy_raw.replace(",", "").replace(".", ""))
             sell_vnd = float(sell_raw.replace(",", "").replace(".", ""))
-            # Convert to triệu đồng
             if buy_vnd > 1_000_000:
                 buy_vnd /= 1_000_000
                 sell_vnd /= 1_000_000
@@ -59,11 +116,29 @@ def fetch_sjc_gold() -> Optional[dict]:
                 "source": "sjc",
             }
 
-        sys.stderr.write("[gold_vn_scraper] No matching SJC item found in XML\n")
+        sys.stderr.write("[gold_vn_scraper] SJC XML: no item found\n")
         return None
     except Exception as e:
-        sys.stderr.write(f"[gold_vn_scraper] fetch_sjc_gold failed: {e}\n")
+        sys.stderr.write(f"[gold_vn_scraper] SJC XML failed: {e}\n")
         return None
+
+
+def fetch_sjc_gold() -> Optional[dict]:
+    """
+    Public interface — try giavang.org first, fall back to SJC XML.
+    Returns:
+        {
+            "buy_vnd":   float,  # triệu đồng/lượng  e.g. 147.0
+            "sell_vnd":  float,  # triệu đồng/lượng  e.g. 150.0
+            "timestamp": str,    # ISO datetime
+            "source":    str,    # "giavang.org" | "sjc"
+        }
+    or None if all sources fail.
+    """
+    result = _fetch_giavang_org()
+    if result is not None:
+        return result
+    return _fetch_sjc_xml()
 
 
 def gold_vnd_per_oz(gold_world_usd: float, usd_vnd: float) -> float:
