@@ -1,0 +1,36 @@
+📰 ĐỌC GÌ TRƯỚC GIỜ THỊ TRƯỜNG MỞ CỬA - {date_display}
+
+🌍 THỊ TRƯỜNG THẾ GIỚI QUA ĐÊM
+
+{world_block}
+
+💛 VÀNG & DẦU
+
+{gold_oil_block}
+
+₿ Bitcoin, Ethereum, XRP & SOL
+
+{crypto_block}
+
+💵 TỶ GIÁ
+
+{fx_block}
+
+📌 TIN ĐÁNG CHÚ Ý HÔM NAY
+
+1️⃣ {vn_index_text}
+
+2️⃣ Độ rộng thị trường: {breadth_text}. {movers_text}
+
+3️⃣ Khối ngoại: {foreign_text}
+
+4️⃣ {news_text}
+
+5️⃣ Lịch quyền: {events_text}
+
+🎯 NHẬN ĐỊNH PHIÊN HÔM NAY
+{outlook_text}
+
+⚠️ Thông tin mang tính tham khảo, không phải khuyến nghị đầu tư.
+
+#VNIndex #ChungKhoan #ThiTruong #VnindexAi #vnindexhomnay

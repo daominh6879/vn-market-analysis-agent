@@ -128,6 +128,19 @@ TOOL_REGISTRY: dict[str, dict] = {
         "cost_hint": "free",
         "side_effect": False,
     },
+    # ── Phase 5: corporate events + broker views ─────────────────────────────
+    "get_corporate_events": {
+        "version": "1.0",
+        "timeout": 10,
+        "cost_hint": "free",
+        "side_effect": False,
+    },
+    "get_broker_views": {
+        "version": "1.0",
+        "timeout": 10,
+        "cost_hint": "free",
+        "side_effect": False,
+    },
 }
 
 
