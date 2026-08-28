@@ -91,18 +91,29 @@ def build_collection_name(ticker: str, version: str, strategy: str, has_meta: bo
 
 # ── Embedding ─────────────────────────────────────────────────────────────────
 
+def _embed_one(text: str, model: str) -> list[float]:
+    """Embed single text, trying /api/embed (Ollama >= 0.1.31) then /api/embeddings."""
+    for path, payload in (
+        ("/api/embed",       {"model": model, "input": text}),
+        ("/api/embeddings",  {"model": model, "prompt": text}),
+    ):
+        r = httpx.post(f"{OLLAMA_URL}{path}", json=payload, timeout=120)
+        if r.status_code == 404:
+            continue
+        r.raise_for_status()
+        data = r.json()
+        vec = data.get("embedding") or (data.get("embeddings") or [[]])[0]
+        if vec:
+            return vec
+    raise httpx.HTTPError("Ollama embed failed on both /api/embed and /api/embeddings")
+
+
 def embed_batch(texts: list[str], model: str, batch_size: int = 20) -> list[list[float]]:
     vecs: list[list[float]] = []
     for i in range(0, len(texts), batch_size):
         batch = texts[i : i + batch_size]
         for text in batch:
-            r = httpx.post(
-                f"{OLLAMA_URL}/api/embeddings",
-                json={"model": model, "prompt": text},
-                timeout=120,
-            )
-            r.raise_for_status()
-            vecs.append(r.json()["embedding"])
+            vecs.append(_embed_one(text, model))
         print(f"  embedded {min(i + batch_size, len(texts))}/{len(texts)}", end="\r")
     print()
     return vecs
@@ -165,7 +176,7 @@ def index_chunks(
         PointStruct(
             id=uuid.uuid5(_CHUNK_NS, f"{doc_id}_{i:04d}"),
             vector=vecs[i],
-            payload={"text": chunks[i], "idx": i, "doc_id": doc_id},
+            payload={"text": chunks[i], "idx": i, "doc_id": doc_id, **(meta or {})},
         )
         for i in range(len(chunks))
     ]

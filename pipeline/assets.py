@@ -55,8 +55,29 @@ def _bucket(cfg: IngestionConfig) -> str:
 
 
 def _collection(cfg: IngestionConfig) -> str:
-    """Mỗi ticker có collection riêng: hpg_structural, vcb_structural, ..."""
-    return f"{cfg.ticker.lower()}_{cfg.chunk_strategy}"
+    """Single shared collection for all tickers. Ticker stored as payload metadata."""
+    return "bctc_structural"
+
+
+_sector_cache: dict[str, str] = {}
+
+
+def _sector(ticker: str) -> str:
+    """Fetch sector from securities table. Cached per process. Falls back to 'other'."""
+    t = ticker.upper()
+    if t in _sector_cache:
+        return _sector_cache[t]
+    try:
+        from core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT sector FROM securities WHERE ticker = %s", (t,))
+                row = cur.fetchone()
+        sector = row[0].lower().strip() if row and row[0] else "other"
+    except Exception:
+        sector = "other"
+    _sector_cache[t] = sector
+    return sector
 
 
 # ── MinIO client helper ───────────────────────────────────────────────────────
@@ -216,7 +237,7 @@ def parsed_doc(
 
         except Exception as exc:
             context.log.error(f"Parse FAIL: {key} — {exc}")
-            raise
+            continue
         finally:
             Path(tmp_path).unlink(missing_ok=True)
 
@@ -247,12 +268,30 @@ def embeddings(
     for doc in parsed_doc:
         context.log.info(f"Indexing: {doc['key']} (doc_id={doc['doc_id']})")
 
+        # Guard: reject if filename explicitly contains ANOTHER ticker separated by underscores/dashes.
+        # Catches mis-configured runs like FPT PDF indexed with ticker="HPG".
+        # Pattern: YYYYMMDD_-_TICKER_-_BCTC... — check the segment between first pair of _-_
+        ticker_upper = config.ticker.upper()
+        import re as _re
+        fname = doc["key"].split("/")[-1].upper()
+        # Extract ticker from filename segment: anything between _-_ separators
+        m = _re.search(r'_-_([A-Z0-9]{2,6})_-_', fname)
+        if m:
+            fname_ticker = m.group(1)
+            if fname_ticker != ticker_upper:
+                context.log.warning(
+                    f"TICKER MISMATCH: config.ticker={ticker_upper} but filename ticker={fname_ticker} "
+                    f"in {doc['key']} — skipping to prevent data contamination."
+                )
+                continue
+
         # Nếu cùng source_uri đã được index với doc_id khác (file update),
         # xóa chunk cũ trước để tránh tích lũy.
         _delete_old_chunks_by_uri(qdrant, _collection(config), doc["key"], doc["doc_id"], context)
 
         meta = {
-            "ticker": config.ticker,
+            "ticker": config.ticker.upper(),
+            "sector": _sector(config.ticker),
             "year": config.period,
             "report_type": config.report_type,
             "source_key": doc["key"],
@@ -275,49 +314,6 @@ def embeddings(
     context.log.info(f"embeddings: {total_indexed} docs, {total_chunks} chunks")
     return {"indexed": total_indexed, "total_chunks": total_chunks}
 
-
-# ── Asset 3b: financial_facts ─────────────────────────────────────────────────
-
-@asset(
-    group_name="ingestion",
-    description="LLM extract số liệu tài chính → validate → Postgres. Song song với embeddings.",
-    retry_policy=RetryPolicy(max_retries=2, delay=20),
-)
-def financial_facts(
-    context: AssetExecutionContext,
-    config: IngestionConfig,
-    parsed_doc: list[dict],       # nhận output từ asset parsed_doc
-) -> dict:
-    """Trả {"extracted": int, "total_facts": int}."""
-    from ingest.extract_facts import extract_facts_from_markdown, validate_facts, insert_facts
-
-    total_extracted = 0
-    total_facts = 0
-
-    for doc in parsed_doc:
-        context.log.info(f"Extracting facts: {doc['key']}")
-        try:
-            facts = extract_facts_from_markdown(
-                markdown=doc["markdown"],
-                ticker=config.ticker,
-                period=config.period,
-                report_type=config.report_type,
-                source_file=doc["key"],
-            )
-            errors = validate_facts(facts)
-            for e in errors:
-                context.log.warning(f"  [WARN] {e.type}: {e.message}")
-
-            n = insert_facts(facts)
-            total_facts += n
-            total_extracted += 1
-            context.log.info(f"  → {n} facts")
-        except Exception as exc:
-            context.log.error(f"Extract FAIL: {doc['key']} — {exc}")
-            raise
-
-    context.log.info(f"financial_facts: {total_extracted} docs, {total_facts} facts")
-    return {"extracted": total_extracted, "total_facts": total_facts}
 
 
 # ── Config xóa ───────────────────────────────────────────────────────────────
@@ -387,7 +383,7 @@ def delete_doc(context: AssetExecutionContext, config: DeleteConfig) -> dict:
 
 # ── Jobs ──────────────────────────────────────────────────────────────────────
 
-from pipeline.assets_news import news_raw, news_indexed, news_purge
+from pipeline.assets_news import news_raw, fireant_news, cafef_ticker_news, news_indexed, news_purge
 from pipeline.assets_vnstock import (
     vnstock_financials, vnstock_prices,
     vnstock_financials_job, vnstock_prices_job,
@@ -418,7 +414,7 @@ from pipeline.assets_market_brief import (
 
 ingestion_job = define_asset_job(
     name="ingestion_job",
-    selection=[raw_pdf, parsed_doc, embeddings, financial_facts],
+    selection=[raw_pdf, parsed_doc, embeddings],
 )
 
 delete_job = define_asset_job(
@@ -428,13 +424,12 @@ delete_job = define_asset_job(
 
 ingestion_full_rebuild_job = define_asset_job(
     name="ingestion_full_rebuild_job",
-    selection=[raw_pdf, parsed_doc, embeddings, financial_facts],
+    selection=[raw_pdf, parsed_doc, embeddings],
     config=RunConfig(
         ops={
             "raw_pdf": IngestionConfig(mode="full_rebuild"),
             "parsed_doc": IngestionConfig(mode="full_rebuild"),
             "embeddings": IngestionConfig(mode="full_rebuild"),
-            "financial_facts": IngestionConfig(mode="full_rebuild"),
         }
     ),
 )
@@ -450,7 +445,7 @@ daily_schedule = ScheduleDefinition(
 
 news_job = define_asset_job(
     name="news_job",
-    selection=[news_raw, news_indexed],
+    selection=[news_raw, fireant_news, cafef_ticker_news, news_indexed],
 )
 
 news_purge_job = define_asset_job(
@@ -538,7 +533,6 @@ def minio_new_pdf_sensor(context):
                                 "raw_pdf": run_cfg,
                                 "parsed_doc": run_cfg,
                                 "embeddings": run_cfg,
-                                "financial_facts": run_cfg,
                             }
                         ),
                     )
@@ -597,8 +591,8 @@ def _serialize_cursor(data: dict[str, dict[str, str]]) -> str:
 # ── Definitions ───────────────────────────────────────────────────────────────
 
 defs = Definitions(
-    assets=[raw_pdf, parsed_doc, embeddings, financial_facts, delete_doc,
-            news_raw, news_indexed, news_purge,
+    assets=[raw_pdf, parsed_doc, embeddings, delete_doc,
+            news_raw, fireant_news, cafef_ticker_news, news_indexed, news_purge,
             vnstock_financials, vnstock_prices,
             ohlcv_daily_ingest,
             market_index_daily_ingest, global_quotes_ingest,

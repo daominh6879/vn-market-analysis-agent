@@ -1,0 +1,939 @@
+{
+  "tickers": [
+    "HPG"
+  ],
+  "collection": "bctc_structural",
+  "embed_model": "bge-m3",
+  "sample_mode": false,
+  "n_questions": 26,
+  "aggregate": {
+    "overall": {
+      "arch_a": {
+        "quality_score": 2.8846,
+        "latency_s": 5.3942,
+        "total_tokens": 1619.8846,
+        "cost_usd": 0.0007,
+        "failure_rate": 0.0
+      },
+      "arch_b": {
+        "quality_score": 2.7692,
+        "latency_s": 5.5104,
+        "total_tokens": 1726.5385,
+        "cost_usd": 0.0008,
+        "failure_rate": 0.0
+      },
+      "arch_c": {
+        "quality_score": 2.8846,
+        "latency_s": 8.1404,
+        "total_tokens": 1666.6154,
+        "cost_usd": 0.0008,
+        "failure_rate": 0.0
+      }
+    },
+    "by_group": {
+      "arch_a": {
+        "simple": {
+          "quality_score": 2.6316,
+          "latency_s": 5.6453,
+          "total_tokens": 1569.3158,
+          "cost_usd": 0.0007,
+          "failure_rate": 0.0
+        },
+        "compound": {
+          "quality_score": 5,
+          "latency_s": 5.595,
+          "total_tokens": 1355,
+          "cost_usd": 0.0007,
+          "failure_rate": 0.0
+        },
+        "multi_source": {
+          "quality_score": 3,
+          "latency_s": 4.36,
+          "total_tokens": 1918,
+          "cost_usd": 0.0007,
+          "failure_rate": 0.0
+        }
+      },
+      "arch_b": {
+        "simple": {
+          "quality_score": 2.4737,
+          "latency_s": 5.7663,
+          "total_tokens": 1709.8421,
+          "cost_usd": 0.0008,
+          "failure_rate": 0.0
+        },
+        "compound": {
+          "quality_score": 5,
+          "latency_s": 6.09,
+          "total_tokens": 1628.5,
+          "cost_usd": 0.0009,
+          "failure_rate": 0.0
+        },
+        "multi_source": {
+          "quality_score": 3,
+          "latency_s": 4.306,
+          "total_tokens": 1829.2,
+          "cost_usd": 0.0006,
+          "failure_rate": 0.0
+        }
+      },
+      "arch_c": {
+        "simple": {
+          "quality_score": 2.6316,
+          "latency_s": 7.8926,
+          "total_tokens": 1631.6316,
+          "cost_usd": 0.0008,
+          "failure_rate": 0.0
+        },
+        "compound": {
+          "quality_score": 5,
+          "latency_s": 9.44,
+          "total_tokens": 1458.5,
+          "cost_usd": 0.0008,
+          "failure_rate": 0.0
+        },
+        "multi_source": {
+          "quality_score": 3,
+          "latency_s": 8.562,
+          "total_tokens": 1882.8,
+          "cost_usd": 0.0007,
+          "failure_rate": 0.0
+        }
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "q08",
+      "group": "simple",
+      "question": "Đầu tư tài chính dài hạn (khoản đầu tư vào công ty con) của Công ty mẹ HPG tại ngày 31/12/2025 là bao nhiêu?",
+      "ground_truth": "97.018.349.440.000 VND (khoảng 97.018 tỷ đồng)",
+      "archs": {
+        "arch_a": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 10.5,
+          "total_tokens": 1774,
+          "cost_usd": 0.000819,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 6.05,
+          "total_tokens": 1983,
+          "cost_usd": 0.000904,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Đầu tư tài chính dài hạn (khoản đầu tư vào công ty con) của Công ty mẹ HPG tại ngày 31/12/2025 là bao nhiêu?\" Dựa trên tài liệu được cung cấp. Tài liệu có vẻ là trích từ báo cáo tài chính của công ty nào đó, có các dòng về \"Đầu tư vào công ty con\" với số liệu. Tuy nhiê",
+          "latency_s": 9.25,
+          "total_tokens": 1876,
+          "cost_usd": 0.000931,
+          "quality_score": 1,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q31",
+      "group": "simple",
+      "question": "Tổng tài sản của Công ty mẹ HPG tại ngày 31/12/2025 là bao nhiêu?",
+      "ground_truth": "98.670.778.691.605 VND",
+      "archs": {
+        "arch_a": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Tổng tài sản của Công ty mẹ HPG tại ngày 31/12/2025 là bao nhiêu?\" Dựa trên tài liệu được cung cấp. Tài liệu có vẻ là các trích đoạn báo cáo tài chính, nhưng không rõ ràng. Cần tìm thông tin về tổng tài sản của công ty mẹ HPG tại ngày 31/12/2025.\n\nTuy nhiên, tài liệu đ",
+          "latency_s": 6.14,
+          "total_tokens": 1544,
+          "cost_usd": 0.000842,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Tổng tài sản của Công ty mẹ HPG tại ngày 31/12/2025 là bao nhiêu?\" Dựa trên tài liệu cung cấp. Tài liệu có vẻ là các trích đoạn từ báo cáo tài chính của công ty nào đó? Nhưng tài liệu có đề cập đến \"Công ty\" với mã chứng khoán HPG. HPG là Công ty Cổ phần Hòa Phát, khôn",
+          "latency_s": 6.63,
+          "total_tokens": 1538,
+          "cost_usd": 0.00084,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 6.73,
+          "total_tokens": 1578,
+          "cost_usd": 0.000666,
+          "quality_score": 1,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q32",
+      "group": "simple",
+      "question": "Lợi nhuận sau thuế TNDN của Công ty mẹ HPG năm 2025 là bao nhiêu?",
+      "ground_truth": "14.074.169.615.158 VND",
+      "archs": {
+        "arch_a": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 4.56,
+          "total_tokens": 1529,
+          "cost_usd": 0.00061,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Lợi nhuận sau thuế TNDN của Công ty mẹ HPG năm 2025 là bao nhiêu?\" Dựa trên tài liệu được cung cấp. Tài liệu có vẻ là trích đoạn báo cáo tài chính của Hòa Phát? Có một đoạn: \"Lợi nhuận sau thuếchưa phân phối namnay|421b||14.074.189.615.158|10.247.400.472.100|be<br><|\" ",
+          "latency_s": 6.07,
+          "total_tokens": 2101,
+          "cost_usd": 0.000992,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Lợi nhuận sau thuế TNDN của Công ty mẹ HPG năm 2025 là bao nhiêu?\" Dựa trên tài liệu được cung cấp. Tài liệu có vẻ là trích từ báo cáo tài chính của một công ty, có thể là FPT, nhưng câu hỏi đề cập HPG? Có thể là nhầm lẫn. Trong tài liệu, các mục có số liệu năm 2025 và",
+          "latency_s": 8.93,
+          "total_tokens": 1802,
+          "cost_usd": 0.000911,
+          "quality_score": 1,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q33",
+      "group": "simple",
+      "question": "Vốn chủ sở hữu của Công ty mẹ HPG tại ngày 31/12/2025 là bao nhiêu?",
+      "ground_truth": "94.430.926.468.210 VND",
+      "archs": {
+        "arch_a": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 5.28,
+          "total_tokens": 1590,
+          "cost_usd": 0.000678,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 3.76,
+          "total_tokens": 1424,
+          "cost_usd": 0.000473,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 6.11,
+          "total_tokens": 1518,
+          "cost_usd": 0.000599,
+          "quality_score": 1,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q35",
+      "group": "simple",
+      "question": "Doanh thu hoạt động tài chính của Công ty mẹ HPG năm 2025 là bao nhiêu?",
+      "ground_truth": "14.347.362.462.056 VND",
+      "archs": {
+        "arch_a": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 5.09,
+          "total_tokens": 1279,
+          "cost_usd": 0.000619,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Doanh thu hoạt động tài chính của Công ty mẹ HPG năm 2025 là bao nhiêu?\" Dựa trên tài liệu cung cấp. Tài liệu có vẻ là trích từ báo cáo tài chính của FPT? Nhưng câu hỏi lại hỏi về HPG. Cần kiểm tra tài liệu có chứa thông tin về HPG không? Đoạn đầu tiên: \"Cổ phiếu của C",
+          "latency_s": 6.66,
+          "total_tokens": 1583,
+          "cost_usd": 0.000852,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 7.17,
+          "total_tokens": 1309,
+          "cost_usd": 0.000652,
+          "quality_score": 1,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q37",
+      "group": "simple",
+      "question": "Vay dài hạn của Công ty mẹ HPG tại ngày 31/12/2025 là bao nhiêu?",
+      "ground_truth": "2.859.500.000.000 VND (tại ngày 1/1/2025: không có vay dài hạn)",
+      "archs": {
+        "arch_a": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 3.94,
+          "total_tokens": 1705,
+          "cost_usd": 0.000495,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 5.86,
+          "total_tokens": 1745,
+          "cost_usd": 0.000831,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 5.64,
+          "total_tokens": 1742,
+          "cost_usd": 0.000536,
+          "quality_score": 1,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q09",
+      "group": "compound",
+      "question": "Tổng số nhân viên của Công ty mẹ HPG tại ngày 31/12/2025 là bao nhiêu người và thay đổi thế nào so với năm 2024?",
+      "ground_truth": "131 người, giảm so với 154 người năm 2024",
+      "archs": {
+        "arch_a": {
+          "answer": "Tổng số nhân viên của Công ty mẹ HPG tại ngày 31/12/2025 là **131 người**, giảm **23 người** so với năm 2024 (năm 2024: **154 người**).",
+          "latency_s": 4.99,
+          "total_tokens": 1363,
+          "cost_usd": 0.000615,
+          "quality_score": 5,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Chúng ta cần trả lời dựa trên tài liệu. Câu hỏi: \"Tổng số nhân viên của Công ty mẹ HPG tại ngày 31/12/2025 là bao nhiêu người và thay đổi thế nào so với năm 2024?\" Tài liệu có đoạn: \"Tổng số nhân viên của Công ty tại ngày 31 tháng 12 năm 2025 là 131 người (ngày 31 tháng 12 năm 2024: 154 người).\" Như",
+          "latency_s": 5.89,
+          "total_tokens": 1596,
+          "cost_usd": 0.000856,
+          "quality_score": 5,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Tổng số nhân viên của Công ty mẹ HPG tại ngày 31/12/2025 là **131 người**, giảm **23 người** so với năm 2024 (154 người).",
+          "latency_s": 9.46,
+          "total_tokens": 1545,
+          "cost_usd": 0.000816,
+          "quality_score": 5,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q10",
+      "group": "simple",
+      "question": "Hoạt động kinh doanh chính của Công ty mẹ HPG trong năm 2025 là gì?",
+      "ground_truth": "Kinh doanh dịch vụ cho thuê văn phòng, quảng cáo, dịch vụ tư vấn quản lý và đầu tư tài chính",
+      "archs": {
+        "arch_a": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 5.16,
+          "total_tokens": 955,
+          "cost_usd": 0.000528,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Hoạt động kinh doanh chính của Công ty (mã HPG) trong năm là: **kinh doanh dịch vụ cho thuê văn phòng, quảng cáo, dịch vụ tư vấn quản lý và đầu tư tài chính**.",
+          "latency_s": 5.95,
+          "total_tokens": 1191,
+          "cost_usd": 0.000713,
+          "quality_score": 5,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 6.21,
+          "total_tokens": 842,
+          "cost_usd": 0.000403,
+          "quality_score": 1,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q11",
+      "group": "simple",
+      "question": "HPG niêm yết trên sàn giao dịch chứng khoán nào, với mã gì và từ ngày nào?",
+      "ground_truth": "Sở Giao dịch Chứng khoán TP. Hồ Chí Minh (HOSE), mã chứng khoán HPG, từ ngày 15 tháng 11 năm 2007",
+      "archs": {
+        "arch_a": {
+          "answer": "Theo tài liệu, cổ phiếu của Công ty được niêm yết trên Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh (HOSE) với mã chứng khoán là HPG từ ngày 15 tháng 11 năm 2007.",
+          "latency_s": 3.88,
+          "total_tokens": 1343,
+          "cost_usd": 0.000515,
+          "quality_score": 5,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Theo tài liệu, cổ phiếu của Công ty được niêm yết trên Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh (HOSE) với mã chứng khoán là HPG từ ngày 15 tháng 11 năm 2007.",
+          "latency_s": 4.45,
+          "total_tokens": 1602,
+          "cost_usd": 0.000597,
+          "quality_score": 5,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Theo tài liệu: Cổ phiếu của Công ty được niêm yết trên Sở Giao dịch Chứng khoán Thành phố Hồ Chí Minh (HOSE), với mã chứng khoán là HPG, từ ngày 15 tháng 11 năm 2007.",
+          "latency_s": 7.51,
+          "total_tokens": 1389,
+          "cost_usd": 0.000566,
+          "quality_score": 5,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q12",
+      "group": "simple",
+      "question": "Kế toán trưởng của HPG ký báo cáo tài chính riêng năm 2025 là ai và báo cáo được lập vào ngày nào?",
+      "ground_truth": "Bà Phạm Thị Kim Oanh, Kế toán trưởng. Báo cáo lập ngày 24 tháng 3 năm 2026",
+      "archs": {
+        "arch_a": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 5.3,
+          "total_tokens": 1559,
+          "cost_usd": 0.000678,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Theo tài liệu, Kế toán trưởng ký báo cáo tài chính riêng năm 2025 là **Hoàng Hữu Chiến** (trong tài liệu ghi là \"oàng Hữu Chiền\", có thể do lỗi OCR). Báo cáo được lập vào ngày **18 tháng 3 năm 2026**.",
+          "latency_s": 5.16,
+          "total_tokens": 1747,
+          "cost_usd": 0.00079,
+          "quality_score": 3,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Kế toán trưởng của HPG ký báo cáo tài chính riêng năm 2025 là ai và báo cáo được lập vào ngày nào?\" Dựa vào tài liệu được cung cấp.\n\nTrong tài liệu, có các đoạn text từ hình ảnh. Chúng ta thấy có các chữ ký:\n\n- Hoang Ngoc Bich - Người lập\n- ang Hữu Chiến (có thể là Hoà",
+          "latency_s": 10.48,
+          "total_tokens": 1722,
+          "cost_usd": 0.00089,
+          "quality_score": 3,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q13",
+      "group": "simple",
+      "question": "Giấy Chứng nhận Đăng ký Kinh doanh lần đầu của HPG mang số hiệu gì, do cơ quan nào cấp và vào ngày nào?",
+      "ground_truth": "Số 0503000008, do Sở Kế hoạch và Đầu tư Tỉnh Hưng Yên cấp ngày 26 tháng 10 năm 2001",
+      "archs": {
+        "arch_a": {
+          "answer": "Theo tài liệu, Giấy Chứng nhận Đăng ký Kinh doanh lần đầu của HPG mang số hiệu **0503000008**, do **Sở Kế hoạch và Đầu tư Tỉnh Hưng Yên** (nay là Sở Tài chính Tỉnh Hưng Yên) cấp vào ngày **26 tháng 10 năm 2001",
+          "latency_s": 5.54,
+          "total_tokens": 1921,
+          "cost_usd": 0.000944,
+          "quality_score": 5,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Giấy Chứng nhận Đăng ký Kinh doanh lần đầu của HPG mang số hiệu **0503000008**, do **Sở Kế hoạch và Đầu tư Tỉnh Hưng Yên** (nay là Sở Tài chính Tỉnh Hưng Yên) cấp vào ngày **26 tháng 10 năm 2001**.",
+          "latency_s": 5.12,
+          "total_tokens": 1889,
+          "cost_usd": 0.000871,
+          "quality_score": 5,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Theo tài liệu, Giấy Chứng nhận Đăng ký Kinh doanh lần đầu của HPG mang số hiệu **0503000008**, do **Sở Kế hoạch và Đầu tư Tỉnh Hưng Yên** (nay là Sở Tài chính Tỉnh Hưng Yên) cấp vào ngày **26 tháng 10 năm 2001**.",
+          "latency_s": 7.81,
+          "total_tokens": 1851,
+          "cost_usd": 0.000867,
+          "quality_score": 5,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q34",
+      "group": "simple",
+      "question": "Đơn vị kiểm toán báo cáo tài chính riêng năm 2025 của HPG là đơn vị nào?",
+      "ground_truth": "Công ty TNHH Kiểm toán Deloitte Việt Nam",
+      "archs": {
+        "arch_a": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Đơn vị kiểm toán báo cáo tài chính riêng năm 2025 của HPG là đơn vị nào?\" Dựa trên tài liệu được cung cấp. Tài liệu có đoạn \"BÁO CÁO KIỂM TOÁN ĐỘC LẬP (Tiếp theo)\" và \"Ý kiến của Kiểm toán viên\" nhưng không nêu rõ tên công ty kiểm toán. Tuy nhiên, trong đoạn \"Vấn đề kh",
+          "latency_s": 6.12,
+          "total_tokens": 1721,
+          "cost_usd": 0.00089,
+          "quality_score": 4,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 4.09,
+          "total_tokens": 1226,
+          "cost_usd": 0.000514,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 8.22,
+          "total_tokens": 1344,
+          "cost_usd": 0.000713,
+          "quality_score": 1,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q29",
+      "group": "simple",
+      "question": "Đầu tư tài chính dài hạn (khoản đầu tư vào công ty con) của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu?",
+      "ground_truth": "80.585.847.420.000 VND (khoảng 80.586 tỷ đồng)",
+      "archs": {
+        "arch_a": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Đầu tư tài chính dài hạn (khoản đầu tư vào công ty con) của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu?\"\n\nDựa vào tài liệu được cung cấp. Trong tài liệu có các đoạn trích từ báo cáo tài chính. Có một bảng liệt kê các khoản đầu tư vào công ty con, công ty liên kết,",
+          "latency_s": 6.64,
+          "total_tokens": 1674,
+          "cost_usd": 0.000877,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Đầu tư tài chính dài hạn (khoản đầu tư vào công ty con) của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu?\" Dựa trên tài liệu cung cấp.\n\nTài liệu có vẻ là các trích đoạn báo cáo tài chính, có đề cập đến các công ty con của HPG? Nhưng câu hỏi hỏi về \"Công ty mẹ HPG\" -",
+          "latency_s": 6.8,
+          "total_tokens": 2163,
+          "cost_usd": 0.001009,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Đầu tư tài chính dài hạn (khoản đầu tư vào công ty con) của Công ty mẹ HPG tại ngày 31/12/2024 là **80.585.847.420.000 VND** (theo cột “Số đầu năm” trong bảng cân đối kế toán).",
+          "latency_s": 9.1,
+          "total_tokens": 2050,
+          "cost_usd": 0.000958,
+          "quality_score": 4,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q30",
+      "group": "simple",
+      "question": "Lợi nhuận sau thuế TNDN của Công ty mẹ HPG năm 2024 là bao nhiêu?",
+      "ground_truth": "10.247.400.472.100 VND (khoảng 10.247,40 tỷ đồng)",
+      "archs": {
+        "arch_a": {
+          "answer": "Chúng ta cần trả lời dựa trên tài liệu. Câu hỏi: \"Lợi nhuận sau thuế TNDN của Công ty mẹ HPG năm 2024 là bao nhiêu?\" Tài liệu có đề cập \"Lợi nhuận sau thuế chưa phân phối năm nay | 421b | 14.074.189.615.158 | 10.247.400.472.100\". Nhưng đó là \"Lợi nhuận sau thuế chưa phân phối\" chứ không phải \"Lợi nh",
+          "latency_s": 6.13,
+          "total_tokens": 2070,
+          "cost_usd": 0.000984,
+          "quality_score": 4,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Lợi nhuận sau thuế TNDN của Công ty mẹ HPG năm 2024 là bao nhiêu?\" Dựa trên tài liệu được cung cấp.\n\nTài liệu có một đoạn bảng với dòng: \"Lợi nhuận sau thuếchưa phân phối năm nay | 421b || 14.074.189.615.158 | 10.247.400.472.100 | be <|\". Có vẻ đây là trích từ báo cáo ",
+          "latency_s": 6.49,
+          "total_tokens": 1921,
+          "cost_usd": 0.000944,
+          "quality_score": 4,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Lợi nhuận sau thuế TNDN của Công ty mẹ HPG năm 2024 là bao nhiêu?\" Dựa trên tài liệu cung cấp.\n\nĐầu tiên, xác định thông tin trong tài liệu. Tài liệu có một đoạn về \"Lợi nhuận sau thuế chưa phân phối năm nay | 421b || 14.074.189.615.158 | 10.247.400.472.100 | be\". Có v",
+          "latency_s": 9.05,
+          "total_tokens": 2080,
+          "cost_usd": 0.000987,
+          "quality_score": 4,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q36",
+      "group": "simple",
+      "question": "Tổng tài sản của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu?",
+      "ground_truth": "81.793.076.515.644 VND",
+      "archs": {
+        "arch_a": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 3.93,
+          "total_tokens": 1109,
+          "cost_usd": 0.000395,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Tổng tài sản của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu?\" Dựa vào tài liệu được cung cấp. Tuy nhiên, tài liệu được cung cấp có vẻ là các đoạn trích rời rạc từ báo cáo tài chính hoặc thuyết minh, chứa các con số nhưng không rõ ràng. Cần tìm trong đoạn tài liệu ",
+          "latency_s": 7.09,
+          "total_tokens": 1506,
+          "cost_usd": 0.000832,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 7.79,
+          "total_tokens": 1825,
+          "cost_usd": 0.000874,
+          "quality_score": 1,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q39",
+      "group": "simple",
+      "question": "Vốn chủ sở hữu của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu?",
+      "ground_truth": "80.780.186.578.052 VND",
+      "archs": {
+        "arch_a": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Vốn chủ sở hữu của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu?\" dựa trên tài liệu được cung cấp.\n\nTrong tài liệu, có các đoạn trích về các công ty con, vốn điều lệ, v.v. của Hòa Phát. Nhưng câu hỏi cụ thể về \"Vốn chủ sở hữu của Công ty mẹ HPG tại ngày 31/12/2024\".",
+          "latency_s": 6.49,
+          "total_tokens": 1920,
+          "cost_usd": 0.000943,
+          "quality_score": 4,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Vốn chủ sở hữu của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu?\" Dựa trên tài liệu được cung cấp. Tài liệu có vẻ bao gồm các đoạn trích từ báo cáo tài chính, nhưng có sự lẫn lộn giữa HPG và FPT? Đoạn đầu nói về HPG: \"Cổ phiếu của Công ty được niêm yết trên HOSE với",
+          "latency_s": 6.35,
+          "total_tokens": 1803,
+          "cost_usd": 0.000912,
+          "quality_score": 4,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Vốn chủ sở hữu của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu?\" Dựa trên tài liệu cung cấp.\n\nTài liệu có các đoạn trích, có một bảng về vốn chủ sở hữu. Trong đó có dòng:\n\n| D. | VỐN CHỦ SỞ HỮU | 400 | | 94.430.926.468.210 | 80.780.186.578.052 |\n\nCột cuối cùng có t",
+          "latency_s": 8.54,
+          "total_tokens": 1963,
+          "cost_usd": 0.000954,
+          "quality_score": 4,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q26",
+      "group": "compound",
+      "question": "Tổng số nhân viên của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu người và thay đổi thế nào so với đầu năm 2024?",
+      "ground_truth": "154 người, tăng so với 127 người tại đầu năm 2024 (1/1/2024)",
+      "archs": {
+        "arch_a": {
+          "answer": "We need answer in Vietnamese based on document. Need parse. User asks: \"Tổng số nhân viên của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu người và thay đổi thế nào so với đầu năm 2024?\" We need use document. Document has conflicting/duplicated text. Let's analyze.\n\nDocument snippet: \"Tổng số nhâ",
+          "latency_s": 6.2,
+          "total_tokens": 1347,
+          "cost_usd": 0.000789,
+          "quality_score": 5,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "The user is asking about the total number of employees of the parent company HPG as of December 31, 2024, and how it changed compared to the beginning of 2024.\n\nLet me check the provided documents.\n\nThe first document says: \"Tổng số nhân viên của Công ty tại ngày 31 tháng 12 năm 2025 là 131 người (n",
+          "latency_s": 6.29,
+          "total_tokens": 1661,
+          "cost_usd": 0.000873,
+          "quality_score": 5,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Tại ngày 31/12/2024, tổng số nhân viên của Công ty mẹ HPG là 154 người. Tuy nhiên, tài liệu không cung cấp số nhân viên tại đầu năm 2024 (01/01/2024), vì vậy không xác định được mức thay đổi so với đầu năm 2024. Thông tin này không có trong tài liệu.",
+          "latency_s": 9.42,
+          "total_tokens": 1372,
+          "cost_usd": 0.000729,
+          "quality_score": 5,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q27",
+      "group": "simple",
+      "question": "Hoạt động kinh doanh chính của Công ty mẹ HPG trong năm 2024 là gì?",
+      "ground_truth": "Kinh doanh dịch vụ cho thuê văn phòng, quảng cáo, mua bán các sản phẩm thép và đầu tư tài chính",
+      "archs": {
+        "arch_a": {
+          "answer": "Mọi người đang hỏi về hoạt động kinh doanh chính của công ty mẹ HPG trong năm 2024. Nhưng trong tài liệu được cung cấp, nó ghi \"Hoạt động chính của Công ty trong năm là kinh doanh dịch vụ cho thuê văn phòng, quảng cáo, dịch vụ tư vấn quản lý và đầu tư tài chính.\" Tuy nhiên, tài liệu không nói rõ năm",
+          "latency_s": 5.95,
+          "total_tokens": 1320,
+          "cost_usd": 0.000781,
+          "quality_score": 5,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "We need answer in Vietnamese. Need rely on document. User asks: \"Hoạt động kinh doanh chính của Công ty mẹ HPG trong năm 2024 là gì?\" Need find in doc. Document mentions \"Hoạt động chính của Công ty trong năm là kinh doanh dịch vụ cho thuê văn phòng, quảng cáo, dịch vụ tư vấn quản lý và đầu tư tài c",
+          "latency_s": 6.44,
+          "total_tokens": 1541,
+          "cost_usd": 0.000841,
+          "quality_score": 5,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Không có trong tài liệu. Tài liệu chỉ nêu: “Hoạt động chính của Công ty trong năm là kinh doanh dịch vụ cho thuê văn phòng, quảng cáo, dịch vụ tư vấn quản lý và đầu tư tài chính” nhưng không xác định rõ đây là năm 2024 hay năm nào.",
+          "latency_s": 6.82,
+          "total_tokens": 1139,
+          "cost_usd": 0.000606,
+          "quality_score": 5,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q28",
+      "group": "simple",
+      "question": "Kế toán trưởng của HPG ký báo cáo tài chính riêng năm 2024 là ai và báo cáo được lập vào ngày nào?",
+      "ground_truth": "Bà Phạm Thị Kim Oanh, Kế toán trưởng. Báo cáo lập ngày 24 tháng 3 năm 2025",
+      "archs": {
+        "arch_a": {
+          "answer": "We need answer in Vietnamese. Need parse documents. User asks: \"Kế toán trưởng của HPG ký báo cáo tài chính riêng năm 2024 là ai và báo cáo được lập vào ngày nào?\" Based on documents. Need identify HPG? In document CÔNG TY CỔ PHẦN TẬP ĐOÀN HÒA PHÁT (HPG). There are signatures: \"Hoang Ngoc Bich Người",
+          "latency_s": 6.07,
+          "total_tokens": 1731,
+          "cost_usd": 0.000892,
+          "quality_score": 5,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Kế toán trưởng của HPG ký báo cáo tài chính riêng năm 2024 là ai và báo cáo được lập vào ngày nào?\" Dựa trên tài liệu cung cấp. Lưu ý: tài liệu nói về báo cáo tài chính riêng năm 2025, được lập ngày 24 tháng 3 năm 2026? Cần đọc kỹ.\n\nTrong tài liệu có đoạn: \"Chúng tôi đ",
+          "latency_s": 5.67,
+          "total_tokens": 1755,
+          "cost_usd": 0.000899,
+          "quality_score": 3,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Chúng ta cần trả lời câu hỏi dựa trên tài liệu. Câu hỏi: \"Kế toán trưởng của HPG ký báo cáo tài chính riêng năm 2024 là ai và báo cáo được lập vào ngày nào?\"\n\nTuy nhiên, tài liệu cung cấp có vẻ là báo cáo tài chính riêng năm 2025, ký ngày 24/3/2026. Trong tài liệu có đề cập đến báo cáo tài chính riê",
+          "latency_s": 8.13,
+          "total_tokens": 1542,
+          "cost_usd": 0.000841,
+          "quality_score": 5,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q38",
+      "group": "simple",
+      "question": "Đơn vị kiểm toán báo cáo tài chính riêng năm 2024 của HPG là đơn vị nào?",
+      "ground_truth": "Công ty TNHH KPMG Việt Nam",
+      "archs": {
+        "arch_a": {
+          "answer": "Không có trong tài liệu. Tài liệu chỉ cho biết báo cáo tài chính riêng năm 2024 của HPG được kiểm toán bởi “một công ty kiểm toán độc lập khác” nhưng không nêu rõ tên đơn vị cụ thể.",
+          "latency_s": 4.5,
+          "total_tokens": 1626,
+          "cost_usd": 0.000686,
+          "quality_score": 3,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Đơn vị kiểm toán báo cáo tài chính riêng năm 2024 của HPG là đơn vị nào?\" Dựa trên tài liệu.\n\nTrong tài liệu, ở phần \"Vấn đề khác\" có nói: \"Báo cáo tài chính riêng cho năm tài chính kết thúc ngày 31 tháng 12 năm 2024 của Công ty đã được kiểm toán bởi một công ty kiểm t",
+          "latency_s": 5.71,
+          "total_tokens": 1950,
+          "cost_usd": 0.000951,
+          "quality_score": 3,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 6.51,
+          "total_tokens": 1652,
+          "cost_usd": 0.000715,
+          "quality_score": 1,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q40",
+      "group": "simple",
+      "question": "Số lượng công ty con cấp 1 của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu?",
+      "ground_truth": "5 công ty con cấp 1 (không đổi so với đầu năm 2024)",
+      "archs": {
+        "arch_a": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Số lượng công ty con cấp 1 của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu?\" Dựa trên tài liệu cung cấp.\n\nTài liệu có đoạn: \"Tại ngày 31 tháng 12 năm 2025, Công ty sở hữu trực tiếp 8 công ty con và 2 công ty liên...\" và \"Tại ngày 31 tháng 12 năm 2025, Công ty có 36",
+          "latency_s": 6.04,
+          "total_tokens": 1447,
+          "cost_usd": 0.000816,
+          "quality_score": 5,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 5.21,
+          "total_tokens": 1819,
+          "cost_usd": 0.000789,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Chúng ta cần trả lời câu hỏi: \"Số lượng công ty con cấp 1 của Công ty mẹ HPG tại ngày 31/12/2024 là bao nhiêu?\" dựa trên tài liệu. Tài liệu cung cấp một đoạn về ngành nghề kinh doanh và danh sách các công ty con, nhưng không rõ ràng về cấp 1 hay ngày 31/12/2024. Cần tìm thông tin trong tài liệu.\n\nTà",
+          "latency_s": 9.96,
+          "total_tokens": 1777,
+          "cost_usd": 0.000905,
+          "quality_score": 5,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q21",
+      "group": "multi_source",
+      "question": "Doanh thu từ mảng thép xây dựng riêng lẻ của HPG trong năm 2025 là bao nhiêu?",
+      "ground_truth": "Không có trong tài liệu — BCTC hợp nhất không phân tách doanh thu theo phân khúc sản phẩm",
+      "archs": {
+        "arch_a": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 3.85,
+          "total_tokens": 1621,
+          "cost_usd": 0.000574,
+          "quality_score": 4,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 4.48,
+          "total_tokens": 1605,
+          "cost_usd": 0.000642,
+          "quality_score": 4,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 9.19,
+          "total_tokens": 1647,
+          "cost_usd": 0.000602,
+          "quality_score": 4,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q22",
+      "group": "multi_source",
+      "question": "Tỷ lệ cổ tức HPG dự kiến chi trả cho năm tài chính 2025 là bao nhiêu phần trăm?",
+      "ground_truth": "Không có trong tài liệu — chính sách cổ tức không được công bố trong BCTC đã kiểm toán này",
+      "archs": {
+        "arch_a": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 5.37,
+          "total_tokens": 2091,
+          "cost_usd": 0.000965,
+          "quality_score": 4,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 3.83,
+          "total_tokens": 1686,
+          "cost_usd": 0.00054,
+          "quality_score": 4,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 6.64,
+          "total_tokens": 1484,
+          "cost_usd": 0.000538,
+          "quality_score": 4,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q23",
+      "group": "multi_source",
+      "question": "Sản lượng thép thô HPG sản xuất trong năm 2025 là bao nhiêu tấn?",
+      "ground_truth": "Không có trong tài liệu — đây là dữ liệu hoạt động sản xuất, không được trình bày trong báo cáo tài chính",
+      "archs": {
+        "arch_a": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 4.41,
+          "total_tokens": 1648,
+          "cost_usd": 0.00059,
+          "quality_score": 5,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 4.66,
+          "total_tokens": 1329,
+          "cost_usd": 0.000498,
+          "quality_score": 5,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 8.7,
+          "total_tokens": 1792,
+          "cost_usd": 0.000749,
+          "quality_score": 5,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q24",
+      "group": "multi_source",
+      "question": "Giá thép HRC trên thị trường quốc tế tháng 12/2025 là bao nhiêu USD/tấn?",
+      "ground_truth": "Ngoài phạm vi — đây là dữ liệu thị trường hàng hoá, không có trong báo cáo tài chính doanh nghiệp",
+      "archs": {
+        "arch_a": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 3.95,
+          "total_tokens": 2262,
+          "cost_usd": 0.00073,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 4.31,
+          "total_tokens": 2279,
+          "cost_usd": 0.000776,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 9.57,
+          "total_tokens": 2170,
+          "cost_usd": 0.000629,
+          "quality_score": 1,
+          "failed": false
+        }
+      }
+    },
+    {
+      "id": "q25",
+      "group": "multi_source",
+      "question": "Công nghệ lò cao nào HPG đang sử dụng tại khu liên hợp thép Dung Quất?",
+      "ground_truth": "Ngoài phạm vi — đây là thông tin kỹ thuật sản xuất, không có trong báo cáo tài chính",
+      "archs": {
+        "arch_a": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 4.22,
+          "total_tokens": 1968,
+          "cost_usd": 0.000663,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_b": {
+          "answer": "Không có trong tài liệu.",
+          "latency_s": 4.25,
+          "total_tokens": 2247,
+          "cost_usd": 0.00072,
+          "quality_score": 1,
+          "failed": false
+        },
+        "arch_c": {
+          "answer": "1.  **Phân tích yêu cầu**: Người dùng đang hỏi cụ thể về công nghệ lò cao mà HPG (Hòa Phát Group) đang sử dụng tại khu liên hợp thép Dung Quất.\n2.  **Tìm kiếm trong Tài liệu**: Xem xét nhanh tài liệu được cung cấp.\n    *   Nội dung đề cập đến \"Công ty Cổ phần Thép Hòa Phát Dung Quất\" trong bảng doan",
+          "latency_s": 8.71,
+          "total_tokens": 2321,
+          "cost_usd": 0.001052,
+          "quality_score": 1,
+          "failed": false
+        }
+      }
+    }
+  ]
+}

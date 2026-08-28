@@ -626,3 +626,45 @@ Pattern này là **self-documenting infrastructure** — metadata viết một l
 
 ---
 
+## 3 kiến trúc RAG khác nhau thế nào? Khi nào dùng cái nào?
+
+**Q:** arch_a, arch_b, arch_c là gì? Kết quả đo thực tế ra sao?
+
+**A:**
+
+| | arch_a | arch_b | arch_c |
+|---|---|---|---|
+| **Tên** | Pure vector RAG | Hybrid fusion | Smart planner |
+| **Flow** | embed → Qdrant top-5 → LLM | BM25 + vector → weighted_sum → top-5 → LLM | interpret() → route → retrieve(s) → RRF → LLM |
+| **LLM calls** | 1 | 1 | 2 (interpret + answer) |
+| **Điểm mạnh** | Đơn giản, nhanh, ổn định | Kết hợp exact match + semantic | Xử lý câu phức tạp, multi-ticker, multi-year |
+| **Điểm yếu** | Bỏ sót exact keyword match | BM25 index thêm, đôi khi kéo chunk không liên quan | Latency cao hơn ~3s, cost +14% |
+
+**Kết quả đo thực tế (bctc_structural, bge-m3, top_k=5):**
+
+| Chỉ số | arch_a | arch_b | arch_c v2 |
+|--------|--------|--------|-----------|
+| quality_score | **2.88** | 2.77 | **2.88** |
+| latency_s | **5.39** | 5.51 | 8.14 |
+| cost (relative) | 1× | 1.1× | 1.1× |
+| compound score | 5 | 5 | **5** |
+| failure_rate | 0% | 0% | 0% |
+
+*(3 câu sample · 28/08/2026)*
+
+**arch_c v1 vs v2 — tại sao quan trọng:**
+
+arch_c v1 dùng `decompose_query()` — LLM tách câu hỏi thành sub-queries text thuần → compound "nhân viên 2025 và 2024" bị tách thành 2 retrieve riêng lẻ → mỗi cái chỉ lấy 1 năm → LLM không so sánh được → **score=1**.
+
+arch_c v2 dùng `query_interpreter.interpret()` — structured output có `years`, `tickers`, `sub_queries` → quyết định strategy:
+- `years=['2025','2024']` → retrieve **không có** year filter → context có cả 2 năm → **score=5**
+- `len(tickers) > 1` → retrieve per ticker với filter riêng → noise thấp
+- `sub_queries` set → multi-topic decompose đúng chỗ
+
+**Khi nào dùng gì:**
+- Production đơn giản → **arch_a**
+- Cần exact match (mã số, ngày tháng, tên riêng) → **arch_b**
+- Câu hỏi phức tạp: so sánh nhiều công ty, nhiều năm, nhiều topic → **arch_c v2**
+
+---
+

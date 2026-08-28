@@ -144,6 +144,9 @@ _TOOL_SCHEMA = {
 
 _SYSTEM = """Bạn trích xuất số liệu tài chính từ báo cáo tài chính Việt Nam.
 
+QUAN TRỌNG: Bạn PHẢI gọi tool save_financial_facts với tất cả số liệu tìm được. \
+Không được trả lời bằng văn bản thuần túy. Nếu không có số liệu, gọi tool với facts=[].
+
 Quy tắc đặt tên metric_code (snake_case không dấu):
 - tong_tai_san, tai_san_ngan_han, tai_san_dai_han
 - no_phai_tra, von_chu_so_huu
@@ -179,6 +182,24 @@ def _extract_financial_section(markdown: str, max_chars: int = 20_000) -> str:
     return markdown[start: start + max_chars]
 
 
+def _parse_facts_from_text(text: str) -> list | None:
+    """Try to extract a facts list from raw text when model outputs JSON instead of tool call."""
+    import json, re
+    # Look for JSON array or object with "facts" key anywhere in text
+    for pattern in (r'\{[^{}]*"facts"\s*:\s*\[.*?\]\s*\}', r'\[.*?\]'):
+        m = re.search(pattern, text, re.DOTALL)
+        if m:
+            try:
+                parsed = json.loads(m.group())
+                if isinstance(parsed, list):
+                    return parsed
+                if isinstance(parsed, dict) and "facts" in parsed:
+                    return parsed["facts"]
+            except json.JSONDecodeError:
+                continue
+    return None
+
+
 def extract_facts_from_markdown(
     markdown: str,
     ticker: str,
@@ -205,10 +226,48 @@ def extract_facts_from_markdown(
         max_tokens=4096,
     )
 
-    if not response.tool_calls:
-        raise ValueError("Model did not call tool — check LLM_PROVIDER and tool schema")
+    raw = None
 
-    raw = response.tool_calls[0].input["facts"]
+    if not response.tool_calls:
+        # Fallback 1: model output JSON as text.
+        raw = _parse_facts_from_text(response.text)
+        if raw is None:
+            # Fallback 2: reasoning models think but don't emit a tool call.
+            # Retry with explicit follow-up to force the call.
+            response = client.generate(
+                messages=[
+                    Message(role="user", content=(
+                        f"Kỳ báo cáo: {period}\n"
+                        f"Loại báo cáo: {report_type}\n\n"
+                        f"Markdown:\n\n{section}"
+                    )),
+                    Message(role="assistant", content=response.text or "(no response)"),
+                    Message(role="user", content=(
+                        "Bây giờ hãy gọi tool save_financial_facts với các số liệu bạn đã phân tích."
+                    )),
+                ],
+                system=_SYSTEM,
+                tools=[_TOOL_SCHEMA],
+                max_tokens=4096,
+            )
+            if not response.tool_calls:
+                raw = _parse_facts_from_text(response.text)
+                if raw is None:
+                    raise ValueError(
+                        f"Model did not call tool after retry. "
+                        f"text[:200]={response.text[:200]!r}"
+                    )
+
+    if response.tool_calls and raw is None:  # type: ignore[possibly-undefined]
+        inp = response.tool_calls[0].input
+        if "facts" in inp:
+            raw = inp["facts"]
+        elif isinstance(inp, list):
+            raw = inp
+        else:
+            raise ValueError(
+                f"Tool input missing 'facts' key. Got keys: {list(inp.keys())}. Input: {inp}"
+            )
 
     return [
         FinancialFact(

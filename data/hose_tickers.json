@@ -1,0 +1,2432 @@
+[
+  {
+    "ticker": "AAA",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "AAM",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "AAN",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "AAT",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ABR",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ABS",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ABT",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ACB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "ACC",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ACG",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ACL",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ADG",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ADP",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ADS",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "AFX",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "AGG",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "AGR",
+    "exchange": "HOSE",
+    "sector": "Chứng khoán",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "ANT",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ANV",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "APG",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "APH",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ASG",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ASM",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ASP",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "AST",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "BAF",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "BCE",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "BCM",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "BFC",
+    "exchange": "HOSE",
+    "sector": "Hóa chất",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "BHN",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "BIC",
+    "exchange": "HOSE",
+    "sector": "Bảo hiểm",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "BID",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "BKG",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "BMC",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "BMI",
+    "exchange": "HOSE",
+    "sector": "Bảo hiểm",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "BMP",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "BRC",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "BSI",
+    "exchange": "HOSE",
+    "sector": "Chứng khoán",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "BSR",
+    "exchange": "HOSE",
+    "sector": "Dầu khí",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "BTP",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "BTT",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "BVB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "BVH",
+    "exchange": "HOSE",
+    "sector": "Bảo hiểm",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "BWE",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "C32",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "C47",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CCC",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CCI",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CCL",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CDC",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CHP",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CIG",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CII",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "CKG",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CLC",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CLL",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CLW",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CMG",
+    "exchange": "HOSE",
+    "sector": "Công nghệ",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "CMV",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CMX",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CNG",
+    "exchange": "HOSE",
+    "sector": "Dầu khí",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "COM",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CRC",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CRE",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CRV",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CSM",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CSV",
+    "exchange": "HOSE",
+    "sector": "Hóa chất",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CTD",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "CTF",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CTG",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "CTI",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CTR",
+    "exchange": "HOSE",
+    "sector": "Công nghệ",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CTS",
+    "exchange": "HOSE",
+    "sector": "Chứng khoán",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "CVT",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "D2D",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DAH",
+    "exchange": "HOSE",
+    "sector": "Du lịch",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DAT",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DBC",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DBD",
+    "exchange": "HOSE",
+    "sector": "Y tế",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DBT",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DC4",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DCL",
+    "exchange": "HOSE",
+    "sector": "Y tế",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DCM",
+    "exchange": "HOSE",
+    "sector": "Hóa chất",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "DGC",
+    "exchange": "HOSE",
+    "sector": "Hóa chất",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DGW",
+    "exchange": "HOSE",
+    "sector": "Bán lẻ",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "DHA",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DHC",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DHG",
+    "exchange": "HOSE",
+    "sector": "Y tế",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DHM",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DIG",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "DLG",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DMC",
+    "exchange": "HOSE",
+    "sector": "Y tế",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DMX",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DPG",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DPM",
+    "exchange": "HOSE",
+    "sector": "Hóa chất",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "DPR",
+    "exchange": "HOSE",
+    "sector": "Nông nghiệp",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DQC",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DRC",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DRH",
+    "exchange": "HOSE",
+    "sector": "Du lịch",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DRL",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DSC",
+    "exchange": "HOSE",
+    "sector": "Chứng khoán",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DSE",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DSN",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DTA",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DTL",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DTT",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DVP",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DXG",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DXS",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "DXV",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "EIB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "ELC",
+    "exchange": "HOSE",
+    "sector": "Công nghệ",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "EVE",
+    "exchange": "HOSE",
+    "sector": "Dệt may",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "EVF",
+    "exchange": "HOSE",
+    "sector": "Tài chính",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "EVG",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "FCM",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "FCN",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "FDC",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "FIR",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "FIT",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "FMC",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "FPT",
+    "exchange": "HOSE",
+    "sector": "Công nghệ",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "FRT",
+    "exchange": "HOSE",
+    "sector": "Bán lẻ",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "FTS",
+    "exchange": "HOSE",
+    "sector": "Chứng khoán",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "GAS",
+    "exchange": "HOSE",
+    "sector": "Dầu khí",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "GDT",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "GEE",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "GEG",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "GEL",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "GEX",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "GHC",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "GIL",
+    "exchange": "HOSE",
+    "sector": "Dệt may",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "GMD",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "GMH",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "GSP",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "GTA",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "GVR",
+    "exchange": "HOSE",
+    "sector": "Nông nghiệp",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "HAG",
+    "exchange": "HOSE",
+    "sector": "Nông nghiệp",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HAH",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HAP",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HAR",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HAS",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HAX",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HCD",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HCM",
+    "exchange": "HOSE",
+    "sector": "Chứng khoán",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "HDB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "HDC",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HDG",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "HHP",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HHS",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HHV",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HID",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HII",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HMC",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HNA",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HPA",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HPG",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "HPX",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HQC",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HRC",
+    "exchange": "HOSE",
+    "sector": "Nông nghiệp",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HSG",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "HSL",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HT1",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HTG",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HTI",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HTL",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HTN",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HTV",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HU1",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HUB",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HVH",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "HVN",
+    "exchange": "HOSE",
+    "sector": "Hàng không",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ICT",
+    "exchange": "HOSE",
+    "sector": "Công nghệ",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "IDI",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "IJC",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ILB",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "IMP",
+    "exchange": "HOSE",
+    "sector": "Y tế",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ITC",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ITD",
+    "exchange": "HOSE",
+    "sector": "Công nghệ",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "JVC",
+    "exchange": "HOSE",
+    "sector": "Y tế",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "KBC",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "KDC",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "KDH",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "KHG",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "KHP",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "KLB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "KMR",
+    "exchange": "HOSE",
+    "sector": "Dệt may",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "KOS",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "KSB",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "L10",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "LAF",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "LBM",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "LCG",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "LDG",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "LGC",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "LGL",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "LHG",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "LIX",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "LM8",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "LPB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "LPS",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "LSS",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "MBB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "MCH",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "MCM",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "MCP",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "MDG",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "MHC",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "MIG",
+    "exchange": "HOSE",
+    "sector": "Bảo hiểm",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "MSB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "MSH",
+    "exchange": "HOSE",
+    "sector": "Dệt may",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "MSN",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "MWG",
+    "exchange": "HOSE",
+    "sector": "Bán lẻ",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "MZG",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "NAB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "NAF",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "NAV",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "NBB",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "NCT",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "NHA",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "NHH",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "NHT",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "NKG",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "NLG",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "NNC",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "NO1",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "NSC",
+    "exchange": "HOSE",
+    "sector": "Nông nghiệp",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "NT2",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "NTC",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "NTL",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "NVL",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "NVT",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "OCB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "OGC",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "OPC",
+    "exchange": "HOSE",
+    "sector": "Y tế",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "ORS",
+    "exchange": "HOSE",
+    "sector": "Chứng khoán",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PAC",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PAN",
+    "exchange": "HOSE",
+    "sector": "Nông nghiệp",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PC1",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "PDN",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PDR",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "PDV",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PET",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PGC",
+    "exchange": "HOSE",
+    "sector": "Dầu khí",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PGD",
+    "exchange": "HOSE",
+    "sector": "Dầu khí",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PGI",
+    "exchange": "HOSE",
+    "sector": "Bảo hiểm",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PGV",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PHC",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PHR",
+    "exchange": "HOSE",
+    "sector": "Nông nghiệp",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "PIT",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PJT",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PLP",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PLX",
+    "exchange": "HOSE",
+    "sector": "Dầu khí",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "PMG",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PNC",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PNJ",
+    "exchange": "HOSE",
+    "sector": "Bán lẻ",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "POW",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "PPC",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PTB",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PTC",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PTL",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PVD",
+    "exchange": "HOSE",
+    "sector": "Dầu khí",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "PVP",
+    "exchange": "HOSE",
+    "sector": "Dầu khí",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "PVT",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "QCG",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "QNP",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "RAL",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "REE",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "RYG",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "S4A",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SAB",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "SAM",
+    "exchange": "HOSE",
+    "sector": "Công nghệ",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SAV",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SBA",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SBG",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SBT",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SBV",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SC5",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SCR",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SCS",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SFC",
+    "exchange": "HOSE",
+    "sector": "Dầu khí",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SFG",
+    "exchange": "HOSE",
+    "sector": "Hóa chất",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SFI",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SGN",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SGR",
+    "exchange": "HOSE",
+    "sector": "Du lịch",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SGT",
+    "exchange": "HOSE",
+    "sector": "Công nghệ",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SHA",
+    "exchange": "HOSE",
+    "sector": "Du lịch",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SHB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "SHI",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SHP",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SIP",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SJD",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SJS",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SKG",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SMA",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SMB",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SMC",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SPM",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SRC",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SRF",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SSB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "SSC",
+    "exchange": "HOSE",
+    "sector": "Nông nghiệp",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SSI",
+    "exchange": "HOSE",
+    "sector": "Chứng khoán",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "ST8",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "STB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "STG",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "STK",
+    "exchange": "HOSE",
+    "sector": "Dệt may",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SVC",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SVD",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SVT",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SZC",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "SZL",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TAL",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TBC",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TCB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "TCH",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TCI",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TCL",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TCM",
+    "exchange": "HOSE",
+    "sector": "Dệt may",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TCO",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TCR",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TCT",
+    "exchange": "HOSE",
+    "sector": "Du lịch",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TCX",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TDC",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TDG",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TDH",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TDM",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TDP",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TDW",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TEG",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "THG",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TIP",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TIX",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TLD",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TLG",
+    "exchange": "HOSE",
+    "sector": "Dệt may",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TLH",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TMP",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TMS",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TMT",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TN1",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TNC",
+    "exchange": "HOSE",
+    "sector": "Dệt may",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TNH",
+    "exchange": "HOSE",
+    "sector": "Y tế",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TNI",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TNT",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TPB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "TPC",
+    "exchange": "HOSE",
+    "sector": "Hóa chất",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TRA",
+    "exchange": "HOSE",
+    "sector": "Y tế",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TRC",
+    "exchange": "HOSE",
+    "sector": "Nông nghiệp",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TSA",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TSC",
+    "exchange": "HOSE",
+    "sector": "Nông nghiệp",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TTA",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TTE",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TTF",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TV2",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TVB",
+    "exchange": "HOSE",
+    "sector": "Chứng khoán",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TVS",
+    "exchange": "HOSE",
+    "sector": "Chứng khoán",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TVT",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "TYA",
+    "exchange": "HOSE",
+    "sector": "Dệt may",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "UIC",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VAB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VBB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VCA",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VCB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "VCF",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VCG",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VCI",
+    "exchange": "HOSE",
+    "sector": "Chứng khoán",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "VCK",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VDP",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VDS",
+    "exchange": "HOSE",
+    "sector": "Chứng khoán",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VFG",
+    "exchange": "HOSE",
+    "sector": "Hóa chất",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VGC",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VHC",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VHM",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "VIB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "VIC",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "VID",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VIP",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VIX",
+    "exchange": "HOSE",
+    "sector": "Chứng khoán",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VJC",
+    "exchange": "HOSE",
+    "sector": "Hàng không",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "VMD",
+    "exchange": "HOSE",
+    "sector": "Y tế",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VND",
+    "exchange": "HOSE",
+    "sector": "Chứng khoán",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "VNG",
+    "exchange": "HOSE",
+    "sector": "Công nghệ",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VNL",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VNM",
+    "exchange": "HOSE",
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "VNS",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VOS",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VPB",
+    "exchange": "HOSE",
+    "sector": "Ngân hàng",
+    "index_member": "VN30"
+  },
+  {
+    "ticker": "VPD",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VPG",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VPH",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VPI",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VPL",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VPS",
+    "exchange": "HOSE",
+    "sector": "Chứng khoán",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VPX",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VRC",
+    "exchange": "HOSE",
+    "sector": "Bất động sản",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VRE",
+    "exchange": "HOSE",
+    "sector": "Bán lẻ",
+    "index_member": "VN100"
+  },
+  {
+    "ticker": "VSC",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VSH",
+    "exchange": "HOSE",
+    "sector": "Tiện ích",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VSI",
+    "exchange": "HOSE",
+    "sector": "Xây dựng",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VTB",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VTO",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VTP",
+    "exchange": "HOSE",
+    "sector": "Logistics",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "VVS",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "YBM",
+    "exchange": "HOSE",
+    "sector": "Vật liệu",
+    "index_member": "HOSE"
+  },
+  {
+    "ticker": "YEG",
+    "exchange": "HOSE",
+    "sector": "Unknown",
+    "index_member": "HOSE"
+  }
+]

@@ -35,6 +35,7 @@ Ghi chép thực nghiệm, số đo, quyết định kỹ thuật. Không giải
 - [x] Bài 26 — Daily Brief Phase 2: khối ngoại (get_foreign_flows DB-first) + sector performance, 39 tests xanh
 - [x] Bài 27 — Daily Brief Phase 5: 011/012 migrations, corporate_events scraper, broker_views LLM extract, 42 tests xanh
 - [x] Bài 28 — Daily Brief Phase 6: market_brief_graph (LangGraph 3-node), template, run_brief CLI, 33 tests xanh
+- [x] Bài 26 (arch) — So 3 kiến trúc: arch_a thắng 4/5 chỉ số; arch_c tệ nhất (compound=1, fail_rate=3.85%); chọn arch_a production
 
 ## Pipeline hiện tại
 
@@ -72,3 +73,4 @@ Ghi chép thực nghiệm, số đo, quyết định kỹ thuật. Không giải
 | Bài 26 | [bai-26-daily-brief-p2.md](bai-26-daily-brief-p2.md) | Phase 2: get_foreign_flows DB-first (foreign_flows table); get_sector_performance; 39 tests xanh |
 | Bài 27 | [bai-27-daily-brief-p5.md](bai-27-daily-brief-p5.md) | Phase 5: 011/012 migrations; corporate_events scraper; broker_views LLM extract; 42 tests xanh |
 | Bài 28 | [bai-28-daily-brief-p6.md](bai-28-daily-brief-p6.md) | Phase 6: market_brief_graph LangGraph 3-node; template; run_brief CLI; 33 tests xanh |
+| Bài 26 (arch) | [bai-26-compare-arch.md](bai-26-compare-arch.md) | arch_a thắng (quality=3.31, latency=5.9s, cost=$0.0008, failure=0%); arch_c tệ nhất (compound=1, +38% cost); production = arch_a |
