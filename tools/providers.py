@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import pandas as pd
@@ -132,7 +132,7 @@ class VciDirectProvider(PriceProvider):
         # VCI returns columnar arrays: {o, h, l, c, v, t}
         rows = [
             {
-                "time":   datetime.fromtimestamp(int(ts)).strftime("%Y-%m-%d"),
+                "time":   datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%d"),
                 "open":   symbol_data["o"][i],
                 "high":   symbol_data["h"][i],
                 "low":    symbol_data["l"][i],
@@ -157,45 +157,55 @@ class VciDirectProvider(PriceProvider):
         return df.tail(days).reset_index(drop=True)
 
     def fetch_batch_latest(self, tickers: list[str], count_back: int = 2) -> dict[str, pd.DataFrame]:
-        """Fetch latest OHLCV for multiple tickers in one API call. Returns {ticker: df}."""
+        """Fetch latest OHLCV for multiple tickers. Uses concurrent single-ticker requests.
+
+        VCI gap-chart only supports 1 symbol per call; multi-symbol returns [].
+        Uses ThreadPoolExecutor to fetch in parallel (max 20 concurrent).
+        """
         import httpx
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        payload = {
-            "timeFrame": "ONE_DAY",
-            "symbols": [t.upper() for t in tickers],
-            "to": int(datetime.now().timestamp()),
-            "countBack": count_back,
-        }
-        resp = httpx.post(self._URL, json=payload, headers=self._HEADERS, timeout=20)
-        resp.raise_for_status()
-        data = resp.json()
-        if isinstance(data, dict) and "data" in data:
-            data = data["data"]
-        if not data:
-            return {}
+        def _fetch_one(ticker: str) -> tuple[str, pd.DataFrame | None]:
+            payload = {
+                "timeFrame": "ONE_DAY",
+                "symbols": [ticker.upper()],
+                "to": int(datetime.now().timestamp()),
+                "countBack": count_back,
+            }
+            try:
+                resp = httpx.post(self._URL, json=payload, headers=self._HEADERS, timeout=10)
+                resp.raise_for_status()
+                data = resp.json()
+                if isinstance(data, dict) and "data" in data:
+                    data = data["data"]
+                if not data:
+                    return ticker, None
+                symbol_data = data[0]
+                if not symbol_data.get("t"):
+                    return ticker, None
+                rows = [
+                    {
+                        "time":   datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%d"),
+                        "open":   symbol_data["o"][i],
+                        "high":   symbol_data["h"][i],
+                        "low":    symbol_data["l"][i],
+                        "close":  symbol_data["c"][i],
+                        "volume": symbol_data["v"][i],
+                    }
+                    for i, ts in enumerate(symbol_data["t"])
+                ]
+                df = pd.DataFrame(rows).sort_values("time").drop_duplicates(subset=["time"]).reset_index(drop=True)
+                return ticker.upper(), df
+            except Exception:
+                return ticker, None
 
-        upper_tickers = [t.upper() for t in tickers]
         result: dict[str, pd.DataFrame] = {}
-        for idx, symbol_data in enumerate(data):
-            # VCI may return a "sym" field; fall back to request order if absent
-            sym = (symbol_data.get("sym") or symbol_data.get("s") or "").upper()
-            if not sym:
-                sym = upper_tickers[idx] if idx < len(upper_tickers) else f"UNKNOWN_{idx}"
-            if not symbol_data.get("t"):
-                continue
-            rows = [
-                {
-                    "time":   datetime.fromtimestamp(int(ts)).strftime("%Y-%m-%d"),
-                    "open":   symbol_data["o"][i],
-                    "high":   symbol_data["h"][i],
-                    "low":    symbol_data["l"][i],
-                    "close":  symbol_data["c"][i],
-                    "volume": symbol_data["v"][i],
-                }
-                for i, ts in enumerate(symbol_data["t"])
-            ]
-            df = pd.DataFrame(rows).sort_values("time").drop_duplicates(subset=["time"]).reset_index(drop=True)
-            result[sym] = df
+        with ThreadPoolExecutor(max_workers=20) as pool:
+            futures = {pool.submit(_fetch_one, t): t for t in tickers}
+            for future in as_completed(futures):
+                sym, df = future.result()
+                if df is not None and not df.empty:
+                    result[sym] = df
         return result
 
     def fetch_foreign_batch(self, tickers: list[str]) -> list[dict]:
@@ -320,7 +330,7 @@ class SsiIndexProvider(PriceProvider):
 
         rows = [
             {
-                "time":                   datetime.fromtimestamp(int(ts)).strftime("%Y-%m-%d"),
+                "time":                   datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%d"),
                 "open":                   item["o"][i],
                 "high":                   item["h"][i],
                 "low":                    item["l"][i],
@@ -365,16 +375,50 @@ def resolve_ticker(ticker: str) -> str:
     return _VN_INDEX_ALIASES.get(upper, upper)
 
 
+_vn_ticker_cache: set[str] | None = None
+
+
+def _vn_ticker_set() -> set[str]:
+    """Lazy-load VN ticker universe from hose_tickers.json + securities DB (cached)."""
+    global _vn_ticker_cache
+    if _vn_ticker_cache is not None:
+        return _vn_ticker_cache
+    tickers: set[str] = set()
+    # Try hose_tickers.json first (fast, no DB)
+    try:
+        import json
+        from pathlib import Path as _P
+        json_path = _P(__file__).parent.parent / "data" / "hose_tickers.json"
+        if json_path.exists():
+            data = json.loads(json_path.read_text(encoding="utf-8"))
+            tickers.update(item["ticker"].upper() for item in data if item.get("ticker"))
+    except Exception:
+        pass
+    # Supplement with securities table if available
+    try:
+        from core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT ticker FROM securities")
+                tickers.update(r[0].upper() for r in cur.fetchall())
+    except Exception:
+        pass
+    _vn_ticker_cache = tickers or {"HPG", "VCB", "FPT", "VNM", "TCB", "MBB", "VHM"}
+    return _vn_ticker_cache
+
+
 def _detect_provider(ticker: str) -> PriceProvider:
     """
     Provider routing:
     - VN broad indices (VNINDEX/VN30/HNX/HNX30/UPCOM) → SsiIndexProvider
-    - 2–4 chars, no dot → VciDirectProvider (VN stock tickers)
-    - dot or >4 chars → YFinanceProvider (international, USD)
+    - 2–4 chars, no dot, in VN universe → VciDirectProvider (VN stock tickers)
+    - dot or >4 chars or not in VN universe → YFinanceProvider (international, USD)
     """
     resolved = resolve_ticker(ticker)
     if resolved in _SSI_DIRECT:
         return SsiIndexProvider()
     if "." not in resolved and len(resolved) <= 4:
-        return VciDirectProvider()
+        vn_tickers = _vn_ticker_set()
+        if resolved in vn_tickers or not vn_tickers:
+            return VciDirectProvider()
     return YFinanceProvider()

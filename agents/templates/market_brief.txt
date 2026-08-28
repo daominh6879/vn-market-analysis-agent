@@ -18,15 +18,9 @@
 
 📌 TIN ĐÁNG CHÚ Ý HÔM NAY
 
-1️⃣ {vn_index_text}
+{news_text}
 
-2️⃣ Độ rộng thị trường: {breadth_text}. {movers_text}
-
-3️⃣ Khối ngoại: {foreign_text}
-
-4️⃣ {news_text}
-
-5️⃣ Sự kiện: {events_text}
+{events_text}
 
 🎯 NHẬN ĐỊNH PHIÊN HÔM NAY
 {outlook_text}

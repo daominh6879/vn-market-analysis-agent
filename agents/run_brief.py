@@ -17,6 +17,9 @@ import time
 from datetime import date as date_cls
 from pathlib import Path
 
+from dotenv import load_dotenv
+load_dotenv()
+
 
 def _default_out(date_str: str) -> str:
     from datetime import datetime

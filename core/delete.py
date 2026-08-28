@@ -71,7 +71,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Soft-delete 1 tài liệu")
     parser.add_argument("--doc-id", required=True, help="doc_id cần xoá")
     parser.add_argument(
-        "--collection", default="hpg_structural", help="Qdrant collection"
+        "--collection", default="bctc_structural", help="Qdrant collection"
     )
     args = parser.parse_args()
     soft_delete(args.doc_id, args.collection)

@@ -24,7 +24,8 @@ except ImportError:
 
 from rag.retrieval_bm25 import BM25Retriever
 
-COLLECTION = "hpg_structural"
+COLLECTION = "bctc_structural"
+_TICKERS = ["HPG"]  # HPG-specific debug script
 
 # ── 1. Tokenization check ─────────────────────────────────────────────────────
 
@@ -117,9 +118,9 @@ def check_scores():
     print("2. BM25 SCORE COMPARISON (raw vs vn, top-5)")
     print("=" * 60)
     print("Loading BM25 raw index...")
-    bm25_raw = BM25Retriever(COLLECTION, use_vn_tokenize=False)
+    bm25_raw = BM25Retriever(COLLECTION, use_vn_tokenize=False, tickers=_TICKERS)
     print("Loading BM25 vn index...")
-    bm25_vn  = BM25Retriever(COLLECTION, use_vn_tokenize=True)
+    bm25_vn  = BM25Retriever(COLLECTION, use_vn_tokenize=True, tickers=_TICKERS)
 
     for qid, query in QUERIES.items():
         score_dump(bm25_raw, bm25_vn, query, qid)

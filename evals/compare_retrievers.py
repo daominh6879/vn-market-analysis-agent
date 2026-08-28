@@ -33,7 +33,7 @@ except ImportError:
 
 import yaml
 
-COLLECTION   = "hpg_structural"
+COLLECTION   = "bctc_structural"
 EMBED_MODEL  = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 
 # ── Ground-truth keywords per question ───────────────────────────────────────
@@ -84,6 +84,9 @@ def hit_at_k(contexts: list[str], keywords: list[str], k: int) -> bool:
     return context_hit(contexts[:k], keywords)
 
 
+_TICKER_FILTER = None  # set in main()
+
+
 def retrieve_vector(question: str, top_k: int) -> list[str]:
     import httpx
     from qdrant_client import QdrantClient
@@ -99,7 +102,7 @@ def retrieve_vector(question: str, top_k: int) -> list[str]:
 
     qdrant = QdrantClient("localhost", port=6333)
     results = qdrant.query_points(
-        collection_name=COLLECTION, query=qvec, limit=top_k
+        collection_name=COLLECTION, query=qvec, query_filter=_TICKER_FILTER, limit=top_k
     ).points
     return [p.payload["text"] for p in results]
 
@@ -128,28 +131,37 @@ def answer_hit(answer: str, keywords: list[str]) -> bool:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    global _TICKER_FILTER
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--no-llm", action="store_true",
                         help="Skip model calls — score context only")
+    parser.add_argument("--ticker", default="HPG",
+                        help="Ticker filter — comma-separated e.g. HPG or HPG,VCB (default: HPG)")
     parser.add_argument("--questions", default="evals/golden_hpg.yaml")
     parser.add_argument("--out", default="evals/compare.json")
     args = parser.parse_args()
+
+    from rag.filter import build_filter
+    tickers = [t.strip().upper() for t in args.ticker.split(",") if t.strip()]
+    _TICKER_FILTER = build_filter(tickers=tickers)
 
     K = args.top_k
     questions = load_questions(Path(args.questions))
     print(f"Questions: {len(questions)} indexed (skip no_answer/out_of_scope)")
     print(f"Top-k    : {K}")
+    print(f"Tickers  : {tickers}")
     print(f"LLM calls: {'NO (--no-llm)' if args.no_llm else 'YES'}")
     print()
 
     # Build retrievers
     print("Loading BM25 raw...")
     from rag.retrieval_bm25 import BM25Retriever
-    bm25_raw = BM25Retriever(COLLECTION, use_vn_tokenize=False)
+    bm25_raw = BM25Retriever(COLLECTION, use_vn_tokenize=False, tickers=tickers)
 
     print("Loading BM25 vn...")
-    bm25_vn = BM25Retriever(COLLECTION, use_vn_tokenize=True)
+    bm25_vn = BM25Retriever(COLLECTION, use_vn_tokenize=True, tickers=tickers)
 
     llm_client = None
     if not args.no_llm:

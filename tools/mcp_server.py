@@ -41,6 +41,8 @@ from tools.price import (
     get_sector_performance,
     search_financial_news,
 )
+from tools.rag_query import ask_report as _ask_report
+from tools.qa_agent import answer as _qa_answer
 
 mcp = FastMCP("financial-tools")
 
@@ -80,7 +82,7 @@ async def _run(fn, *args, timeout: float, **kwargs) -> str:
             "[warming_up] Server đang khởi động (cache priming). "
             "Thử lại sau 15 giây kể từ khi khởi động server."
         )
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         result = await asyncio.wait_for(
             loop.run_in_executor(None, lambda: fn(*args, **kwargs)),
@@ -136,7 +138,7 @@ async def get_indicators(ticker: str, days: int = 60) -> str:
     giá đang trên/dưới MA20 và MA50.
     """
     provider = _detect_provider(ticker)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         ohlcv_result = await asyncio.wait_for(
             loop.run_in_executor(None, lambda: get_historical_ohlcv(ticker, days=days, provider=provider)),
@@ -239,6 +241,85 @@ async def get_sector_perf(period: str = "day") -> str:
     Kết quả: danh sách ngành sắp xếp từ tăng mạnh → giảm mạnh.
     """
     return await _run(get_sector_performance, period, timeout=_TIMEOUT_SECTOR)
+
+
+_TIMEOUT_RAG = 60.0
+
+
+@mcp.tool()
+async def ask_report(
+    question: str,
+    tickers: str = "",
+    sector: str = "",
+    year: str = "",
+) -> str:
+    """
+    Trả lời câu hỏi về nội dung báo cáo tài chính (BCTC).
+
+    question: câu hỏi về số liệu, sự kiện trong báo cáo tài chính.
+    tickers:  mã CK cách nhau bằng dấu phẩy — "" = tất cả công ty.
+              Ví dụ: "HPG" hoặc "HPG,VCB" để so sánh.
+    sector:   lọc theo ngành — "steel", "banking", "real_estate", ...
+              "" = không lọc ngành.
+    year:     năm tài chính — "2025", "2024", ... "" = tất cả năm.
+
+    Ví dụ:
+      ask_report("Tổng tài sản HPG 2025?", tickers="HPG", year="2025")
+      ask_report("So sánh lợi nhuận HPG và VCB", tickers="HPG,VCB")
+      ask_report("Ngành thép lãi như thế nào năm 2025?", sector="steel", year="2025")
+      ask_report("Công ty nào có nợ vay cao nhất?")
+
+    Dùng khi: câu hỏi về nội dung BCTC (bảng cân đối, kết quả kinh doanh, thuyết minh).
+    Không dùng cho: giá cổ phiếu, chỉ báo kỹ thuật, tin tức — dùng get_price/get_indicators/search_news.
+    """
+    ticker_list = [t.strip() for t in tickers.split(",") if t.strip()] if tickers else None
+    loop = asyncio.get_running_loop()
+    try:
+        result = await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                lambda: _ask_report(
+                    question,
+                    tickers=ticker_list,
+                    sector=sector or None,
+                    year=year or None,
+                ),
+            ),
+            timeout=_TIMEOUT_RAG,
+        )
+        return _result_to_text(result)
+    except asyncio.TimeoutError:
+        return f"[upstream_error] Timeout sau {_TIMEOUT_RAG:.0f}s khi query BCTC. Thử lại sau."
+
+
+@mcp.tool()
+async def answer_financial_question(question: str) -> str:
+    """
+    Trả lời câu hỏi tài chính với auto-routing thông minh.
+
+    Tự động phân tích câu hỏi và chọn nguồn dữ liệu phù hợp:
+      - ask_report  → câu hỏi định tính từ BCTC (chiến lược, giải thích, ngữ cảnh)
+      - sql_query   → số liệu cụ thể (doanh thu, lợi nhuận, bảng xếp hạng)
+      - both        → cần cả số liệu lẫn giải thích từ tài liệu
+      - out_of_scope→ không thuộc phạm vi hệ thống
+
+    Ví dụ:
+      answer_financial_question("So sánh HPG và VCB năm 2024")
+      answer_financial_question("Phân tích chiến lược của Hòa Phát")
+      answer_financial_question("Ngành thép Việt Nam có triển vọng gì?")
+      answer_financial_question("Doanh thu HPG 2025 là bao nhiêu?")
+
+    Dùng thay cho ask_report khi không biết trước cần RAG hay SQL.
+    """
+    loop = asyncio.get_running_loop()
+    try:
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, lambda: _qa_answer(question)),
+            timeout=_TIMEOUT_RAG,
+        )
+        return _result_to_text(result)
+    except asyncio.TimeoutError:
+        return f"[upstream_error] Timeout sau {_TIMEOUT_RAG:.0f}s. Thử lại sau."
 
 
 def _warmup() -> None:

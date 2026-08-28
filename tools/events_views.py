@@ -31,7 +31,7 @@ def get_corporate_events(
     Returns ToolResult with data as list[dict] and formatted message.
     """
     try:
-        from data.db import get_conn
+        from core.db import get_conn
 
         today = date.today()
         from_date = today - timedelta(days=days_back)
@@ -69,7 +69,7 @@ def get_corporate_events(
         for r in rows:
             ratio_str = f" ({r['ratio']}%)" if r["ratio"] else ""
             lines.append(
-                f"• {r['ticker']:6s} | {r['event_type']:12s} | {r['ex_date']}{ratio_str} — {r['note'][:60]}"
+                f"• {r['ticker']:6s} | {r['event_type']:12s} | {r['ex_date']}{ratio_str} — {(r['note'] or '')[:60]}"
             )
 
         return ToolResult(
@@ -100,7 +100,7 @@ def get_broker_views(
     Returns ToolResult with data as list[dict] sorted by published_at DESC.
     """
     try:
-        from data.db import get_conn
+        from core.db import get_conn
 
         since = datetime.now(tz=timezone.utc) - timedelta(days=days)
         subject = ticker_or_index.upper().strip()

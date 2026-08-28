@@ -76,22 +76,91 @@ def _ok(result) -> bool:
     return result is not None and getattr(result, "status", None) == "ok"
 
 
+def _build_world_narrative(data: list[dict]) -> str:
+    """Build 2-paragraph prose narrative for 🌍 section from world index data."""
+    US_NAMES = {"S&P 500", "Dow Jones", "Nasdaq"}
+    ASIA_NAMES = {"Nikkei 225", "KOSPI", "Shanghai", "Hang Seng"}
+
+    us = [d for d in data if d["name"] in US_NAMES]
+    vix = next((d for d in data if d["name"] == "VIX"), None)
+    asia = [d for d in data if d["name"] in ASIA_NAMES]
+    parts = []
+
+    if us:
+        leader = max(us, key=lambda x: abs(x.get("change_pct", 0)))
+        us_dir = "tăng" if sum(d.get("change_pct", 0) for d in us) >= 0 else "giảm"
+        sign = "+" if leader.get("change_pct", 0) >= 0 else ""
+        leader_str = f"{leader['name']} dẫn đầu {sign}{leader.get('change_pct', 0):.2f}% lên {leader.get('close', 0):,.2f}"
+        others_str = ", ".join(
+            f"{d['name']} {'+' if d.get('change_pct',0)>=0 else ''}{d.get('change_pct',0):.2f}%"
+            for d in us if d["name"] != leader["name"]
+        )
+        sentence = f"Phố Wall {us_dir} với {leader_str}"
+        if others_str:
+            sentence += f", {others_str}."
+        else:
+            sentence += "."
+        if vix:
+            vix_pct = vix.get("change_pct", 0)
+            vix_dir = "tăng" if vix_pct >= 0 else "giảm"
+            sentence += f" VIX {vix_dir} {abs(vix_pct):.1f}% về {vix.get('close', 0):.2f}."
+        parts.append(sentence)
+
+    if asia:
+        up_count = sum(1 for d in asia if d.get("change_pct", 0) > 0)
+        down_count = sum(1 for d in asia if d.get("change_pct", 0) < 0)
+        if up_count > 0 and down_count > 0:
+            mood = "phân hóa"
+        elif up_count > 0:
+            mood = "tăng đồng loạt"
+        else:
+            mood = "giảm đồng loạt"
+        items = ", ".join(
+            f"{d['name']} {'+' if d.get('change_pct',0)>=0 else ''}{d.get('change_pct',0):.2f}%"
+            for d in asia
+        )
+        parts.append(f"Châu Á {mood}: {items}.")
+
+    if parts:
+        return "\n".join(parts)
+    return "\n".join(
+        f"• {d['name']}: {d['close']:,.2f} ({'+' if d['change_pct']>=0 else ''}{d['change_pct']:.2f}%)"
+        for d in data
+    )
+
+
+def _format_event_line(raw: str) -> str:
+    """'BPC | dividend | 2026-09-08 (2.48%) — Trả cổ tức...' → '• BPC: Trả cổ tức... (chốt 08/09)'"""
+    import re as _re_ev
+    parts = [p.strip() for p in raw.split("|", 2)]
+    if len(parts) < 3:
+        return f"• {raw}"
+    ticker = parts[0].strip()
+    date_pct_desc = parts[2].strip()
+    m = _re_ev.match(r"(\d{4})-(\d{2})-(\d{2})", date_pct_desc)
+    date_str = f"{m.group(3)}/{m.group(2)}" if m else ""
+    desc = date_pct_desc.split("—", 1)[1].strip() if "—" in date_pct_desc else date_pct_desc
+    if date_str:
+        return f"• {ticker}: {desc} (chốt {date_str})"
+    return f"• {ticker}: {desc}"
+
+
 # ── Sub-collectors ────────────────────────────────────────────────────────────
 
-def _collect_world() -> dict:
+def _collect_world(target_date: Optional[str] = None) -> dict:
     """Fetch world indices, gold (world + SJC), oil, crypto, FX. All best-effort."""
     missing: list[str] = []
 
-    # World indices
-    idx_r = _safe(get_global_indices)
+    # World indices — pass target_date so yfinance won't bleed in future/intraday rows
+    idx_r = _safe(get_global_indices, target_date)
     if _ok(idx_r):
-        world_block = idx_r.message
+        world_block = _build_world_narrative(idx_r.data) if idx_r.data else idx_r.message
     else:
         world_block = _MISSING
         missing.append("world_indices")
 
     # Commodities: split gold vs oil
-    com_r = _safe(get_commodities)
+    com_r = _safe(get_commodities, target_date)
     gold_line = _MISSING
     oil_parts: list[str] = []
     if _ok(com_r) and com_r.data:
@@ -122,7 +191,14 @@ def _collect_world() -> dict:
     # Crypto
     crypto_r = _safe(get_crypto_prices)
     if _ok(crypto_r):
-        crypto_block = crypto_r.message
+        coins = (crypto_r.data or {}).get("coins", [])[:4] if isinstance(crypto_r.data, dict) else []
+        if coins:
+            avg_pct = sum(c.get("change_24h_pct", 0) for c in coins) / len(coins)
+            sentiment = "Sắc xanh" if avg_pct > 0.3 else ("Sắc đỏ" if avg_pct < -0.3 else "Phân hóa")
+            lead = max(coins, key=lambda x: abs(x.get("change_24h_pct", 0)))
+            crypto_block = f"{sentiment} bao trùm thị trường tiền số, {lead['symbol']} dẫn đầu:\n{crypto_r.message}"
+        else:
+            crypto_block = crypto_r.message
     else:
         crypto_block = _MISSING
         missing.append("crypto")
@@ -148,6 +224,21 @@ def _collect_vn(target_date: Optional[str]) -> dict:
     """Fetch VN market: index, breadth, top movers, foreign flows, sector."""
     missing: list[str] = []
 
+    # Auto-refresh HOSE universe cache if missing or stale (>7 days)
+    try:
+        from data.hose_universe import _CACHE_PATH, fetch_and_save_hose_universe
+        import os
+        import time as _time
+        stale = (
+            not _CACHE_PATH.exists()
+            or (_time.time() - os.path.getmtime(_CACHE_PATH)) > 7 * 86400
+        )
+        if stale:
+            sys.stderr.write("[_collect_vn] HOSE cache missing/stale — refreshing\n")
+            fetch_and_save_hose_universe()
+    except Exception as e:
+        sys.stderr.write(f"[_collect_vn] HOSE universe refresh failed: {e}\n")
+
     # VN-Index (DB-first, fallback to market_performance)
     # as_of_date: the brief for date D shows the session that CLOSED before D's open.
     # If target_date is given, use it as the upper bound so yesterday's close is returned.
@@ -165,16 +256,27 @@ def _collect_vn(target_date: Optional[str]) -> dict:
         streak_note = ""
         try:
             from tools.index_db import query_index
-            hist_df = query_index("VNINDEX", 10)
+            hist_df = query_index("VNINDEX", 15)
             if hist_df is not None and not hist_df.empty and "change_pts" in hist_df.columns:
                 changes = hist_df["change_pts"].tolist()
                 if changes:
                     last = changes[-1]
-                    direction = last > 0
-                    streak = sum(1 for c in reversed(changes) if (c > 0) == direction and c != 0)
-                    if streak >= 2:
-                        word = "tăng" if direction else "giảm"
-                        streak_note = f" — phiên {word} thứ {streak} liên tiếp"
+                    if last == 0:
+                        streak_note = ""  # flat session — no streak label
+                    else:
+                        direction = last > 0
+                        # Count only the CONSECUTIVE run at the end — stop at first break
+                        streak = 0
+                        for c in reversed(changes):
+                            if c == 0:
+                                continue
+                            if (c > 0) == direction:
+                                streak += 1
+                            else:
+                                break
+                        if streak >= 2:
+                            word = "tăng" if direction else "giảm"
+                            streak_note = f" — phiên {word} thứ {streak} liên tiếp"
         except Exception:
             pass
 
@@ -210,8 +312,8 @@ def _collect_vn(target_date: Optional[str]) -> dict:
         else:
             missing.append("vn_index")
 
-    # Market breadth
-    breadth_r = _safe(get_market_breadth, "HOSE")
+    # Market breadth — pass target_date so stale DB triggers VCI live fallback
+    breadth_r = _safe(get_market_breadth, "HOSE", target_date)
     if _ok(breadth_r):
         d = breadth_r.data
         total = d.get('advances', 0) + d.get('declines', 0) + d.get('unchanged', 0)
@@ -221,8 +323,8 @@ def _collect_vn(target_date: Optional[str]) -> dict:
         breadth_text = _MISSING
         missing.append("breadth")
 
-    # Top movers by value
-    movers_r = _safe(get_top_movers, "value", 3)
+    # Top movers by value — pass target_date for same staleness check
+    movers_r = _safe(get_top_movers, "value", 3, target_date)
     if _ok(movers_r) and movers_r.data:
         items = movers_r.data[:3]
         parts = [
@@ -261,42 +363,129 @@ def _collect_vn(target_date: Optional[str]) -> dict:
     }
 
 
-def _collect_news(target_date: Optional[str]) -> dict:
-    """Fetch news, corporate events, broker views."""
-    missing: list[str] = []
+def _enrich_news_with_llm(raw_headlines: list[str]) -> str:
+    """
+    LLM call: select top 3-5 headlines and add brief market impact notes.
+    Returns bullet-point text like reference TIN ĐÁNG CHÚ Ý.
+    Falls back to plain bullet list if LLM fails.
+    """
+    if not raw_headlines:
+        return ""
 
-    # Market news — semantic search for financial relevance, then sort by recency.
-    # Pure DB recency pulls in non-market articles (politics, crime); semantic filter fixes that.
-    # Pure semantic search misses today's top stories if embedding score is low; recency sort fixes that.
-    import re as _re
+    headlines_text = "\n".join(f"- {h}" for h in raw_headlines)
+
     try:
-        from rag.news_index import search_news_by_text as _snbt
-        # Broad financial market query — filters to market-relevant articles only
-        _hits = _snbt(
-            "tin tức tài chính chứng khoán thị trường Việt Nam VN-Index cổ phiếu đầu tư",
-            days=3,
-            limit=10,
-        )
-        # Sort by recency so today's top story wins over yesterday's
-        _hits.sort(key=lambda x: str(x.get("published_at", "")), reverse=True)
-        _raw_lines = [
-            f"[{_h.get('source','')} | {str(_h.get('published_at',''))[:10]}] {_h.get('title','').strip()}"
-            for _h in _hits[:5]
-            if _h.get("title", "").strip()
-        ]
-        _has_news = bool(_raw_lines)
-    except Exception:
-        _news_r = _safe(search_financial_news, "VNINDEX", 2)
-        _raw_lines = [l for l in _news_r.message.split("\n") if l.strip()] if _ok(_news_r) else []
-        _has_news = bool(_raw_lines)
+        _fn = create_client
+        if _fn is None:
+            from llm.factory import create_client as _fn  # type: ignore
+        client = _fn()
 
-    if _has_news:
-        clean_lines = []
-        for l in _raw_lines[:3]:
-            cleaned = _re.sub(r"^\[[^\]]+\]\s*", "", l).strip()
-            if cleaned:
-                clean_lines.append(cleaned)
-        news_text = "\n".join(clean_lines) if clean_lines else _MISSING
+        _Msg = LLMMessage
+        if _Msg is None:
+            from llm.types import Message as _Msg  # type: ignore
+
+        prompt = f"""Bạn là biên tập viên tài chính chứng khoán Việt Nam. Dưới đây là tiêu đề các tin tức thị trường:
+
+{headlines_text}
+
+Yêu cầu:
+1. Chọn 5-7 tin tức quan trọng nhất với thị trường chứng khoán.
+2. Viết mỗi tin thành 1 bullet bắt đầu bằng "•": "• [tóm tắt tin ngắn gọn] — [tác động với nhóm cổ phiếu hoặc thị trường]"
+3. Ưu tiên: sự kiện doanh nghiệp (cổ tức, M&A, cổ đông ngoại), chính sách vĩ mô (xăng dầu, lãi suất), tin ngành/nhóm cụ thể.
+4. KHÔNG lặp tin về điểm đóng cửa VN-Index (đã có phần khác).
+5. Mỗi bullet tối đa 2 câu, chuyên nghiệp, không hoa mỹ.
+6. Chỉ trả lời các dòng bullet (•), không thêm tiêu đề hay giải thích."""
+
+        resp = client.generate(
+            [_Msg(role="user", content=prompt)],
+            max_tokens=900,
+            temperature=0.0,
+        )
+        text = resp.text.strip()
+        # Extract only bullet lines — drop any reasoning preamble the model emits
+        bullet_lines = [l.strip() for l in text.split("\n") if l.strip().startswith("•")]
+        if len(bullet_lines) >= 2:
+            return "\n".join(bullet_lines)
+    except Exception as e:
+        sys.stderr.write(f"[_enrich_news_with_llm] failed: {e}\n")
+
+    # Fallback: plain bullet list
+    return "\n".join(f"• {h}" for h in raw_headlines[:5])
+
+
+def _collect_news(target_date: Optional[str]) -> dict:
+    """Fetch news (Tavily multi-query → RAG fallback), corporate events, broker views."""
+    missing: list[str] = []
+    import re as _re
+
+    # --- Step 1: Collect raw headlines ---
+    # Priority: RSS/scraper → Tavily multi-query → RAG index
+    raw_headlines: list[str] = []
+
+    # Primary: RSS feeds + HTML scraper (real-time, no API key, same-morning freshness)
+    try:
+        from data.cafef_rss import fetch_vn_market_news
+        rss_arts = fetch_vn_market_news(target_date=target_date, min_articles=4, max_total=10)
+        if rss_arts:
+            raw_headlines = [a["title"].strip() for a in rss_arts if a.get("title")]
+    except Exception as e:
+        sys.stderr.write(f"[_collect_news] RSS/scraper failed: {e}\n")
+
+    # Secondary: Tavily multi-query (supplements or replaces RSS if unavailable)
+    if len(raw_headlines) < 4:
+        try:
+            from data.tavily_news import search_market_news_multi
+            tavily_arts = search_market_news_multi(target_date=target_date, max_total=8)
+            if tavily_arts:
+                seen = {h[:60].lower() for h in raw_headlines}
+                for a in tavily_arts:
+                    t = a.get("title", "").strip()
+                    if t and t[:60].lower() not in seen:
+                        raw_headlines.append(t)
+                        seen.add(t[:60].lower())
+        except Exception:
+            pass
+
+    # Tertiary: RAG news index (when both above fail / no API key)
+    if not raw_headlines:
+        try:
+            from rag.news_index import search_news_by_text as _snbt
+            _hits = _snbt(
+                "tin tức tài chính chứng khoán thị trường Việt Nam VN-Index cổ phiếu đầu tư",
+                days=3,
+                limit=10,
+            )
+            _hits.sort(key=lambda x: str(x.get("published_at", "")), reverse=True)
+            raw_headlines = [
+                _h.get("title", "").strip()
+                for _h in _hits[:8]
+                if _h.get("title", "").strip()
+            ]
+        except Exception:
+            _news_r = _safe(search_financial_news, "VNINDEX", 2)
+            if _ok(_news_r):
+                raw_headlines = [
+                    _re.sub(r"^\[[^\]]+\]\s*", "", l).strip()
+                    for l in _news_r.message.split("\n")
+                    if l.strip()
+                ][:6]
+
+    # --- Step 2: Deduplicate headlines ---
+    if raw_headlines:
+        seen: set = set()
+        deduped = []
+        for h in raw_headlines:
+            key = h[:60].lower()
+            if key not in seen:
+                seen.add(key)
+                deduped.append(h)
+        raw_headlines = deduped
+
+    # --- Step 3: LLM enrichment → bullet points with market impact ---
+    if raw_headlines:
+        news_text = _enrich_news_with_llm(raw_headlines[:10])
+        if not news_text:
+            news_text = "\n".join(f"• {h}" for h in raw_headlines[:5])
     else:
         news_text = _MISSING
         missing.append("news")
@@ -315,7 +504,8 @@ def _collect_news(target_date: Optional[str]) -> dict:
     ev_r = _safe(get_corporate_events, None, 14, 1)
     if _ok(ev_r) and ev_r.data:
         ev_lines = ev_r.message.split("\n")
-        events_text = "; ".join(l.strip().lstrip("• ") for l in ev_lines[:3] if l.strip())
+        formatted_evs = [_format_event_line(l.strip().lstrip("• ")) for l in ev_lines[:3] if l.strip()]
+        events_text = "🗓 Sự kiện:\n" + "\n".join(formatted_evs)
     elif ev_r is not None and ev_r.status == "no_data":
         # No rights events — fall back to broker views if available
         if _ok(bv_r) and bv_r.data:
@@ -388,7 +578,7 @@ def collect_all(state: MarketBriefState) -> dict:
     date = state.get("date", "")
 
     tasks = {
-        "world": lambda: _collect_world(),
+        "world": lambda: _collect_world(date),
         "vn":    lambda: _collect_vn(date),
         "news":  lambda: _collect_news(date),
         "tech":  lambda: _collect_technical(date),
@@ -521,6 +711,36 @@ def _strip_reasoning(text: str) -> str:
 
 # ── Node 2: compose_outlook ───────────────────────────────────────────────────
 
+# VN national holidays — used to add context about upcoming holiday sessions
+_VN_HOLIDAYS: dict[str, str] = {
+    "2026-01-01": "Tết Dương lịch (1/1)",
+    "2026-02-17": "Tết Nguyên Đán",
+    "2026-02-18": "Tết Nguyên Đán",
+    "2026-02-19": "Tết Nguyên Đán",
+    "2026-02-20": "Tết Nguyên Đán",
+    "2026-04-30": "Giải phóng miền Nam (30/4)",
+    "2026-05-01": "Quốc tế Lao động (1/5)",
+    "2026-09-02": "Quốc khánh 2/9",
+    "2026-09-03": "Quốc khánh 2/9 (bù)",
+}
+
+
+def _upcoming_holiday(date_str: str, lookahead_days: int = 4) -> str:
+    """Return holiday name if one falls within lookahead_days of date_str, else ''."""
+    if not date_str:
+        return ""
+    try:
+        from datetime import datetime, timedelta
+        base = datetime.strptime(date_str, "%Y-%m-%d").date()
+        for offset in range(1, lookahead_days + 1):
+            candidate = str(base + timedelta(days=offset))
+            if candidate in _VN_HOLIDAYS:
+                return _VN_HOLIDAYS[candidate]
+    except Exception:
+        pass
+    return ""
+
+
 def compose_outlook(state: MarketBriefState) -> dict:
     """Single LLM call — writes ONLY the 🎯 NHẬN ĐỊNH narrative (no numbers)."""
     tech = state.get("tech_signals", _MISSING)
@@ -532,6 +752,14 @@ def compose_outlook(state: MarketBriefState) -> dict:
     breadth = state.get("breadth_text", _MISSING)
     foreign = state.get("foreign_text", _MISSING)
     sector = state.get("sector_text", "")
+    report_date = state.get("date", "")
+
+    # Holiday context — inject if a VN holiday is within 4 days
+    holiday = _upcoming_holiday(report_date)
+    holiday_note = (
+        f"\nLưu ý: {holiday} trong {4} ngày tới — tâm lý nhà đầu tư thường thận trọng/chốt lời trước kỳ nghỉ lễ."
+        if holiday else ""
+    )
 
     system_prompt = (
         "Bạn là chuyên gia phân tích kỹ thuật chứng khoán Việt Nam. "
@@ -543,7 +771,7 @@ def compose_outlook(state: MarketBriefState) -> dict:
         "Output chỉ gồm nội dung nhận định thuần túy — viết như bài đăng mạng xã hội chuyên nghiệp."
     )
 
-    user_prompt = f"""Dữ liệu phiên hôm nay:
+    user_prompt = f"""Dữ liệu phiên hôm nay:{holiday_note}
 
 VN-Index: {vn_idx}
 Độ rộng: {breadth}
@@ -559,11 +787,12 @@ Hỗ trợ/kháng cự: {levels}
 Nhận định CTCK:
 {broker}
 
-Tin tức: {news}
+Tin tức nổi bật:
+{news}
 
-Yêu cầu: Viết 2-3 đoạn nhận định ngắn gọn (kỹ thuật → kịch bản → rủi ro). Mỗi đoạn tối đa 3-4 câu. Không dùng tiêu đề đoạn như "Đoạn 1:", "Kỹ thuật:", "Kịch bản:", "Nội dung:". Viết liền mạch như bài đăng mạng xã hội.
-Bắt buộc: Bắt đầu phần trả lời bằng đúng dòng: ###NHẬN ĐỊNH###
-Sau đó viết thẳng nội dung. Không thêm chú thích, kiểm tra, hay bình luận sau nội dung."""
+Yêu cầu: Viết đúng 3 đoạn nhận định (kỹ thuật + độ rộng → kịch bản + điểm tựa → rủi ro + nhóm đáng quan tâm). Mỗi đoạn tối đa 3-4 câu. Không dùng tiêu đề đoạn. Viết liền mạch như bài đăng mạng xã hội chuyên nghiệp.
+Đoạn 3 bắt buộc đề xuất 2-3 nhóm cổ phiếu đáng quan tâm dựa trên tin tức nổi bật (ví dụ: nếu có tin về cổ đông ngoại ngân hàng → nhắc ngân hàng; nếu có tin xăng dầu → nhắc dầu khí/vận tải).
+Viết thẳng 3 đoạn nhận định, không cần tiêu đề hay ký hiệu đặc biệt."""
 
     t0 = time.perf_counter()
     try:
@@ -579,7 +808,7 @@ Sau đó viết thẳng nội dung. Không thêm chú thích, kiểm tra, hay b�
 
         resp = client.generate(
             [_Msg(role="user", content=user_prompt)],
-            max_tokens=2000,
+            max_tokens=3000,
             temperature=0.0,
             system=system_prompt,
         )

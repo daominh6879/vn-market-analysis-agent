@@ -159,7 +159,7 @@ def recall_at_k(chunks: list[str], ground_truth: str) -> float:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="RAG-Fusion eval: single vs multi-query")
-    parser.add_argument("--collection", default="hpg_b7_structural_meta", help="Qdrant collection name")
+    parser.add_argument("--collection", default="bctc_structural", help="Qdrant collection name")
     parser.add_argument("--embed", default=os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text"))
     parser.add_argument("--questions", default="evals/golden_hpg.yaml")
     parser.add_argument("--n", type=int, default=4, help="Number of sub-queries")

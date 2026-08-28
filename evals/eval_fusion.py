@@ -30,7 +30,7 @@ except ImportError:
 
 import yaml
 
-COLLECTION  = "hpg_structural"
+COLLECTION  = "bctc_structural"
 EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 OLLAMA_URL  = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
@@ -73,7 +73,7 @@ def hit_at_k(texts: list[str], keywords: list[str], k: int) -> bool:
 
 
 def retrieve_vector_scored(question: str, collection: str, embed_model: str,
-                           top_k: int) -> list[tuple[str, float]]:
+                           top_k: int, query_filter=None) -> list[tuple[str, float]]:
     import httpx
     from qdrant_client import QdrantClient
 
@@ -87,7 +87,7 @@ def retrieve_vector_scored(question: str, collection: str, embed_model: str,
 
     qdrant = QdrantClient("localhost", port=6333)
     points = qdrant.query_points(
-        collection_name=collection, query=qvec, limit=top_k
+        collection_name=collection, query=qvec, query_filter=query_filter, limit=top_k
     ).points
     return [(p.payload.get("text", ""), float(p.score)) for p in points]
 
@@ -99,12 +99,18 @@ def main() -> None:
     parser.add_argument("--candidate-k", type=int, default=20,
                         help="Candidates retrieved from each source before fusion (default 20)")
     parser.add_argument("--collection", default=COLLECTION)
+    parser.add_argument("--ticker", default="HPG",
+                        help="Ticker filter — comma-separated e.g. HPG or HPG,VCB (default: HPG)")
     parser.add_argument("--embed", default=EMBED_MODEL)
     parser.add_argument("--questions", default="evals/golden_hpg.yaml")
     parser.add_argument("--out", default="evals/fusion_results.json")
     parser.add_argument("--alpha", type=float, default=0.5,
                         help="BM25 weight for weighted-sum fusion (default 0.5)")
     args = parser.parse_args()
+
+    from rag.filter import build_filter
+    tickers = [t.strip().upper() for t in args.ticker.split(",") if t.strip()]
+    ticker_filter = build_filter(tickers=tickers)
 
     K = args.top_k
     CK = args.candidate_k
@@ -134,7 +140,7 @@ def main() -> None:
     from rag.retrieval_bm25 import BM25Retriever
     from rag.fusion import weighted_sum_fusion, rrf_fusion
 
-    bm25_vn = BM25Retriever(args.collection, use_vn_tokenize=True)
+    bm25_vn = BM25Retriever(args.collection, use_vn_tokenize=True, tickers=tickers)
     print()
 
     STRATEGIES = ["bm25_vn", "vector", "weighted_sum", "rrf"]
@@ -152,7 +158,7 @@ def main() -> None:
         t_bm25 = time.perf_counter() - t0
 
         t0 = time.perf_counter()
-        vec_scored = retrieve_vector_scored(text, args.collection, args.embed, top_k=CK)
+        vec_scored = retrieve_vector_scored(text, args.collection, args.embed, top_k=CK, query_filter=ticker_filter)
         t_vec = time.perf_counter() - t0
 
         bm25_texts  = [t for t, _ in bm25_scored]

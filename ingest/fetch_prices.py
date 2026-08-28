@@ -14,6 +14,8 @@ import argparse
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -37,18 +39,22 @@ def fetch_and_insert(ticker: str, from_date: str, to_date: str) -> int:
     # vnstock trả về cột: time, open, high, low, close, volume
     # close là giá đã điều chỉnh theo mặc định của VCI source
     df = df.rename(columns={"time": "ngay", "close": "close_adj"})
-    rows = [
-        (ticker, str(row["ngay"])[:10], float(row["close_adj"]), int(row.get("volume", 0)))
-        for _, row in df.iterrows()
-    ]
+    rows = []
+    for _, row in df.iterrows():
+        ngay = str(row["ngay"])[:10]
+        close_adj = float(row["close_adj"]) if pd.notna(row.get("close_adj")) else None
+        volume = int(row["volume"]) if pd.notna(row.get("volume")) else 0
+        if close_adj is None:
+            continue  # skip rows with no price
+        rows.append((ticker, ngay, close_adj, volume))
 
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.executemany(
                 """
-                INSERT INTO stock_prices (ticker, ngay, close_adj, volume)
+                INSERT INTO stock_prices (ticker, trade_date, close_adj, volume)
                 VALUES (%s, %s, %s, %s)
-                ON CONFLICT (ticker, ngay) DO UPDATE
+                ON CONFLICT (ticker, trade_date) DO UPDATE
                     SET close_adj = EXCLUDED.close_adj,
                         volume    = EXCLUDED.volume
                 """,

@@ -117,6 +117,58 @@ def query_latest_foreign_date(as_of_date: Optional[str] = None) -> Optional[date
         return None
 
 
+def query_foreign_net_streak(as_of_date: Optional[str] = None) -> Optional[dict]:
+    """Count consecutive days of market-level net buying/selling ending at as_of_date.
+
+    Returns {"streak": int, "direction": "buy"|"sell", "latest_date": str} or None.
+    Queries up to 10 recent dates to keep it cheap.
+    """
+    try:
+        from core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                if as_of_date:
+                    cur.execute(
+                        """
+                        SELECT date, SUM(net_value) AS net
+                        FROM foreign_flows
+                        WHERE date <= %s
+                        GROUP BY date
+                        ORDER BY date DESC
+                        LIMIT 10
+                        """,
+                        (as_of_date,),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT date, SUM(net_value) AS net
+                        FROM foreign_flows
+                        GROUP BY date
+                        ORDER BY date DESC
+                        LIMIT 10
+                        """
+                    )
+                rows = cur.fetchall()
+        if not rows:
+            return None
+        nets = [(str(r[0]), float(r[1] or 0)) for r in rows]
+        latest_net = nets[0][1]
+        if latest_net == 0:
+            return {"streak": 0, "direction": "neutral", "latest_date": nets[0][0]}
+        direction = "buy" if latest_net > 0 else "sell"
+        streak = 0
+        for _d, net in nets:
+            if (direction == "buy" and net > 0) or (direction == "sell" and net < 0):
+                streak += 1
+            else:
+                break
+        return {"streak": streak, "direction": direction, "latest_date": nets[0][0]}
+    except Exception as e:
+        sys.stderr.write(f"[foreign_flow_db] query_foreign_net_streak failed: {e}\n")
+        return None
+
+
 def upsert_foreign_rows(rows: list[dict]) -> int:
     """Upsert rows into foreign_flows. Returns count inserted/updated."""
     if not rows:
@@ -143,7 +195,6 @@ def upsert_foreign_rows(rows: list[dict]) -> int:
                     """,
                     rows,
                 )
-            conn.commit()
         return len(rows)
     except Exception as e:
         sys.stderr.write(f"[foreign_flow_db] upsert_foreign_rows failed: {e}\n")

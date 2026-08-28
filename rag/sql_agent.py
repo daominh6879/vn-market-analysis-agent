@@ -34,7 +34,7 @@ from llm.types import Message
 
 # ── allowed tables ────────────────────────────────────────────────────────────
 
-ALLOWED_TABLES: frozenset[str] = frozenset({"financial_facts", "stock_prices"})
+ALLOWED_TABLES: frozenset[str] = frozenset({"financial_facts", "stock_prices", "securities"})
 
 # Statement type names that are always forbidden (covers all dialects).
 # Using name strings for robustness across sqlglot versions.
@@ -66,6 +66,18 @@ TABLE stock_prices
   close_adj    NUMERIC  -- adjusted close price
   volume       BIGINT
 
+TABLE securities
+  ticker       TEXT PRIMARY KEY
+  exchange     TEXT     -- 'HOSE', 'HNX', 'UPCOM'
+  sector       TEXT     -- e.g. 'Thép', 'Ngân hàng', 'Công nghệ'
+  industry     TEXT
+  company_name TEXT
+
+Period filter rules:
+- Annual data: WHERE period = '2024'
+- Quarterly: WHERE period LIKE 'Q%/2024' (e.g. 'Q3/2024')
+- Any 2024 data: WHERE period = '2024' OR period LIKE '%/2024'
+
 Rules:
 - Generate PostgreSQL SELECT queries ONLY.
 - Return ONLY the SQL query, no explanation, no markdown fences.
@@ -95,7 +107,7 @@ class SQLAgentError(Exception):
 class QueryResult:
     sql: str
     columns: list[str]
-    rows: list[tuple] = field(default_factory=list)
+    rows: list[dict] = field(default_factory=list)
 
     def format_answer(self) -> str:
         if not self.rows:
@@ -175,6 +187,30 @@ def _strip_fences(text: str) -> str:
     return text.strip().rstrip("`").strip()
 
 
+def _extract_sql(text: str) -> str:
+    """Extract the last SELECT statement from text.
+
+    Handles DeepSeek reasoning prefix: the model may output chain-of-thought
+    before the final SQL. We find the last occurrence of SELECT and take
+    from there to the end of the statement.
+    """
+    text = _strip_fences(text)
+    # Find the last SELECT keyword (case-insensitive)
+    idx = text.upper().rfind("SELECT")
+    if idx == -1:
+        return text.strip()
+    sql = text[idx:].strip()
+    # Trim trailing reasoning: only split on blank line if the part after it
+    # does NOT look like SQL continuation (avoid truncating CTEs).
+    if "\n\n" in sql:
+        first_part = sql.split("\n\n")[0].strip()
+        upper_first = first_part.upper()
+        # If the first part has no SELECT it's probably a CTE fragment — keep all
+        if "SELECT" in upper_first:
+            sql = first_part
+    return sql
+
+
 def generate_sql(question: str, client=None) -> str:
     """Ask LLM to generate a SQL query for the given question.
 
@@ -188,9 +224,9 @@ def generate_sql(question: str, client=None) -> str:
     resp = client.generate(
         messages=[Message(role="user", content=question)],
         system=_SQL_SYSTEM,
-        max_tokens=512,
+        max_tokens=1024,
     )
-    sql = _strip_fences(resp.text)
+    sql = _extract_sql(resp.text)
     if not sql:
         raise SQLAgentError("LLM returned empty SQL.")
     return sql
@@ -233,12 +269,12 @@ def execute_safe(question: str, client=None) -> QueryResult:
         raise SQLAgentError(f"DB connection failed: {exc}") from exc
 
     try:
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             # Layer 4: statement timeout
             cur.execute("SET statement_timeout = '5s'")
             cur.execute(safe_sql)
             columns = [desc[0] for desc in cur.description] if cur.description else []
-            rows = cur.fetchall()
+            rows = [dict(r) for r in cur.fetchall()]
         conn.commit()
         return QueryResult(sql=safe_sql, columns=columns, rows=rows)
     except psycopg2.Error as exc:

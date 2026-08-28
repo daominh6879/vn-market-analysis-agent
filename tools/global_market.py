@@ -13,22 +13,45 @@ All return ToolResult. Never raise.
 
 from __future__ import annotations
 
+from typing import Optional
+
 from tools.result import ToolResult
+
+
+def _yf_filter_as_of(close, as_of_date: Optional[str]):
+    """Keep only rows with date STRICTLY BEFORE as_of_date.
+
+    The morning brief for date D reports the previous session's close (D-1).
+    Using < (not <=) prevents D's intraday/partial data from bleeding in —
+    especially for Asian markets that open around the same time the brief runs.
+    """
+    if as_of_date is None:
+        return close
+    try:
+        import pandas as _pd
+        cutoff = _pd.Timestamp(as_of_date).date()
+        mask = _pd.to_datetime(close.index).date < cutoff
+        return close[mask]
+    except Exception:
+        return close
 
 
 # ── Tool: World equity indices ────────────────────────────────────────────────
 
-def get_global_indices() -> ToolResult:
+def get_global_indices(as_of_date: Optional[str] = None) -> ToolResult:
     """
     Fetch closing prices + %change for major world indices via yfinance.
-    Returns ToolResult with data as list[dict] and message as formatted text.
+
+    as_of_date: YYYY-MM-DD cap — only rows on or before this date are used.
+    The brief for date D should pass D so we show D-1 close, not D partial/future data.
     """
     try:
+        import sys
         import yfinance as yf
         from data.global_universe import WORLD_INDICES
 
         tickers_str = " ".join(WORLD_INDICES.keys())
-        raw = yf.download(tickers_str, period="5d", auto_adjust=True, progress=False)
+        raw = yf.download(tickers_str, period="7d", auto_adjust=True, progress=False)
 
         if raw.empty:
             return ToolResult(status="no_data", data=None,
@@ -41,12 +64,12 @@ def get_global_indices() -> ToolResult:
             return ToolResult(status="no_data", data=None,
                               message="Insufficient history for world indices.")
 
-        # Log the date range actually returned — helps diagnose stale/wrong-day data
-        import sys
-        if not close.empty:
-            sys.stderr.write(
-                f"[get_global_indices] yfinance dates: {list(close.index.astype(str))}\n"
-            )
+        close = _yf_filter_as_of(close, as_of_date)
+
+        sys.stderr.write(
+            f"[get_global_indices] as_of={as_of_date} "
+            f"dates_used: {list(close.index.astype(str))}\n"
+        )
 
         results = []
         lines = []
@@ -81,17 +104,18 @@ def get_global_indices() -> ToolResult:
 
 # ── Tool: Commodities (Gold, Silver, WTI, Brent) ────────────────────────────
 
-def get_commodities() -> ToolResult:
+def get_commodities(as_of_date: Optional[str] = None) -> ToolResult:
     """
     Fetch gold, silver, WTI, Brent prices + %change via yfinance futures.
-    Returns ToolResult with data as list[dict].
+
+    as_of_date: YYYY-MM-DD cap — only rows on or before this date are used.
     """
     try:
         import yfinance as yf
         from data.global_universe import COMMODITIES
 
         tickers_str = " ".join(COMMODITIES.keys())
-        raw = yf.download(tickers_str, period="5d", auto_adjust=True, progress=False)
+        raw = yf.download(tickers_str, period="7d", auto_adjust=True, progress=False)
 
         if raw.empty:
             return ToolResult(status="no_data", data=None,
@@ -103,6 +127,8 @@ def get_commodities() -> ToolResult:
         if close.empty:
             return ToolResult(status="no_data", data=None,
                               message="Insufficient history for commodities.")
+
+        close = _yf_filter_as_of(close, as_of_date)
 
         results = []
         lines = []
@@ -137,10 +163,54 @@ def get_commodities() -> ToolResult:
 
 # ── Tool: Crypto prices ───────────────────────────────────────────────────────
 
+# Binance symbol → (CoinGecko id, display symbol)
+_BINANCE_CRYPTO = [
+    ("BTCUSDT",  "bitcoin",  "BTC"),
+    ("ETHUSDT",  "ethereum", "ETH"),
+    ("XRPUSDT",  "ripple",   "XRP"),
+    ("SOLUSDT",  "solana",   "SOL"),
+]
+
+
+def _fetch_crypto_binance() -> Optional[list[dict]]:
+    """Binance public 24h ticker — no API key, better uptime than CoinGecko free."""
+    try:
+        import httpx
+        import json as _json
+        syms = _json.dumps([p[0] for p in _BINANCE_CRYPTO])
+        resp = httpx.get(
+            "https://api.binance.com/api/v3/ticker/24hr",
+            params={"symbols": syms},
+            timeout=10,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        sym_map = {p[0]: (p[1], p[2]) for p in _BINANCE_CRYPTO}
+        results = []
+        for item in data:
+            sym = item.get("symbol", "")
+            if sym not in sym_map:
+                continue
+            cg_id, display = sym_map[sym]
+            price = float(item["lastPrice"])
+            change_pct = float(item["priceChangePercent"])
+            results.append({
+                "symbol": display,
+                "cg_id": cg_id,
+                "price_usd": round(price, 2),
+                "change_24h_pct": round(change_pct, 2),
+                "market_cap_usd": 0,
+            })
+        return results if len(results) == len(_BINANCE_CRYPTO) else None
+    except Exception:
+        return None
+
+
 def get_crypto_prices() -> ToolResult:
     """
-    Fetch BTC/ETH/XRP/SOL prices + 24h change + total market cap via CoinGecko free API.
-    No API key required (free tier).
+    Fetch BTC/ETH/XRP/SOL prices + 24h change + total market cap.
+    Primary: CoinGecko free API. Fallback: Binance public ticker.
     """
     try:
         import httpx
@@ -156,11 +226,15 @@ def get_crypto_prices() -> ToolResult:
         resp = httpx.get(
             "https://api.coingecko.com/api/v3/simple/price",
             params=params,
-            timeout=15,
+            timeout=12,
             headers={"User-Agent": "Mozilla/5.0"},
         )
         resp.raise_for_status()
         data = resp.json()
+
+        # CoinGecko rate-limits return empty {} — detect and fall back
+        if not data or not any(cg_id in data for cg_id in CRYPTO_IDS):
+            raise ValueError("CoinGecko returned empty payload (likely rate-limited)")
 
         results = []
         lines = []
@@ -182,17 +256,20 @@ def get_crypto_prices() -> ToolResult:
             lines.append(f"• {symbol}: {price:,.2f} USD ({sign}{change_24h:.2f}%)")
 
         # Total market cap
-        global_resp = httpx.get(
-            "https://api.coingecko.com/api/v3/global",
-            timeout=10,
-            headers={"User-Agent": "Mozilla/5.0"},
-        )
         total_mcap_t = None
-        if global_resp.status_code == 200:
-            gdata = global_resp.json().get("data", {})
-            total_mcap = gdata.get("total_market_cap", {}).get("usd", 0)
-            total_mcap_t = round(total_mcap / 1e12, 2)
-            lines.append(f"• Total market cap: ~{total_mcap_t} nghìn tỷ USD")
+        try:
+            global_resp = httpx.get(
+                "https://api.coingecko.com/api/v3/global",
+                timeout=8,
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            if global_resp.status_code == 200:
+                gdata = global_resp.json().get("data", {})
+                total_mcap = gdata.get("total_market_cap", {}).get("usd", 0)
+                total_mcap_t = round(total_mcap / 1e12, 2)
+                lines.append(f"• Total market cap: ~{total_mcap_t} nghìn tỷ USD")
+        except Exception:
+            pass
 
         message = "\n".join(lines) if lines else "Không có dữ liệu crypto."
         return ToolResult(
@@ -201,9 +278,24 @@ def get_crypto_prices() -> ToolResult:
             message=message,
         )
 
-    except Exception as e:
+    except Exception:
+        # Fallback: Binance public ticker
+        import sys
+        sys.stderr.write("[get_crypto_prices] CoinGecko failed, trying Binance fallback\n")
+        binance = _fetch_crypto_binance()
+        if binance:
+            lines = []
+            for r in binance:
+                sign = "+" if r["change_24h_pct"] >= 0 else ""
+                lines.append(f"• {r['symbol']}: {r['price_usd']:,.2f} USD ({sign}{r['change_24h_pct']:.2f}%)")
+            message = "\n".join(lines)
+            return ToolResult(
+                status="ok",
+                data={"coins": binance, "total_market_cap_trillion_usd": None},
+                message=message,
+            )
         return ToolResult(status="upstream_error", data=None,
-                          message=f"Lỗi lấy giá crypto: {e}")
+                          message="Lỗi lấy giá crypto (CoinGecko + Binance đều thất bại)")
 
 
 # ── Tool: FX rates (USD/VND) ──────────────────────────────────────────────────

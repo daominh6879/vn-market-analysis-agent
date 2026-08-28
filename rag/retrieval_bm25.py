@@ -5,6 +5,8 @@ Loads all chunks at init, builds BM25Okapi index, exposes search().
 Two tokenization modes:
   - raw split: text.split() — baseline
   - VN tokenize: underthesea.word_tokenize — handles compound words
+
+Pass tickers= to restrict index to specific companies from bctc_structural.
 """
 from __future__ import annotations
 
@@ -27,26 +29,42 @@ class BM25Retriever:
         qdrant_host: str = "localhost",
         qdrant_port: int = 6333,
         use_vn_tokenize: bool = False,
+        tickers: list[str] | None = None,
+        sector: str | None = None,
+        year: str | None = None,
     ) -> None:
         from rank_bm25 import BM25Okapi
+        from rag.filter import build_filter
 
         self._tokenize = _vn_tokenize if use_vn_tokenize else _raw_tokenize
 
         client = QdrantClient(qdrant_host, port=qdrant_port)
-        self._texts = self._scroll_all(client, collection)
-        print(f"  BM25: loaded {len(self._texts)} chunks from '{collection}' "
+        scroll_filter = build_filter(tickers=tickers, sector=sector, year=year)
+        self._texts = self._scroll_all(client, collection, scroll_filter=scroll_filter)
+
+        filter_desc = ""
+        if tickers:
+            filter_desc = f" tickers={tickers}"
+        elif sector:
+            filter_desc = f" sector={sector}"
+        print(f"  BM25: loaded {len(self._texts)} chunks from '{collection}'{filter_desc} "
               f"({'vn_tokenize' if use_vn_tokenize else 'raw_split'})")
 
         tokenized = [self._tokenize(t) for t in self._texts]
         self._bm25 = BM25Okapi(tokenized)
 
     @staticmethod
-    def _scroll_all(client: QdrantClient, collection: str) -> list[str]:
+    def _scroll_all(
+        client: QdrantClient,
+        collection: str,
+        scroll_filter=None,
+    ) -> list[str]:
         texts: list[str] = []
         offset = None
         while True:
             results, offset = client.scroll(
                 collection_name=collection,
+                scroll_filter=scroll_filter,
                 limit=256,
                 offset=offset,
                 with_payload=True,

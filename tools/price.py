@@ -783,13 +783,18 @@ def _build_breadth_result(changes: list[dict], label: str = "VN30") -> ToolResul
     )
 
 
-def get_market_breadth(universe: str = "HOSE") -> ToolResult:
+def get_market_breadth(universe: str = "HOSE", as_of_date: Optional[str] = None) -> ToolResult:
     """Độ rộng thị trường: advance/decline/unchanged + top gainers/losers.
 
     universe: "HOSE" (default, ~150-400 mã) | "VN30" (30 mã, faster)
+    as_of_date: YYYY-MM-DD — if DB's latest data is older than as_of_date - 1 day,
+                skip DB and use live VCI API instead.
 
-    DB-first: query ohlcv_daily. Falls back to live batch VCI API if DB empty.
+    DB-first (when fresh): query ohlcv_daily.
+    Fallback: live batch VCI API when DB is empty OR stale.
     """
+    import sys
+
     # Resolve ticker list
     if universe.upper() == "VN30":
         tickers = _VN30_CONSTITUENTS
@@ -799,10 +804,30 @@ def get_market_breadth(universe: str = "HOSE") -> ToolResult:
         tickers = load_hose_tickers()
         label = "HOSE"
 
-    # DB-first
+    # DB-first — but only if data is fresh enough
     from tools.ohlcv_db import query_universe_latest
     db_df = query_universe_latest(tickers)
-    if db_df is not None and not db_df.empty:
+
+    _db_fresh = False
+    if db_df is not None and not db_df.empty and "date" in db_df.columns:
+        if as_of_date:
+            try:
+                import pandas as _pd
+                db_max = _pd.to_datetime(db_df["date"]).max().date()
+                # Previous trading day = as_of_date - 1 calendar day (rough check)
+                prev_day = (_pd.Timestamp(as_of_date) - _pd.Timedelta(days=1)).date()
+                _db_fresh = db_max >= prev_day
+                if not _db_fresh:
+                    sys.stderr.write(
+                        f"[get_market_breadth] DB stale: max={db_max} < prev={prev_day} — using VCI\n"
+                    )
+            except Exception:
+                _db_fresh = True  # can't verify → assume fresh
+        else:
+            _db_fresh = True
+
+    _MIN_COVERAGE = 200  # require at least 200 tickers to trust DB breadth for HOSE
+    if _db_fresh and db_df is not None and not db_df.empty:
         changes = [
             {
                 "ticker": row["ticker"],
@@ -812,8 +837,13 @@ def get_market_breadth(universe: str = "HOSE") -> ToolResult:
             }
             for _, row in db_df.iterrows()
         ]
-        if changes:
+        min_coverage = _MIN_COVERAGE if label == "HOSE" else 25
+        if changes and len(changes) >= min_coverage:
             return _build_breadth_result(changes, label=label)
+        # DB fresh but coverage too low — fall through to VCI API
+        sys.stderr.write(
+            f"[get_market_breadth] DB coverage low: {len(changes)} < {min_coverage} — using VCI\n"
+        )
 
     # Fallback: live batch VCI API (chunk into groups of 30 to respect API limits)
     from tools.providers import VciDirectProvider
@@ -824,7 +854,7 @@ def get_market_breadth(universe: str = "HOSE") -> ToolResult:
         chunk = tickers[i:i + chunk_size]
         try:
             batch = provider.fetch_batch_latest(chunk, count_back=3)
-        except Exception as e:
+        except Exception:
             continue  # skip failed chunks, don't abort entire breadth
         for sym, df in batch.items():
             if df.empty or len(df) < 2:
@@ -844,13 +874,15 @@ def get_market_breadth(universe: str = "HOSE") -> ToolResult:
     return _build_breadth_result(changes, label=label)
 
 
-def get_top_movers(by: str = "value", limit: int = 5) -> ToolResult:
+def get_top_movers(by: str = "value", limit: int = 5, as_of_date: Optional[str] = None) -> ToolResult:
     """Top mã theo thanh khoản hoặc % thay đổi trong phiên gần nhất.
 
     by: "value" (top theo giá trị giao dịch ≈ close×volume) |
         "pct_gain" (top tăng giá) | "pct_loss" (top giảm giá)
     limit: số mã trả về (mặc định 5)
+    as_of_date: YYYY-MM-DD — skip DB and use VCI if DB data is stale.
     """
+    import sys
     from data.hose_universe import load_hose_tickers
     tickers = load_hose_tickers()
 
@@ -862,28 +894,83 @@ def get_top_movers(by: str = "value", limit: int = 5) -> ToolResult:
             message="by phải là 'value', 'pct_gain', hoặc 'pct_loss'.",
         )
 
+    def _db_is_fresh(df) -> bool:
+        if df is None or df.empty or "date" not in df.columns:
+            return False
+        if not as_of_date:
+            return True
+        try:
+            import pandas as _pd
+            db_max = _pd.to_datetime(df["date"]).max().date()
+            prev_day = (_pd.Timestamp(as_of_date) - _pd.Timedelta(days=1)).date()
+            fresh = db_max >= prev_day
+            if not fresh:
+                sys.stderr.write(
+                    f"[get_top_movers] DB stale: max={db_max} < prev={prev_day} — using VCI\n"
+                )
+            return fresh
+        except Exception:
+            return True
+
     try:
         if by == "value":
             from tools.ohlcv_db import query_top_by_value
             df = query_top_by_value(tickers, limit=limit)
-            if df is None or df.empty:
-                return ToolResult(status="no_data", data=None,
-                                  message="Không có dữ liệu top thanh khoản từ DB.")
-            items = [
-                {
-                    "ticker": row["ticker"],
-                    "close": float(row["close"]),
-                    "volume": int(row["volume"]),
-                    "traded_value": float(row["traded_value"]),
-                    "pct_change": float(row["pct_change"]),
-                }
-                for _, row in df.iterrows()
-            ]
-            lines = [f"• {r['ticker']}: {r['close']:,.0f} ({r['pct_change']:+.1f}%)"
-                     f" — value ~{r['traded_value']/1e9:.0f} tỷ"
-                     for r in items]
-            message = "Top thanh khoản:\n" + "\n".join(lines)
-            return ToolResult(status="ok", data=items, message=message)
+            if df is not None and not df.empty and _db_is_fresh(df):
+                items = [
+                    {
+                        "ticker": row["ticker"],
+                        "close": float(row["close"]),
+                        "volume": int(row["volume"]),
+                        "traded_value": float(row["traded_value"]),
+                        "pct_change": float(row["pct_change"]),
+                    }
+                    for _, row in df.iterrows()
+                ]
+                lines = [f"• {r['ticker']}: {r['close']:,.0f} ({r['pct_change']:+.1f}%)"
+                         f" — value ~{r['traded_value']/1e9:.0f} tỷ"
+                         for r in items]
+                message = "Top thanh khoản:\n" + "\n".join(lines)
+                return ToolResult(status="ok", data=items, message=message)
+
+            # DB stale or empty → VCI live top movers (top 90 tickers by alpha, sort by value)
+            from tools.providers import VciDirectProvider
+            provider = VciDirectProvider()
+            vci_changes = []
+            # Use VN30+VN100 for speed; full HOSE would be too slow here
+            top_tickers = tickers[:90]
+            chunk_size = 30
+            for i in range(0, len(top_tickers), chunk_size):
+                chunk = top_tickers[i:i + chunk_size]
+                try:
+                    batch = provider.fetch_batch_latest(chunk, count_back=3)
+                except Exception:
+                    continue
+                for sym, sdf in batch.items():
+                    if sdf.empty or len(sdf) < 2:
+                        continue
+                    prev = float(sdf["close"].iloc[-2])
+                    curr = float(sdf["close"].iloc[-1])
+                    vol = float(sdf["volume"].iloc[-1])
+                    pct = (curr - prev) / prev * 100 if prev else 0.0
+                    vci_changes.append({
+                        "ticker": sym,
+                        "close": curr,
+                        "volume": vol,
+                        "traded_value": curr * vol,
+                        "pct_change": round(pct, 2),
+                    })
+            if vci_changes:
+                vci_changes.sort(key=lambda x: x["traded_value"], reverse=True)
+                items = vci_changes[:limit]
+                lines = [f"• {r['ticker']}: {r['close']:,.0f} ({r['pct_change']:+.1f}%)"
+                         f" — value ~{r['traded_value']/1e9:.0f} tỷ"
+                         for r in items]
+                message = "Top thanh khoản:\n" + "\n".join(lines)
+                return ToolResult(status="ok", data=items, message=message)
+
+            return ToolResult(status="no_data", data=None,
+                              message="Không có dữ liệu top thanh khoản từ DB.")
 
         else:
             from tools.ohlcv_db import query_universe_latest
@@ -951,9 +1038,28 @@ def get_foreign_flows(days: int = 1, as_of_date: Optional[str] = None) -> ToolRe
 
     top_buyers = query_top_foreign(target_date, n=5, direction="buy") or []
     top_sellers = query_top_foreign(target_date, n=5, direction="sell") or []
-    return _build_foreign_result(str(target_date), market["net_value"],
-                                 market["total_buy"], market["total_sell"],
-                                 top_buyers, top_sellers)
+    result = _build_foreign_result(str(target_date), market["net_value"],
+                                   market["total_buy"], market["total_sell"],
+                                   top_buyers, top_sellers)
+
+    # Append consecutive-session streak to first line of message
+    try:
+        from tools.foreign_flow_db import query_foreign_net_streak
+        streak_data = query_foreign_net_streak(as_of_date=as_of_date)
+        if streak_data and streak_data["streak"] >= 2:
+            word = "mua ròng" if streak_data["direction"] == "buy" else "bán ròng"
+            streak_note = f" — phiên {word} thứ {streak_data['streak']} liên tiếp"
+            lines = result.message.split("\n")
+            lines[0] = lines[0] + streak_note
+            result = ToolResult(
+                status=result.status,
+                data={**result.data, "streak": streak_data},
+                message="\n".join(lines),
+            )
+    except Exception:
+        pass
+
+    return result
 
 
 def _get_foreign_flows_live() -> ToolResult:

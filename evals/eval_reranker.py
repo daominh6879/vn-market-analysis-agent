@@ -36,7 +36,7 @@ except ImportError:
 
 import yaml
 
-COLLECTION  = "hpg_structural"
+COLLECTION  = "bctc_structural"
 EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 OLLAMA_URL  = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
@@ -79,7 +79,7 @@ def hit_at_k(texts: list[str], keywords: list[str], k: int) -> bool:
 
 
 def retrieve_vector_scored(question: str, collection: str, embed_model: str,
-                           top_k: int) -> list[tuple[str, float]]:
+                           top_k: int, query_filter=None) -> list[tuple[str, float]]:
     import httpx
     from qdrant_client import QdrantClient
 
@@ -93,7 +93,7 @@ def retrieve_vector_scored(question: str, collection: str, embed_model: str,
 
     qdrant = QdrantClient("localhost", port=6333)
     points = qdrant.query_points(
-        collection_name=collection, query=qvec, limit=top_k
+        collection_name=collection, query=qvec, query_filter=query_filter, limit=top_k
     ).points
     return [(p.payload.get("text", ""), float(p.score)) for p in points]
 
@@ -111,6 +111,8 @@ def main() -> None:
     parser.add_argument("--top-k",      type=int, default=5)
     parser.add_argument("--candidate-k", type=int, default=30)
     parser.add_argument("--collection", default=COLLECTION)
+    parser.add_argument("--ticker", default="HPG",
+                        help="Ticker filter — comma-separated e.g. HPG or HPG,VCB (default: HPG)")
     parser.add_argument("--embed",      default=EMBED_MODEL)
     parser.add_argument("--questions",  default="evals/golden_hpg.yaml")
     parser.add_argument("--out",        default="evals/reranker_results.json")
@@ -120,6 +122,10 @@ def main() -> None:
     parser.add_argument("--skip-512",   action="store_true",
                         help="Skip reranker_512 (slow ~26s/query) to save time")
     args = parser.parse_args()
+
+    from rag.filter import build_filter
+    tickers = [t.strip().upper() for t in args.ticker.split(",") if t.strip()]
+    ticker_filter = build_filter(tickers=tickers)
 
     K  = args.top_k
     CK = args.candidate_k
@@ -139,7 +145,7 @@ def main() -> None:
     from rag.fusion import weighted_sum_fusion
     from rag.reranker import rerank, rerank_with_snippets, extract_snippet
 
-    bm25_vn = BM25Retriever(args.collection, use_vn_tokenize=True)
+    bm25_vn = BM25Retriever(args.collection, use_vn_tokenize=True, tickers=tickers)
     print()
 
     print("Warming up reranker (max_length=256)...")
@@ -167,7 +173,7 @@ def main() -> None:
 
         # Stage 1 — fusion (same for all variants)
         bm25_scored = bm25_vn.search_scored(text, top_k=CK)
-        vec_scored  = retrieve_vector_scored(text, args.collection, args.embed, top_k=CK)
+        vec_scored  = retrieve_vector_scored(text, args.collection, args.embed, top_k=CK, query_filter=ticker_filter)
         ws_texts    = weighted_sum_fusion(bm25_scored, vec_scored, alpha=args.alpha)
         candidates  = ws_texts[:20]  # top-20 as reranker input
 

@@ -97,7 +97,7 @@ def reconcile(collection: str, fix: bool = False) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Đối chiếu Postgres vs Qdrant")
     parser.add_argument(
-        "--collection", default="hpg_structural", help="Qdrant collection"
+        "--collection", default="bctc_structural", help="Qdrant collection"
     )
     parser.add_argument("--fix", action="store_true", help="Tự xoá orphan khỏi Qdrant")
     args = parser.parse_args()

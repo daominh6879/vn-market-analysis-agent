@@ -83,17 +83,18 @@ class TestNaming:
         assert _bucket(IngestionConfig(ticker="VCB")) == "vcb-docs"
         assert _bucket(IngestionConfig(ticker="MWG")) == "mwg-docs"
 
-    def test_collection_includes_strategy(self):
-        assert _collection(IngestionConfig(ticker="HPG", chunk_strategy="structural")) == "hpg_structural"
-        assert _collection(IngestionConfig(ticker="HPG", chunk_strategy="fixed")) == "hpg_fixed"
-        assert _collection(IngestionConfig(ticker="VCB", chunk_strategy="structural")) == "vcb_structural"
+    def test_collection_is_shared(self):
+        """All tickers share bctc_structural — isolation via payload filter."""
+        assert _collection(IngestionConfig(ticker="HPG", chunk_strategy="structural")) == "bctc_structural"
+        assert _collection(IngestionConfig(ticker="HPG", chunk_strategy="fixed")) == "bctc_structural"
+        assert _collection(IngestionConfig(ticker="VCB", chunk_strategy="structural")) == "bctc_structural"
 
     def test_ticker_isolation(self):
-        """Hai ticker khác nhau → bucket và collection khác nhau."""
+        """Hai ticker khác nhau → bucket khác nhau (collection shared)."""
         hpg = IngestionConfig(ticker="HPG")
         vcb = IngestionConfig(ticker="VCB")
         assert _bucket(hpg) != _bucket(vcb)
-        assert _collection(hpg) != _collection(vcb)
+        assert _collection(hpg) == _collection(vcb)  # same shared collection
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -484,8 +485,8 @@ class TestPipelineIntegration:
         from qdrant_client import QdrantClient
 
         qdrant = QdrantClient("localhost", port=6333)
-        hpg_collection = "hpg_structural"
-        vcb_collection = "vcb_structural"
+        hpg_collection = "bctc_structural"
+        vcb_collection = "bctc_structural"
 
         # Dọn trước
         for col in [hpg_collection, vcb_collection]:

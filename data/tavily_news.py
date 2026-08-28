@@ -15,6 +15,7 @@ import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Optional
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
@@ -127,6 +128,151 @@ def search_ticker_news(ticker: str, days: int = 7, max_results: int = 10) -> lis
         })
 
     return articles
+
+
+def search_market_news_today(target_date: Optional[str] = None, max_results: int = 5) -> list[dict]:
+    """
+    Search Tavily for general VN stock market news relevant to target_date.
+    Returns article dicts with title, source, published_at.
+    Falls back silently if TAVILY_API_KEY not set.
+    """
+    api_key = os.environ.get("TAVILY_API_KEY", "")
+    if not api_key:
+        return []
+
+    try:
+        from tavily import TavilyClient
+    except ImportError:
+        return []
+
+    client = TavilyClient(api_key=api_key)
+
+    # Build a date-aware query
+    date_hint = target_date[:10] if target_date else ""
+    query = f"thị trường chứng khoán Việt Nam VN-Index hôm nay {date_hint}".strip()
+
+    try:
+        response = client.search(
+            query=query,
+            max_results=max_results,
+            search_depth="basic",
+            include_raw_content=False,
+            topic="news",
+            include_domains=_VN_FINANCE_DOMAINS,
+        )
+    except Exception:
+        return []
+
+    from datetime import datetime, timedelta, timezone
+    base_dt = (
+        datetime.fromisoformat(target_date).replace(tzinfo=timezone.utc)
+        if target_date
+        else datetime.now(timezone.utc)
+    )
+    cutoff = base_dt - timedelta(days=2)
+    articles: list[dict] = []
+    for item in response.get("results", []):
+        title = (item.get("title") or "").strip()
+        if not title:
+            continue
+        pub_raw = item.get("published_date") or ""
+        try:
+            dt = datetime.fromisoformat(pub_raw.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            if dt < cutoff:
+                continue
+            pub_date = dt.isoformat()
+        except Exception:
+            pub_date = datetime.now(timezone.utc).isoformat()
+        articles.append({
+            "title":        title,
+            "source":       "tavily",
+            "published_at": pub_date,
+            "url":          item.get("url", ""),
+        })
+
+    return articles
+
+
+def search_market_news_multi(target_date: Optional[str] = None, max_total: int = 8) -> list[dict]:
+    """
+    Run 4 targeted Tavily queries in parallel covering different market angles:
+    general market, banking/foreign, corporate events, macro/policy.
+    Deduplicates by URL and returns up to max_total articles sorted by recency.
+    Falls back to [] silently if TAVILY_API_KEY not set.
+    """
+    api_key = os.environ.get("TAVILY_API_KEY", "")
+    if not api_key:
+        return []
+
+    try:
+        from tavily import TavilyClient
+    except ImportError:
+        return []
+
+    client = TavilyClient(api_key=api_key)
+    date_hint = target_date[:10] if target_date else ""
+
+    _QUERIES = [
+        f"VN-Index thị trường chứng khoán Việt Nam hôm nay {date_hint}".strip(),
+        f"khối ngoại mua bán cổ phiếu ngân hàng Việt Nam {date_hint}".strip(),
+        f"doanh nghiệp Việt Nam cổ tức phát hành cổ phiếu sự kiện {date_hint}".strip(),
+        f"kinh tế vĩ mô xăng dầu lãi suất tỷ giá Việt Nam {date_hint}".strip(),
+    ]
+
+    from concurrent.futures import ThreadPoolExecutor as _TPE, as_completed as _ac
+
+    base_dt = (
+        datetime.fromisoformat(target_date).replace(tzinfo=timezone.utc)
+        if target_date
+        else datetime.now(timezone.utc)
+    )
+    cutoff = base_dt - timedelta(days=2)
+
+    def _search_one(query: str) -> list[dict]:
+        try:
+            resp = client.search(
+                query=query,
+                max_results=5,
+                search_depth="basic",
+                include_raw_content=False,
+                topic="news",
+                include_domains=_VN_FINANCE_DOMAINS,
+            )
+        except Exception:
+            return []
+        out = []
+        for item in resp.get("results", []):
+            title = (item.get("title") or "").strip()
+            url = item.get("url", "")
+            if not title or not url:
+                continue
+            pub_raw = item.get("published_date") or ""
+            try:
+                dt = datetime.fromisoformat(pub_raw.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                if dt < cutoff:
+                    continue
+                pub_date = dt.isoformat()
+            except Exception:
+                pub_date = datetime.now(timezone.utc).isoformat()
+            out.append({"title": title, "url": url, "source": "tavily", "published_at": pub_date})
+        return out
+
+    all_articles: list[dict] = []
+    seen_urls: set = set()
+    with _TPE(max_workers=4) as ex:
+        futures = [ex.submit(_search_one, q) for q in _QUERIES]
+        for fut in _ac(futures):
+            for art in (fut.result() or []):
+                if art["url"] not in seen_urls:
+                    seen_urls.add(art["url"])
+                    all_articles.append(art)
+
+    all_articles.sort(key=lambda x: x.get("published_at", ""), reverse=True)
+    return all_articles[:max_total]
 
 
 def fetch_and_save(ticker: str, days: int = 7, dry_run: bool = False) -> int:

@@ -35,7 +35,7 @@ TEST_QUESTIONS = [
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="RAG-Fusion demo")
-    parser.add_argument("--collection", default="hpg_b7_structural_meta")
+    parser.add_argument("--collection", default="bctc_structural")
     parser.add_argument("--embed", default=os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text"))
     parser.add_argument("--n", type=int, default=4, help="Number of sub-queries")
     parser.add_argument("--query", default=None, help="Run a single custom query instead of TEST_QUESTIONS")
