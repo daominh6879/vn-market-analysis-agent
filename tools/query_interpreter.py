@@ -38,10 +38,12 @@ _SYSTEM = f"""\
 Bạn là query interpreter cho hệ thống phân tích tài chính Việt Nam.
 Phân tích câu hỏi của người dùng và gọi tool interpret_query.
 
+Hệ thống phục vụ TẤT CẢ mã chứng khoán Việt Nam (HOSE, HNX, UPCOM) — không giới hạn công ty cụ thể.
+
 Dữ liệu hiện có:
   - bctc_structural: nội dung báo cáo tài chính (Qdrant RAG) — dữ liệu lịch sử
-  - financial_facts: số liệu tài chính cấu trúc (Postgres)
-  - stock_prices:    giá lịch sử (Postgres)
+  - financial_facts: số liệu tài chính cấu trúc (Postgres) — mọi mã CK
+  - stock_prices:    giá lịch sử (Postgres) — mọi mã CK
   - news_chunks:     tin tức tài chính gần đây (Qdrant) — realtime, forward-looking
 
 Quy tắc routing:
@@ -61,28 +63,32 @@ Quy tắc routing:
 QUAN TRỌNG: Câu hỏi về rủi ro, thách thức, chiến lược, triển vọng của công ty cụ thể (HPG, VCB, ...)
   → LUÔN là ask_report hoặc report_and_news, KHÔNG BAO GIỜ là out_of_scope.
 
-Ví dụ routing:
+Ví dụ routing (áp dụng cho BẤT KỲ mã CK VN nào, không chỉ HPG/VCB/FPT):
   "thị trường thép trong thời gian tới"             → news, sector=vật liệu
   "tin tức HPG tuần này"                            → news, tickers=[HPG]
+  "tin tức MWG gần đây"                             → news, tickers=[MWG]
   "triển vọng ngành ngân hàng 2025"                 → news, sector=ngân hàng
   "phân tích HPG hôm nay"                           → report_and_news, tickers=[HPG]
   "đánh giá cổ phiếu VCB"                           → report_and_news, tickers=[VCB]
-  "HPG đang như thế nào"                            → report_and_news, tickers=[HPG]
+  "TCB đang như thế nào"                            → report_and_news, tickers=[TCB]
   "Hòa Phát có rủi ro gì từ thép Trung Quốc?"      → ask_report, tickers=[HPG]
-  "HPG đối mặt với thách thức gì?"                  → ask_report, tickers=[HPG]
-  "chiến lược của Hòa Phát là gì?"                  → ask_report, tickers=[HPG]
-  "rủi ro cạnh tranh của VCB?"                      → ask_report, tickers=[VCB]
+  "MWG đối mặt với thách thức gì?"                  → ask_report, tickers=[MWG]
+  "chiến lược của Vietcombank là gì?"               → ask_report, tickers=[VCB]
+  "rủi ro cạnh tranh của ACB?"                      → ask_report, tickers=[ACB]
   "tổng tài sản HPG 2025 và chiến lược?"            → both, tickers=[HPG], year=2025
-  "doanh thu VCB 2024 và triển vọng ngân hàng?"     → both, tickers=[VCB], year=2024
+  "doanh thu VNM 2024 và triển vọng?"               → both, tickers=[VNM], year=2024
   "HPG lợi nhuận 2025 ra sao và rủi ro từ thép TQ?" → both, tickers=[HPG], year=2025
+  "so sánh doanh thu SSI và VND năm 2024"           → sql_query, tickers=[SSI,VND], year=2024
 
 QUY TẮC PHÂN BIỆT news vs report_and_news:
   → Có "phân tích"/"đánh giá"/"nhận định" + ticker cụ thể = report_and_news
   → Chỉ hỏi tin tức/diễn biến không cần phân tích sâu = news
 
 Quy tắc tickers:
-  - Trích xuất tất cả mã CK được đề cập (HPG, VCB, FPT, ...)
-  - Nếu hỏi về một công ty bằng tên ("Hòa Phát" → HPG, "Vietcombank" → VCB, "FPT" → FPT)
+  - Trích xuất TẤT CẢ mã CK được đề cập — bất kỳ mã nào trên HOSE/HNX/UPCOM
+  - Nếu hỏi về công ty bằng tên: "Hòa Phát"→HPG, "Vietcombank"→VCB, "Thế Giới Di Động"→MWG,
+    "Vinamilk"→VNM, "Masan"→MSN, "Techcombank"→TCB, "ACB"→ACB, "Sacombank"→STB, v.v.
+  - Không giới hạn HPG/VCB/FPT — mọi mã CK Việt Nam đều hợp lệ
   - Nếu không đề cập cụ thể → []
 
 Quy tắc sector (dùng tiếng Việt từ danh sách): {_SECTOR_EXAMPLES}
