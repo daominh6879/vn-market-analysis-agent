@@ -348,21 +348,48 @@ html, body, [data-testid="stAppViewContainer"] {
 /* ── Divider ── */
 [data-testid="stDivider"] { border-color: #2a2a2a !important; }
 
-/* Delete button (conversation + memory) */
+/* Conversation row: zero gap, vertically centered */
+[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
+    gap: 0px !important;
+    align-items: center !important;
+    margin-bottom: 0 !important;
+}
+[data-testid="stSidebar"] [data-testid="stColumn"] {
+    padding: 0 !important;
+}
+
+/* Delete button */
+.del-btn {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 100% !important;
+    padding: 0 !important;
+}
+.del-btn > div {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    padding: 0 !important;
+}
 .del-btn > div > button {
     background: transparent !important;
     border: none !important;
+    box-shadow: none !important;
     color: #555 !important;
     font-size: 0.8rem !important;
-    padding: 4px 6px !important;
+    padding: 0 6px !important;
     border-radius: 6px !important;
-    min-height: unset !important;
+    min-height: 34px !important;
+    height: 34px !important;
+    width: 28px !important;
     line-height: 1 !important;
     transition: color 0.15s, background 0.15s !important;
 }
 .del-btn > div > button:hover {
     color: #e55 !important;
-    background-color: rgba(220,50,50,0.12) !important;
+    background-color: rgba(220,50,50,0.15) !important;
 }
 
 /* Memory item row */
@@ -554,44 +581,60 @@ def _sse_chunks(conversation_id: str, user_id: str, tenant_id: str,
                     pass
 
 
-# ── Login screen ──────────────────────────────────────────────────────────────
+# ── Auto-login from URL params (persists across refresh) ─────────────────────
+
+def _init_session(uid: str, tid: str) -> None:
+    st.session_state.user_id = uid
+    st.session_state.tenant_id = tid
+    st.session_state.conversation_id = None
+    st.session_state.messages = []
+    st.session_state.turn_count = 0
+    st.session_state.conversations = _load_conversations(uid, tid)
+    if st.session_state.conversations:
+        latest = st.session_state.conversations[0]
+        st.session_state.conversation_id = latest["conversation_id"]
+        st.session_state.messages = _load_history(latest["conversation_id"])
+        st.session_state.turn_count = int(latest.get("turn_count") or 0)
+
 
 if "user_id" not in st.session_state:
-    _, col, _ = st.columns([1, 1.4, 1])
-    with col:
-        st.markdown("""
-        <div class="login-container">
-            <div class="login-title">📈 VN Stock Chat</div>
-            <div class="login-sub">Trợ lý phân tích tài chính chứng khoán Việt Nam</div>
-        </div>
-        """, unsafe_allow_html=True)
+    # Try restoring from URL query params first
+    _qp = st.query_params
+    _quid = _qp.get("u", "").strip()
+    _qtid = _qp.get("t", "default").strip() or "default"
 
-        with st.form("login_form"):
-            user_id = st.text_input("User ID", placeholder="vd: hung.dao")
-            tenant_id = st.text_input("Tenant", value="default")
-            st.markdown('<div class="login-submit">', unsafe_allow_html=True)
-            submitted = st.form_submit_button("Bắt đầu →", use_container_width=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+    if _quid:
+        _init_session(_quid, _qtid)
+        st.rerun()
+    else:
+        # Show login form
+        _, col, _ = st.columns([1, 1.4, 1])
+        with col:
+            st.markdown("""
+            <div class="login-container">
+                <div class="login-title">📈 VN Stock Chat</div>
+                <div class="login-sub">Trợ lý phân tích tài chính chứng khoán Việt Nam</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-            if submitted:
-                if not user_id.strip():
-                    st.error("Nhập user ID.")
-                else:
-                    uid = user_id.strip()
-                    tid = tenant_id.strip() or "default"
-                    st.session_state.user_id = uid
-                    st.session_state.tenant_id = tid
-                    st.session_state.conversation_id = None
-                    st.session_state.messages = []
-                    st.session_state.turn_count = 0
-                    st.session_state.conversations = _load_conversations(uid, tid)
-                    if st.session_state.conversations:
-                        latest = st.session_state.conversations[0]
-                        st.session_state.conversation_id = latest["conversation_id"]
-                        st.session_state.messages = _load_history(latest["conversation_id"])
-                        st.session_state.turn_count = int(latest.get("turn_count") or 0)
-                    st.rerun()
-    st.stop()
+            with st.form("login_form"):
+                user_id = st.text_input("User ID", placeholder="vd: hung.dao")
+                tenant_id = st.text_input("Tenant", value="default")
+                st.markdown('<div class="login-submit">', unsafe_allow_html=True)
+                submitted = st.form_submit_button("Bắt đầu →", use_container_width=True)
+                st.markdown("</div>", unsafe_allow_html=True)
+
+                if submitted:
+                    if not user_id.strip():
+                        st.error("Nhập user ID.")
+                    else:
+                        uid = user_id.strip()
+                        tid = tenant_id.strip() or "default"
+                        st.query_params["u"] = uid
+                        st.query_params["t"] = tid
+                        _init_session(uid, tid)
+                        st.rerun()
+        st.stop()
 
 
 # ── Init missing state ────────────────────────────────────────────────────────
@@ -637,7 +680,7 @@ with st.sidebar:
             if is_active:
                 st.markdown('<div class="conv-active">', unsafe_allow_html=True)
 
-            col_title, col_del = st.columns([5, 1])
+            col_title, col_del = st.columns([6, 1])
             with col_title:
                 if st.button(title, key=f"conv_{cid}", use_container_width=True, help=help_text):
                     if cid != st.session_state.conversation_id:
@@ -677,7 +720,7 @@ with st.sidebar:
                 key = item.get("key", "")
                 val = item.get("value", "")
                 conf = item.get("confidence", 0)
-                mcol1, mcol2 = st.columns([5, 1])
+                mcol1, mcol2 = st.columns([6, 1])
                 with mcol1:
                     st.markdown(
                         f"<div class='memory-item'>"
@@ -709,6 +752,7 @@ with st.sidebar:
     )
     st.markdown('<div class="logout-btn">', unsafe_allow_html=True)
     if st.button("Đăng xuất", use_container_width=True, key="logout"):
+        st.query_params.clear()
         for k in list(st.session_state.keys()):
             del st.session_state[k]
         st.rerun()
