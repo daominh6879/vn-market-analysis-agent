@@ -30,3 +30,4 @@
 | Bài 24 | [docs/notes/bai-24-daily-brief-p0-p3.md](docs/notes/bai-24-daily-brief-p0-p3.md) |
 | Bài 25 | [docs/notes/bai-25-daily-brief-p1.md](docs/notes/bai-25-daily-brief-p1.md) |
 | Bài 26 | [docs/notes/bai-26-daily-brief-p4.md](docs/notes/bai-26-daily-brief-p4.md) |
+| Bài 27 | [docs/notes/bai-27-human-in-loop.md](docs/notes/bai-27-human-in-loop.md) |
