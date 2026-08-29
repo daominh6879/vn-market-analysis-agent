@@ -111,6 +111,7 @@ def get_realtime_price(ticker: str, provider: PriceProvider | None = None) -> To
         return _map_upstream_error(t, e)
 
 
+@instrument_tool("get_realtime_price_intl")
 def get_realtime_price_intl(ticker: str, provider: PriceProvider | None = None) -> ToolResult:
     """Trả giá đóng cửa gần nhất (USD) cho mã quốc tế. Luôn trả ToolResult, không raise."""
     if not ticker or not ticker.strip():
@@ -185,6 +186,7 @@ def get_historical_ohlcv(
         return _map_upstream_error(t, e)
 
 
+@instrument_tool("get_historical_ohlcv_intl")
 def get_historical_ohlcv_intl(
     ticker: str,
     days: int = 60,
@@ -400,6 +402,7 @@ def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> ToolResult:
         )
 
 
+@instrument_tool("detect_candle_pattern")
 def detect_candle_pattern(df: pd.DataFrame) -> ToolResult:
     """
     Nhận diện mẫu nến Doji / Marubozu / Hammer trên nến cuối cùng.
@@ -704,6 +707,7 @@ def _compute_performance_from_df(
     )
 
 
+@instrument_tool("get_market_performance")
 def get_market_performance(period: str = "week", ticker: str = "VNINDEX") -> ToolResult:
     """Tóm tắt hiệu suất thị trường trong kỳ: % thay đổi, high/low, xu hướng.
 
@@ -793,6 +797,7 @@ def _build_breadth_result(changes: list[dict], label: str = "VN30") -> ToolResul
     )
 
 
+@instrument_tool("get_market_breadth")
 def get_market_breadth(universe: str = "HOSE", as_of_date: Optional[str] = None) -> ToolResult:
     """Độ rộng thị trường: advance/decline/unchanged + top gainers/losers.
 
@@ -884,6 +889,7 @@ def get_market_breadth(universe: str = "HOSE", as_of_date: Optional[str] = None)
     return _build_breadth_result(changes, label=label)
 
 
+@instrument_tool("get_top_movers")
 def get_top_movers(by: str = "value", limit: int = 5, as_of_date: Optional[str] = None) -> ToolResult:
     """Top mã theo thanh khoản hoặc % thay đổi trong phiên gần nhất.
 
@@ -1016,6 +1022,7 @@ def get_top_movers(by: str = "value", limit: int = 5, as_of_date: Optional[str] 
 
 # ── Tool 7: Khối ngoại mua/bán ròng ─────────────────────────────────────────
 
+@instrument_tool("get_foreign_flows")
 def get_foreign_flows(days: int = 1, as_of_date: Optional[str] = None) -> ToolResult:
     """Khối ngoại mua/bán ròng toàn thị trường + top mua/top bán.
 
@@ -1165,6 +1172,7 @@ def _build_foreign_result(
 
 # ── Tool 8: Hiệu suất nhóm ngành ─────────────────────────────────────────────
 
+@instrument_tool("get_sector_performance")
 def get_sector_performance(period: str = "day") -> ToolResult:
     """Hiệu suất theo nhóm ngành: % thay đổi weighted theo giá trị giao dịch.
 

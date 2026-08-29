@@ -39,6 +39,7 @@ def _yf_filter_as_of(close, as_of_date: Optional[str]):
 
 # ── Tool: World equity indices ────────────────────────────────────────────────
 
+@instrument_tool("get_global_indices")
 def get_global_indices(as_of_date: Optional[str] = None) -> ToolResult:
     """
     Fetch closing prices + %change for major world indices via yfinance.
@@ -209,6 +210,7 @@ def _fetch_crypto_binance() -> Optional[list[dict]]:
         return None
 
 
+@instrument_tool("get_crypto_prices")
 def get_crypto_prices() -> ToolResult:
     """
     Fetch BTC/ETH/XRP/SOL prices + 24h change + total market cap.
@@ -334,6 +336,7 @@ def get_fx_rates() -> ToolResult:
 
 # ── Tool: VN Gold (SJC) ───────────────────────────────────────────────────────
 
+@instrument_tool("get_vn_gold")
 def get_vn_gold() -> ToolResult:
     """
     Fetch SJC gold buy/sell prices (triệu đồng/lượng).

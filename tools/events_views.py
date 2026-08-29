@@ -11,8 +11,10 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from tools.result import ToolResult
+from tracing import instrument_tool
 
 
+@instrument_tool("get_corporate_events")
 def get_corporate_events(
     ticker: Optional[str] = None,
     days_ahead: int = 7,
@@ -86,6 +88,7 @@ def get_corporate_events(
         )
 
 
+@instrument_tool("get_broker_views")
 def get_broker_views(
     ticker_or_index: str = "VNINDEX",
     days: int = 7,
