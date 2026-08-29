@@ -1,4 +1,4 @@
-.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-fetch-ticker news-backfill news-reindex test-sentiment mcp-server mcp-inspect test-tools test-chaos migrate-b28 test-b28 api-b28
+.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-fetch-ticker news-backfill news-reindex test-sentiment mcp-server mcp-inspect test-tools test-chaos migrate-b28 test-b28 api-b28 test-b30 eval-b30 eval-b30-notes
 
 up:
 	docker compose up -d
@@ -194,3 +194,23 @@ test-b28:
 
 api-b28:
 	python -m uvicorn api.main:app --reload --port 8028
+
+# Bài 29 — Memory: quên đi (episodic memory)
+migrate-b29:
+	python -c "from data.db import run_migration; run_migration('infra/migrations/029_episodic.sql')"
+
+test-b29:
+	pytest tests/test_bai29_episodic.py -v -s
+
+test-b29-load:
+	pytest tests/test_bai29_episodic.py::test_load_20_episodes_no_context_bloat -v -s
+
+# Bài 30 — Đo memory + test rò rỉ giữa người dùng
+test-b30:
+	pytest tests/test_memory_isolation.py -v
+
+eval-b30:
+	python evals/eval_memory_b30.py
+
+eval-b30-notes:
+	python evals/eval_memory_b30.py --update-notes

@@ -1,14 +1,18 @@
 """
-memory/turn_handler.py — Orchestrates one conversation turn (Bài 28).
+memory/turn_handler.py — Orchestrates one conversation turn (Bài 28 + 29).
 
-run_turn(conversation_id, user_id, tenant_id, user_message) → str (assistant reply)
+run_turn(conversation_id, user_id, tenant_id, user_message, is_first_turn) → str (assistant reply)
 
 Flow:
-  1. load_history(conversation_id)       → inject into LLM messages
-  2. load_user_memory(user_id)           → inject into system prompt
-  3. LLM generates reply
-  4. save_turn(...)                      → persist (user, assistant) to DB
-  5. extract_preferences(turn_messages)  → save items with confidence >= 0.7
+  1. load_history(conversation_id)             → inject into LLM messages
+  2. load_user_memory(user_id)                 → inject into system prompt
+  3. [Bài 29] retrieve_similar episodic memory → inject into system prompt (first turn only)
+  4. LLM generates reply
+  5. save_turn(...)                            → persist (user, assistant) to DB
+  6. extract_preferences(turn_messages)        → save items with confidence >= 0.7
+
+finish_conversation(conversation_id, user_id, first_question, summary, conclusion)
+  → called by API after last turn to store episode in Qdrant
 """
 
 from __future__ import annotations
@@ -23,14 +27,25 @@ _BASE_SYSTEM = """Bạn là trợ lý phân tích tài chính chuyên về thị
 Trả lời bằng tiếng Việt. Dựa vào lịch sử hội thoại và sở thích của người dùng đã được ghi nhớ."""
 
 
-def _build_system(user_memory: list[dict]) -> str:
-    if not user_memory:
-        return _BASE_SYSTEM
-    memory_lines = "\n".join(
-        f"- {m['key']}: {m['value']} (confidence={m['confidence']:.2f})"
-        for m in user_memory
-    )
-    return f"{_BASE_SYSTEM}\n\nSở thích đã biết của người dùng:\n{memory_lines}"
+def _build_system(user_memory: list[dict], episodes: list[dict] | None = None) -> str:
+    parts = [_BASE_SYSTEM]
+
+    if user_memory:
+        memory_lines = "\n".join(
+            f"- {m['key']}: {m['value']} (confidence={m['confidence']:.2f})"
+            for m in user_memory
+        )
+        parts.append(f"\nSở thích đã biết của người dùng:\n{memory_lines}")
+
+    if episodes:
+        ep_lines = []
+        for ep in episodes:
+            ep_lines.append(
+                f"- [{ep['days_old']} ngày trước] {ep['first_question']}: {ep['conclusion']}"
+            )
+        parts.append(f"\nCác cuộc trò chuyện liên quan trước đây:\n" + "\n".join(ep_lines))
+
+    return "\n".join(parts)
 
 
 def run_turn(
@@ -38,12 +53,22 @@ def run_turn(
     user_id: str,
     user_message: str,
     tenant_id: str = "default",
+    is_first_turn: bool = False,
 ) -> str:
     """Run one turn, persist history, extract and save preferences. Returns assistant reply."""
     history = load_history(conversation_id, limit=10)
     user_memory = load_user_memory(user_id, tenant_id, max_items=5)
 
-    system_prompt = _build_system(user_memory)
+    # Inject episodic context only on first turn of a new conversation
+    episodes: list[dict] = []
+    if is_first_turn:
+        try:
+            from memory.episodic import retrieve_similar
+            episodes = retrieve_similar(user_message, user_id, top_k=3)
+        except Exception:
+            episodes = []
+
+    system_prompt = _build_system(user_memory, episodes)
 
     # Build LLM messages: history + new user message
     lm_messages = [Message(role=m["role"], content=m["content"]) for m in history]
@@ -77,3 +102,23 @@ def run_turn(
         )
 
     return assistant_reply
+
+
+def finish_conversation(
+    conversation_id: str,
+    user_id: str,
+    first_question: str,
+    summary: str,
+    conclusion: str,
+    feedback: str = "",
+) -> str:
+    """Store a completed conversation as an episodic memory in Qdrant. Returns point id."""
+    from memory.episodic import store_episode
+    return store_episode(
+        conversation_id=conversation_id,
+        user_id=user_id,
+        first_question=first_question,
+        summary=summary,
+        conclusion=conclusion,
+        feedback=feedback,
+    )

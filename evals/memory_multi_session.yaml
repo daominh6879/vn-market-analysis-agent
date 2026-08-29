@@ -1,0 +1,118 @@
+# Bài 30: Memory recall + precision eval
+# 10 scenarios × 3 conversations each.
+# Each scenario: user expresses facts/prefs in conv1 & conv2, then conv3 asks recall question.
+# expected_remembered: terms that MUST appear in conv3 reply → measures recall.
+# expected_NOT_mentioned: phrases that must NOT appear → measures precision (no hallucination).
+# Design: expected_NOT_mentioned uses phrasing that would only appear if LLM fabricates user prefs.
+
+scenarios:
+
+  - id: s01
+    description: "Sở thích ngành thép - nhớ HPG qua 3 conversations"
+    conversations:
+      - turns:
+          - "Tôi đang đầu tư vào HPG và rất quan tâm đến ngành thép Việt Nam."
+      - turns:
+          - "HPG quý 3 kết quả thế nào? Tôi vẫn đang giữ HPG."
+      - query: "Dựa trên những gì tôi đã chia sẻ, sở thích đầu tư của tôi là gì?"
+    expected_remembered: ["HPG", "thép"]
+    expected_NOT_mentioned: ["bạn thích ngành dệt may", "bạn quan tâm đến bất động sản nhà ở"]
+
+  - id: s02
+    description: "Không ưa rủi ro cao - nhớ khẩu vị rủi ro thấp"
+    conversations:
+      - turns:
+          - "Tôi là nhà đầu tư thận trọng, không muốn rủi ro cao, ưu tiên an toàn vốn."
+      - turns:
+          - "Cổ phiếu nào phù hợp với người ưu tiên bảo toàn vốn như tôi?"
+      - query: "Tóm tắt khẩu vị rủi ro mà tôi đã chia sẻ với bạn."
+    expected_remembered: ["thận trọng", "rủi ro"]
+    expected_NOT_mentioned: ["bạn thích đầu cơ", "bạn ưa thích rủi ro cao"]
+
+  - id: s03
+    description: "Thích cổ tức - nhớ tiêu chí đầu tư theo thu nhập"
+    conversations:
+      - turns:
+          - "Tôi đầu tư để lấy cổ tức đều đặn hàng năm, không quan tâm tăng trưởng ngắn hạn."
+      - turns:
+          - "Những cổ phiếu trả cổ tức tốt nhất trên HOSE là gì?"
+      - query: "Từ những cuộc trò chuyện trước, bạn biết gì về mục tiêu đầu tư của tôi?"
+    expected_remembered: ["cổ tức"]
+    expected_NOT_mentioned: ["bạn muốn lợi nhuận trong ngắn hạn", "bạn thích lướt sóng"]
+
+  - id: s04
+    description: "Tập trung ngành công nghệ - FPT và mảng IT"
+    conversations:
+      - turns:
+          - "Tôi chỉ đầu tư vào công ty công nghệ, chủ yếu là FPT và các công ty IT xuất khẩu phần mềm."
+      - turns:
+          - "FPT Software có triển vọng ở thị trường Nhật không?"
+      - query: "Ngành nào tôi quan tâm nhất theo những gì tôi đã nói?"
+    expected_remembered: ["FPT", "công nghệ"]
+    expected_NOT_mentioned: ["bạn quan tâm đến ngành năng lượng", "bạn thích cổ phiếu ngân hàng"]
+
+  - id: s05
+    description: "Đầu tư dài hạn - không trade ngắn hạn"
+    conversations:
+      - turns:
+          - "Tôi đầu tư theo phong cách dài hạn, giữ ít nhất 3-5 năm. Không trade ngắn hạn."
+      - turns:
+          - "Với phong cách đầu tư dài hạn, tôi nên đánh giá chỉ số nào?"
+      - query: "Hãy nhắc lại phong cách đầu tư của tôi mà bạn đã ghi nhớ."
+    expected_remembered: ["dài hạn"]
+    expected_NOT_mentioned: ["bạn thích giao dịch hàng ngày", "bạn là trader ngắn hạn"]
+
+  - id: s06
+    description: "Cổ phiếu vốn hóa lớn - ngại mid-cap và small-cap"
+    conversations:
+      - turns:
+          - "Tôi chỉ mua cổ phiếu vốn hóa lớn VN30, tránh xa mid-cap và small-cap vì rủi ro thanh khoản."
+      - turns:
+          - "Trong VN30, cổ phiếu nào có thanh khoản tốt nhất?"
+      - query: "Tiêu chí lựa chọn cổ phiếu của tôi là gì?"
+    expected_remembered: ["VN30", "vốn hóa lớn"]
+    expected_NOT_mentioned: ["bạn thích cổ phiếu penny", "bạn đầu tư vào small-cap"]
+
+  - id: s07
+    description: "Quan tâm VCB ngân hàng - ghi nhớ qua episodic"
+    conversations:
+      - turns:
+          - "Tôi theo dõi VCB từ năm 2020, nhà băng lớn nhất Việt Nam về vốn nhà nước."
+      - turns:
+          - "NIM của VCB so với các ngân hàng tư nhân thế nào?"
+      - query: "Cổ phiếu nào tôi đã nhắc đến trong các cuộc trò chuyện trước?"
+    expected_remembered: ["VCB"]
+    expected_NOT_mentioned: ["bạn đã đề cập đến VIC", "bạn nhắc đến MSN trước đây"]
+
+  - id: s08
+    description: "Precision test - user hỏi kỹ thuật, không bày tỏ sở thích"
+    conversations:
+      - turns:
+          - "PE ratio của HPG hiện tại là bao nhiêu?"
+      - turns:
+          - "ROE của VCB năm 2023 là bao nhiêu?"
+      - query: "Những sở thích đầu tư cụ thể nào của tôi bạn đã ghi lại?"
+    expected_remembered: []
+    expected_NOT_mentioned: ["bạn thích HPG", "bạn ưu tiên ngành ngân hàng", "sở thích của bạn là"]
+
+  - id: s09
+    description: "Ngành bán lẻ - MWG và tiêu dùng"
+    conversations:
+      - turns:
+          - "Tôi rất thích MWG và Thế Giới Di Động, đây là khoản đầu tư lớn nhất của tôi."
+      - turns:
+          - "MWG đang mở rộng sang Bách Hóa Xanh, triển vọng thế nào?"
+      - query: "Tôi đã chia sẻ gì về danh mục đầu tư của mình?"
+    expected_remembered: ["MWG"]
+    expected_NOT_mentioned: ["bạn đầu tư chủ yếu vào bất động sản", "bạn thích ngành dược phẩm"]
+
+  - id: s10
+    description: "Precision test - câu hỏi giả định không được ghi thành sở thích"
+    conversations:
+      - turns:
+          - "Nếu giả sử tôi là người ưa rủi ro cao, tôi nên đầu tư vào đâu?"
+      - turns:
+          - "Giả sử tôi muốn lợi nhuận 50% trong 6 tháng, có cổ phiếu nào không?"
+      - query: "Dựa trên những gì tôi đã nói, tôi là kiểu nhà đầu tư nào?"
+    expected_remembered: []
+    expected_NOT_mentioned: ["bạn ưa rủi ro cao", "bạn muốn lợi nhuận 50%", "sở thích đầu tư của bạn là rủi ro"]
