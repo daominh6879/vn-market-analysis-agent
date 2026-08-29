@@ -110,46 +110,28 @@ def run_turn(
     return assistant_reply
 
 
-async def stream_turn(
-    conversation_id: str,
-    user_id: str,
-    user_message: str,
-    tenant_id: str = "default",
-    is_first_turn: bool = False,
+HEARTBEAT_INTERVAL = 15.0
+
+
+def _sse_status(step: str, **extra) -> str:
+    return f"event: status\ndata: {json.dumps({'step': step, **extra})}\n\n"
+
+
+def _sse_chunk(text: str) -> str:
+    return f"data: {json.dumps({'text': text})}\n\n"
+
+
+def _sse_done(length: int, agent: str) -> str:
+    return f"event: done\ndata: {json.dumps({'saved': True, 'length': length, 'agent': agent})}\n\n"
+
+
+async def _stream_via_queue(
+    client,
+    lm_messages: list,
+    system_prompt: str,
 ) -> AsyncIterator[str]:
-    """Async generator yielding SSE events for one conversation turn.
-
-    SSE event types:
-      event: status   → {"step": "loading_history" | "streaming"}
-      data: ...       → {"text": chunk}  (content chunks)
-      : heartbeat     → comment every 15 s if LLM is slow
-      event: done     → {"saved": true, "length": N}
-      event: error    → {"error": "..."}
-
-    On asyncio.CancelledError (client disconnect): task cancelled, turn NOT saved.
-    """
-    HEARTBEAT_INTERVAL = 15.0
-
-    yield f"event: status\ndata: {json.dumps({'step': 'loading_history'})}\n\n"
-
-    history = load_history(conversation_id, limit=10)
-    user_memory = load_user_memory(user_id, tenant_id, max_items=5)
-
-    episodes: list[dict] = []
-    if is_first_turn:
-        try:
-            from memory.episodic import retrieve_similar
-            episodes = retrieve_similar(user_message, user_id, top_k=3)
-        except Exception:
-            episodes = []
-
-    system_prompt = _build_system(user_memory, episodes)
-    lm_messages = [Message(role=m["role"], content=m["content"]) for m in history]
-    lm_messages.append(Message(role="user", content=user_message))
-
-    client = create_client()
-    yield f"event: status\ndata: {json.dumps({'step': 'streaming'})}\n\n"
-
+    """Wrap sync client.stream() in thread+queue, yield SSE data chunks.
+    Propagates asyncio.CancelledError — caller must handle it."""
     loop = asyncio.get_event_loop()
     queue: asyncio.Queue[str | None] = asyncio.Queue()
     stream_error: list[Exception] = []
@@ -159,7 +141,7 @@ async def stream_turn(
             try:
                 loop.call_soon_threadsafe(queue.put_nowait, item)
             except RuntimeError:
-                pass  # loop closed (client disconnected)
+                pass
 
         try:
             for chunk in client.stream(
@@ -184,22 +166,189 @@ async def stream_turn(
             except asyncio.TimeoutError:
                 yield ": heartbeat\n\n"
                 continue
-
             if chunk is None:
                 break
             collected.append(chunk)
-            yield f"data: {json.dumps({'text': chunk})}\n\n"
-
+            yield _sse_chunk(chunk)
     except asyncio.CancelledError:
-        # Client disconnected — do NOT save turn
         thread.join(timeout=1)
-        return
+        raise
 
     if stream_error:
         yield f"event: error\ndata: {json.dumps({'error': str(stream_error[0])})}\n\n"
+
+    # stash full text for caller via a special sentinel (last yielded item)
+    yield f"__collected__:{json.dumps({'text': ''.join(collected)})}"
+
+
+async def _run_blocking_agent(fn, *args, **kwargs) -> str:
+    """Run a blocking sync function in thread pool, return result string.
+    Sends heartbeat-style yields via an asyncio.Event approach — caller
+    separately yields heartbeats while awaiting."""
+    return await asyncio.to_thread(fn, *args, **kwargs)
+
+
+async def stream_turn(
+    conversation_id: str,
+    user_id: str,
+    user_message: str,
+    tenant_id: str = "default",
+    is_first_turn: bool = False,
+) -> AsyncIterator[str]:
+    """Async generator yielding SSE events for one conversation turn.
+
+    Routes query to the right agent before streaming:
+      ticker_analysis → agents/graph.py  (price + technical + news)
+      market_brief    → agents/market_brief_graph.py (full market overview)
+      qa_document     → rag/qa.py (RAG / SQL)
+      conversation    → direct LLM stream (memory-aware)
+
+    SSE events:
+      event: status   → {"step": "...", "agent": "...", ...}
+      data: ...       → {"text": chunk}
+      : heartbeat     → comment every 15s
+      event: done     → {"saved": true, "length": N, "agent": "..."}
+      event: error    → {"error": "..."}
+
+    CancelledError (client disconnect) → turn NOT saved.
+    """
+    yield _sse_status("loading_history")
+
+    history = load_history(conversation_id, limit=10)
+    user_memory = load_user_memory(user_id, tenant_id, max_items=5)
+
+    episodes: list[dict] = []
+    if is_first_turn:
+        try:
+            from memory.episodic import retrieve_similar
+            episodes = retrieve_similar(user_message, user_id, top_k=3)
+        except Exception:
+            episodes = []
+
+    # ── Route query ───────────────────────────────────────────────────────────
+    from agents.query_router import classify as route_classify
+    route = route_classify(user_message)
+
+    yield _sse_status("routing", agent=route.intent, reason=route.reason,
+                      ticker=route.ticker)
+
+    assistant_reply = ""
+
+    # ── ticker_analysis path ──────────────────────────────────────────────────
+    if route.intent == "ticker_analysis":
+        yield _sse_status("collecting_data", ticker=route.ticker)
+        try:
+            def _run_ticker():
+                from agents.graph import build_graph
+                from agents.state import make_initial_state
+                app = build_graph()
+                initial = make_initial_state(user_message)
+                final = app.invoke(initial)
+                return final.get("report") or "[Không có báo cáo]"
+
+            # Heartbeat while agent runs (blocks 5-15s)
+            task = asyncio.create_task(_run_blocking_agent(_run_ticker))
+            while not task.done():
+                try:
+                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
+                except asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+            report = task.result()
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
+            return
+
+        # Yield report line-by-line for progressive display
+        yield _sse_status("streaming", agent="ticker_analysis")
+        for line in report.split("\n"):
+            yield _sse_chunk(line + "\n")
+        assistant_reply = report
+
+    # ── market_brief path ─────────────────────────────────────────────────────
+    elif route.intent == "market_brief":
+        yield _sse_status("collecting_market_data")
+        try:
+            from datetime import date as date_cls
+
+            def _run_brief():
+                from agents.market_brief_graph import build_brief_graph, make_initial_state as mb_init
+                app = build_brief_graph()
+                initial = mb_init(date=str(date_cls.today()), output_path="")
+                final = app.invoke(initial)
+                return final.get("report_text") or "[Không có báo cáo thị trường]"
+
+            task = asyncio.create_task(_run_blocking_agent(_run_brief))
+            while not task.done():
+                try:
+                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
+                except asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+            report = task.result()
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
+            return
+
+        yield _sse_status("streaming", agent="market_brief")
+        for line in report.split("\n"):
+            yield _sse_chunk(line + "\n")
+        assistant_reply = report
+
+    # ── qa_document path ──────────────────────────────────────────────────────
+    elif route.intent == "qa_document":
+        yield _sse_status("querying_documents", ticker=route.ticker)
+        try:
+            def _run_qa():
+                from rag.qa import answer as qa_answer
+                return qa_answer(user_message, ticker=route.ticker)
+
+            task = asyncio.create_task(_run_blocking_agent(_run_qa))
+            while not task.done():
+                try:
+                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
+                except asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+            qa_text = task.result()
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
+            return
+
+        yield _sse_status("streaming", agent="qa_document")
+        for line in qa_text.split("\n"):
+            yield _sse_chunk(line + "\n")
+        assistant_reply = qa_text
+
+    # ── conversation path (LLM stream) ────────────────────────────────────────
+    else:
+        system_prompt = _build_system(user_memory, episodes)
+        lm_messages = [Message(role=m["role"], content=m["content"]) for m in history]
+        lm_messages.append(Message(role="user", content=user_message))
+
+        client = create_client()
+        yield _sse_status("streaming", agent="conversation")
+
+        collected: list[str] = []
+        try:
+            async for sse_line in _stream_via_queue(client, lm_messages, system_prompt):
+                if sse_line.startswith("__collected__:"):
+                    collected_text = json.loads(sse_line[len("__collected__:"):])["text"]
+                    collected = [collected_text]
+                else:
+                    yield sse_line
+        except asyncio.CancelledError:
+            return
+
+        assistant_reply = "".join(collected)
+
+    if not assistant_reply:
         return
 
-    assistant_reply = "".join(collected)
+    # ── Persist + extract preferences (all paths) ─────────────────────────────
     save_turn(conversation_id, user_message, assistant_reply)
 
     turn_messages = [
@@ -217,7 +366,7 @@ async def stream_turn(
             source_message=pref.source_message,
         )
 
-    yield f"event: done\ndata: {json.dumps({'saved': True, 'length': len(assistant_reply)})}\n\n"
+    yield _sse_done(len(assistant_reply), route.intent)
 
 
 def finish_conversation(

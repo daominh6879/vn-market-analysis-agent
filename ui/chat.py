@@ -114,8 +114,27 @@ def _create_conversation(user_id: str, tenant_id: str) -> str:
     return resp.json()["conversation_id"]
 
 
-def _sse_chunks(conversation_id: str, user_id: str, tenant_id: str, message: str, is_first_turn: bool):
-    """Sync generator yielding text strings from SSE stream — fed to st.write_stream()."""
+_AGENT_LABELS = {
+    "ticker_analysis": "📊 Phân tích cổ phiếu",
+    "market_brief":    "🌏 Thị trường chung",
+    "qa_document":     "📄 Tài liệu HPG",
+    "conversation":    "💬 Hội thoại",
+}
+
+_STEP_LABELS = {
+    "loading_history":      "Đang tải lịch sử...",
+    "routing":              "Đang xác định loại câu hỏi...",
+    "collecting_data":      "Đang thu thập dữ liệu giá...",
+    "collecting_market_data": "Đang thu thập dữ liệu thị trường...",
+    "querying_documents":   "Đang tìm kiếm tài liệu...",
+    "streaming":            "Đang tạo câu trả lời...",
+}
+
+
+def _sse_chunks(conversation_id: str, user_id: str, tenant_id: str,
+                message: str, is_first_turn: bool, status_placeholder):
+    """Sync generator yielding text strings — fed to st.write_stream().
+    Updates status_placeholder with routing/step info."""
     with httpx.stream(
         "POST",
         f"{API_URL}/conversations/{conversation_id}/messages/stream",
@@ -129,12 +148,28 @@ def _sse_chunks(conversation_id: str, user_id: str, tenant_id: str, message: str
         headers={"Accept": "text/event-stream"},
     ) as resp:
         resp.raise_for_status()
+        current_event = ""
         for line in resp.iter_lines():
-            if line.startswith("data: "):
+            if line.startswith("event: "):
+                current_event = line[7:].strip()
+            elif line.startswith("data: "):
                 try:
                     payload = json.loads(line[6:])
-                    if "text" in payload:
+                    if current_event == "status":
+                        step = payload.get("step", "")
+                        agent = payload.get("agent", "")
+                        label = _AGENT_LABELS.get(agent, agent)
+                        step_label = _STEP_LABELS.get(step, step)
+                        if agent:
+                            status_placeholder.caption(f"{label} · {step_label}")
+                        else:
+                            status_placeholder.caption(step_label)
+                    elif "text" in payload:
                         yield payload["text"]
+                    elif current_event == "done":
+                        agent = payload.get("agent", "")
+                        label = _AGENT_LABELS.get(agent, agent)
+                        status_placeholder.caption(f"✅ {label}")
                 except json.JSONDecodeError:
                     pass
 
@@ -162,6 +197,7 @@ if prompt := st.chat_input("Hỏi về HPG, VCB, FPT, thị trường..."):
 
     # Stream assistant reply
     with st.chat_message("assistant"):
+        status_box = st.empty()
         try:
             full_reply = st.write_stream(
                 _sse_chunks(
@@ -170,8 +206,10 @@ if prompt := st.chat_input("Hỏi về HPG, VCB, FPT, thị trường..."):
                     tenant_id=st.session_state.tenant_id,
                     message=prompt,
                     is_first_turn=is_first_turn,
+                    status_placeholder=status_box,
                 )
             )
+            status_box.empty()
         except Exception as exc:
             st.error(f"Lỗi stream: {exc}\n\nKiểm tra API đang chạy: make api-b31")
             st.stop()
