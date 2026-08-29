@@ -35,6 +35,9 @@ class AgentState(TypedDict, total=False):
     history: list            # [{step, action, result/tokens/elapsed}]
     error: str
     step_count: int
+    # Bài 28: conversation context
+    conversation_id: str
+    messages: list[dict]     # last N turns [{role, content}] — never full history
 
 
 def detect_query_type(query: str) -> tuple[str, bool]:

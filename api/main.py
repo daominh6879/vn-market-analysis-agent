@@ -22,6 +22,7 @@ from contextlib import asynccontextmanager
 
 from agents.checkpointer import expire_old_sessions
 from api.sessions import router
+from api.conversations import router as conv_router
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +54,7 @@ app = FastAPI(
 )
 
 app.include_router(router)
+app.include_router(conv_router)
 
 
 @app.get("/health")

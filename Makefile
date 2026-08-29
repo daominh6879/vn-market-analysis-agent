@@ -1,4 +1,4 @@
-.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-fetch-ticker news-backfill news-reindex test-sentiment mcp-server mcp-inspect test-tools test-chaos
+.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-fetch-ticker news-backfill news-reindex test-sentiment mcp-server mcp-inspect test-tools test-chaos migrate-b28 test-b28 api-b28
 
 up:
 	docker compose up -d
@@ -184,3 +184,13 @@ test-tools:
 
 test-chaos:
 	pytest tests/test_tool_chaos.py -v
+
+# Bài 28 — Conversation + Memory
+migrate-b28:
+	python -c "from data.db import run_migration; run_migration('infra/migrations/028_conversations.sql')"
+
+test-b28:
+	pytest tests/test_bai28_conversation.py -v -s
+
+api-b28:
+	python -m uvicorn api.main:app --reload --port 8028
