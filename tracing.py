@@ -70,6 +70,64 @@ def _result_summary(result) -> dict:
         return {"status": "ok", "preview": _safe_repr(result, 300)}
 
 
+def instrument_llm(client):
+    """Wrap any LLMClient to log generate() calls (tokens, duration) to traces/latest.jsonl."""
+    from llm.base import LLMClient
+
+    class _FileLLMWrapper(LLMClient):
+        def __init__(self, inner: LLMClient):
+            self._inner = inner
+
+        def generate(self, messages, *, model=None, max_tokens=1024,
+                     system=None, tools=None, temperature=None):
+            rid = current_request_id.get("")
+            n_msgs = len(messages) if messages else 0
+            t0 = time.perf_counter()
+            try:
+                resp = self._inner.generate(
+                    messages, model=model, max_tokens=max_tokens,
+                    system=system, tools=tools, temperature=temperature,
+                )
+                dur = round((time.perf_counter() - t0) * 1000)
+                _write_trace({
+                    "ts": time.time(),
+                    "request_id": rid,
+                    "tool": "llm.generate",
+                    "args": {
+                        "messages": n_msgs,
+                        "model": resp.model or model or "",
+                        "max_tokens": max_tokens,
+                    },
+                    "status": "ok",
+                    "preview": (resp.text or "")[:300],
+                    "duration_ms": dur,
+                    "tokens_in": resp.input_tokens,
+                    "tokens_out": resp.output_tokens,
+                    "error": None,
+                })
+                return resp
+            except Exception as exc:
+                dur = round((time.perf_counter() - t0) * 1000)
+                _write_trace({
+                    "ts": time.time(),
+                    "request_id": rid,
+                    "tool": "llm.generate",
+                    "args": {"messages": n_msgs, "model": model or "", "max_tokens": max_tokens},
+                    "status": "error",
+                    "preview": str(exc)[:300],
+                    "duration_ms": dur,
+                    "tokens_in": 0,
+                    "tokens_out": 0,
+                    "error": str(exc),
+                })
+                raise
+
+        def stream(self, messages, *, model=None, max_tokens=1024, system=None):
+            yield from self._inner.stream(messages, model=model, max_tokens=max_tokens, system=system)
+
+    return _FileLLMWrapper(client)
+
+
 def instrument_tool(name: str | None = None):
     """
     Decorator: log every call to traces/latest.jsonl + optional Langfuse span.

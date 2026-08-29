@@ -77,4 +77,5 @@ def create_client() -> LLMClient:
     else:
         raise ValueError(f"Unknown LLM_PROVIDER={provider!r}. Choose 'anthropic', 'ollama', 'openai', 'gemini', or 'deepseek'.")
 
-    return _wrap_langfuse(client)
+    from tracing import instrument_llm
+    return instrument_llm(_wrap_langfuse(client))

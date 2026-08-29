@@ -153,12 +153,13 @@ st.markdown(
 )
 
 # Header row
-h1, h2, h3, h4, h5 = st.columns([3, 1, 3, 2, 5])
+h1, h2, h3, h4, h5, h6 = st.columns([3, 1, 3, 2, 2, 5])
 h1.markdown("**Tool**")
 h2.markdown("**Status**")
 h3.markdown("**Duration**")
 h4.markdown("**ms**")
-h5.markdown("**Result preview**")
+h5.markdown("**Tokens**")
+h6.markdown("**Result preview**")
 st.markdown("<hr style='margin:4px 0;border-color:#222'>", unsafe_allow_html=True)
 
 for i, t in enumerate(tools):
@@ -168,11 +169,13 @@ for i, t in enumerate(tools):
     preview = t.get("preview", "")
     args = t.get("args", {})
     error = t.get("error")
+    tokens_in = t.get("tokens_in")
+    tokens_out = t.get("tokens_out")
 
     status_color = "status-ok" if status == "ok" else ("status-err" if status == "error" else "status-nodata")
     bar_w = max(4, int(dur_ms / max_dur * 200))
 
-    col1, col2, col3, col4, col5 = st.columns([3, 1, 3, 2, 5])
+    col1, col2, col3, col4, col5, col6 = st.columns([3, 1, 3, 2, 2, 5])
     col1.markdown(f'`{tool_name}`')
     col2.markdown(f'<span class="{status_color}">●&nbsp;{status}</span>', unsafe_allow_html=True)
     col3.markdown(
@@ -180,7 +183,12 @@ for i, t in enumerate(tools):
         unsafe_allow_html=True,
     )
     col4.markdown(f'<span style="color:#888;font-size:0.75rem">{dur_ms:,} ms</span>', unsafe_allow_html=True)
-    col5.markdown(f'<span style="color:#999;font-size:0.75rem">{preview[:120]}</span>', unsafe_allow_html=True)
+    if tokens_in is not None:
+        tok_label = f'<span style="color:#7ec8e3;font-size:0.72rem">↑{tokens_in:,} ↓{tokens_out:,}</span>'
+    else:
+        tok_label = '<span style="color:#444;font-size:0.72rem">—</span>'
+    col5.markdown(tok_label, unsafe_allow_html=True)
+    col6.markdown(f'<span style="color:#999;font-size:0.75rem">{preview[:120]}</span>', unsafe_allow_html=True)
 
     # Expandable detail
     with st.expander(f"↳ {tool_name} detail", expanded=False):
