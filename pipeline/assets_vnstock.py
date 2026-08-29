@@ -107,7 +107,7 @@ def vnstock_prices(context: AssetExecutionContext, config: VnstockPricesConfig) 
         except Exception as exc:
             context.log.error(f"  {ticker} FAILED: {exc}")
             failed.append(ticker)
-        time.sleep(0.3)
+        time.sleep(1.1)
 
     if failed:
         context.log.warning(f"vnstock_prices: {len(failed)} tickers failed: {failed}")

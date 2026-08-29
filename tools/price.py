@@ -264,6 +264,11 @@ def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> ToolResult:
             return float("nan")
 
     try:
+        df = df.copy()
+        # Ensure numeric dtype — DB may return Decimal/str (object dtype breaks numba in pandas_ta)
+        for col in ("open", "high", "low", "close", "volume"):
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
         lines: list[str] = [f"[Đơn vị: {currency}]"]
         close_last = float(df["close"].iloc[-1])
 

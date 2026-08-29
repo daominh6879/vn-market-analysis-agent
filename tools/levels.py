@@ -64,10 +64,18 @@ def find_support_resistance(
         supports = sorted({round(v, 0) for v in swing_lows if v < close_last}, reverse=True)[:3]
         resistances = sorted({round(v, 0) for v in swing_highs if v > close_last})[:3]
 
-        # Mốc tâm lý gần nhất
+        # Mốc tâm lý gần nhất — generated dynamically around actual price
         if round_levels is None:
-            # Default: index points VN-Index range 1600-2100, bước 50
-            round_levels = [float(x) for x in range(1600, 2150, 50)]
+            # Determine step size based on price magnitude
+            if close_last >= 10_000:
+                step = 1_000   # stock in VND: 1,000 VND steps (e.g. 21,000 22,000)
+            elif close_last >= 1_000:
+                step = 100
+            else:
+                step = 50      # VN-Index style
+            lo = max(step, int(close_last * 0.7 // step * step))
+            hi = int(close_last * 1.3 // step * step) + step
+            round_levels = [float(x) for x in range(lo, hi + step, step)]
         nearest_round: float | None = None
         if round_levels:
             nearest_round = min(round_levels, key=lambda x: abs(x - close_last))

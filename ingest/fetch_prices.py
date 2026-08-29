@@ -22,15 +22,46 @@ sys.path.insert(0, str(ROOT))
 from core.db import get_conn
 
 
+def _latest_price_date(ticker: str) -> str | None:
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT MAX(trade_date) FROM stock_prices WHERE ticker = %s", (ticker,))
+                row = cur.fetchone()
+        return str(row[0]) if row and row[0] else None
+    except Exception:
+        return None
+
+
 def fetch_and_insert(ticker: str, from_date: str, to_date: str) -> int:
+    from datetime import date
+
+    latest = _latest_price_date(ticker)
+    today = date.today().isoformat()
+    if latest and latest >= today:
+        return 0  # already up to date
+
+    if latest and latest > from_date:
+        from datetime import timedelta
+        from_date = (date.fromisoformat(latest) + timedelta(days=1)).isoformat()  # skip already-fetched day
+
     try:
         from vnstock.api.quote import Quote  # type: ignore[import]
     except ImportError:
         print("vnstock chưa cài. Chạy: pip install vnstock")
         sys.exit(1)
 
-    q = Quote(symbol=ticker, source="VCI")
-    df = q.history(start=from_date, end=to_date, interval="1D")
+    df = None
+    for source in ("kbs", "VCI"):
+        try:
+            q = Quote(symbol=ticker, source=source)
+            df = q.history(start=from_date, end=to_date, interval="1D")
+            if df is not None and not df.empty:
+                break
+        except SystemExit:
+            continue  # rate limited → try next source
+        except Exception:
+            continue
 
     if df is None or df.empty:
         print(f"Không có dữ liệu giá cho {ticker} ({from_date} → {to_date})")

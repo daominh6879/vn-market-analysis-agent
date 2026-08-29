@@ -89,6 +89,53 @@ def save_turn(
                 )
 
 
+def list_conversations(user_id: str, tenant_id: str = "default", limit: int = 50) -> list[dict]:
+    """Return all conversations for a user, newest first, with title (first user message)."""
+    with _conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                    c.conversation_id,
+                    c.created_at,
+                    (
+                        SELECT content FROM messages
+                        WHERE conversation_id = c.conversation_id AND role = 'user'
+                        ORDER BY seq ASC LIMIT 1
+                    ) AS title,
+                    (
+                        (SELECT COUNT(*) FROM messages
+                        WHERE conversation_id = c.conversation_id) / 2.0
+                    )::int AS turn_count
+                FROM conversations c
+                WHERE c.user_id = %s AND c.tenant_id = %s
+                ORDER BY c.created_at DESC
+                LIMIT %s
+                """,
+                (user_id, tenant_id, limit),
+            )
+            rows = cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_latest_conversation(user_id: str, tenant_id: str = "default") -> Optional[dict]:
+    """Return the most recent conversation row for this user, or None."""
+    with _conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT conversation_id, user_id, tenant_id, created_at
+                FROM conversations
+                WHERE user_id = %s AND tenant_id = %s
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (user_id, tenant_id),
+            )
+            row = cur.fetchone()
+    return dict(row) if row else None
+
+
 def get_conversation(conversation_id: str) -> Optional[dict]:
     """Return conversation row or None."""
     with _conn() as conn:

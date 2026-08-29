@@ -4,19 +4,20 @@ agents/query_router.py — Keyword-based intent router.
 classify(query) → RouterResult
 
 Intent labels (maps to 6 nhóm in stock-agent.md):
+  investment_case     — nhóm 6: tổng hợp khuyến nghị MUA/BÁN/NẮM GIỮ/TÍCH LŨY
   price_action        — nhóm 1: giá hiện tại, dòng tiền, khối ngoại, volume
   technical_analysis  — nhóm 2: RSI, MACD, MA, support/resistance, xu hướng kỹ thuật
   fundamentals        — nhóm 3: P/E, P/B, ROE, định giá, tài chính công ty
   macro_sector        — nhóm 4: tỷ giá, dầu thô, thép, ngành, vĩ mô
   news_sentiment      — nhóm 5: tin tức, sentiment, bình luận cộng đồng
-  screening           — nhóm 6: lọc cổ phiếu, tìm cổ phiếu theo tiêu chí
+  screening           — nhóm 7: lọc cổ phiếu, tìm cổ phiếu theo tiêu chí
   market_brief        — tổng quan thị trường (VNINDEX / "thị trường")
   conversation        — fallback chat
 
 Rules:
   - No LLM call — pure keyword matching (<1ms).
   - Market indices (VNINDEX/VN30) → market_brief first.
-  - Priority (high → low): market_brief > screening > news_sentiment >
+  - Priority (high → low): market_brief > investment_case > screening > news_sentiment >
     macro_sector > fundamentals > technical_analysis > price_action > conversation
   - Ticker alone (no other keywords) → technical_analysis default.
 """
@@ -40,6 +41,20 @@ _MARKET_KW = frozenset({
 
 _MARKET_INDICES = frozenset({
     "VNINDEX", "VN-INDEX", "VN30", "VN100", "HOSE", "HNX30",
+})
+
+_INVESTMENT_CASE_KW = frozenset({
+    "nên mua không", "có nên mua", "nên mua hay bán", "nên bán không",
+    "có nên đầu tư", "khuyến nghị", "khuyến cáo",
+    "mua bán nắm giữ", "buy sell hold",
+    "tổng kết", "tổng hợp", "kết luận đầu tư",
+    "investment case", "luận điểm", "bull case", "bear case",
+    "đánh giá tổng thể", "nhìn tổng thể",
+    "có tiềm năng không", "đáng mua không", "đáng đầu tư không",
+    "nắm giữ hay bán", "tích lũy hay bán",
+    "phân tích toàn diện", "phân tích đầy đủ",
+    "full analysis", "complete analysis",
+    "rủi ro và cơ hội",
 })
 
 _SCREENING_KW = frozenset({
@@ -169,33 +184,39 @@ def classify(query: str) -> RouterResult:
             ticker = t
             break
 
-    # 3. Screening — must check before fundamentals (both share financial keywords)
+    # 3. Investment case (comprehensive recommendation) — before all single-domain intents
+    if any(kw in lower for kw in _INVESTMENT_CASE_KW):
+        return RouterResult("investment_case", ticker, "investment case keyword")
+
+    # 4. Screening — must check before fundamentals (both share financial keywords)
     if any(kw in lower for kw in _SCREENING_KW):
         return RouterResult("screening", ticker, "screening keyword")
 
-    # 4. News / Sentiment
+    # 5. News / Sentiment
     if any(kw in lower for kw in _NEWS_KW):
         return RouterResult("news_sentiment", ticker, "news/sentiment keyword")
 
-    # 5. Macro / Sector
-    if any(kw in lower for kw in _MACRO_KW):
-        return RouterResult("macro_sector", ticker, "macro/sector keyword")
-
-    # 6. Fundamentals (financial statement / valuation)
+    # 6. Fundamentals — check BEFORE macro when valuation keywords present.
+    #    "VCB P/E so với ngành ngân hàng?" has both fundamentals ("p/e") AND macro
+    #    ("ngành ngân hàng"). Valuation keywords are always company-specific → win.
     if any(kw in lower for kw in _FUNDAMENTALS_KW):
         return RouterResult("fundamentals", ticker, "fundamentals keyword")
 
-    # 7. Technical analysis
+    # 7. Macro / Sector (only if no valuation keywords)
+    if any(kw in lower for kw in _MACRO_KW):
+        return RouterResult("macro_sector", ticker, "macro/sector keyword")
+
+    # 8. Technical analysis
     if any(kw in lower for kw in _TECHNICAL_KW):
         return RouterResult("technical_analysis", ticker, "technical keyword")
 
-    # 8. Price action / money flow
+    # 9. Price action / money flow
     if any(kw in lower for kw in _PRICE_ACTION_KW):
         return RouterResult("price_action", ticker, "price action keyword")
 
-    # 9. Ticker alone → default technical_analysis
+    # 10. Ticker alone → default technical_analysis
     if ticker:
         return RouterResult("technical_analysis", ticker, f"ticker {ticker} default")
 
-    # 10. Fallback
+    # 11. Fallback
     return RouterResult("conversation", None, "no financial intent detected")

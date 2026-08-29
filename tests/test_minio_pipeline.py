@@ -18,6 +18,7 @@ Chạy:
 import io
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -110,8 +111,7 @@ def _run_sensor(cursor: str = "") -> tuple:
     import os
 
     ctx = build_sensor_context(cursor=cursor)
-    with pytest.MonkeyPatch().context() as mp:
-        mp.setenv("TICKERS", TICKER)
+    with patch("core.tickers.get_tickers", return_value=[TICKER]):
         result = minio_new_pdf_sensor(ctx)
     return result.run_requests, result.cursor
 
@@ -361,8 +361,7 @@ class TestNewTicker:
         self._upload_vcb(mc, "2024/vcb_q4.pdf")
 
         ctx = build_sensor_context(cursor="")
-        with pytest.MonkeyPatch().context() as mp:
-            mp.setenv("TICKERS", f"{TICKER},{self.NEW_TICKER}")
+        with patch("core.tickers.get_tickers", return_value=[TICKER, self.NEW_TICKER]):
             result = minio_new_pdf_sensor(ctx)
 
         vcb_requests = [r for r in result.run_requests if self.NEW_TICKER in r.run_key]

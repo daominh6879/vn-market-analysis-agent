@@ -40,6 +40,16 @@ def query_ohlcv(ticker: str, days: int) -> Optional[pd.DataFrame]:
         df = pd.DataFrame(rows, columns=["time", "open", "high", "low", "close", "volume"])
         df = df.sort_values("time").reset_index(drop=True)
         df["time"] = df["time"].astype(str)
+        # Coerce price columns to float (DB may return Decimal or str)
+        for col in ("open", "high", "low", "close"):
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        df["volume"] = pd.to_numeric(df["volume"], errors="coerce")
+        # Normalize: if the WHOLE ticker's prices are < 1000, dataset is stored in thousands VND.
+        # Apply only when >80% of rows are below 1000 to avoid corrupting legitimately low-priced stocks.
+        pct_below = (df["close"] < 1000).mean()
+        if pct_below > 0.8:
+            for col in ("open", "high", "low", "close"):
+                df[col] = df[col] * 1000
         return df
     except Exception as e:
         sys.stderr.write(f"[ohlcv_db] query_ohlcv({ticker}, {days}) failed: {e}\n")

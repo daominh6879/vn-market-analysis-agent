@@ -65,16 +65,21 @@ def ohlcv_daily_ingest(context: AssetExecutionContext, config: OhlcvIngestConfig
     else:
         ticker_list = _load_hose_tickers_from_db()
         if not ticker_list:
+            # Try get_tickers() which includes TICKERS env var fallback
+            try:
+                from core.tickers import get_tickers
+                ticker_list = get_tickers()
+            except Exception:
+                pass
+        if not ticker_list:
             context.log.warning(
                 "securities table empty or unreachable — falling back to VN30 hardcoded list"
             )
             ticker_list = _VN30_FALLBACK
 
-        # Always append extra tickers from TICKERS env
-        extra = [t.strip().upper() for t in os.getenv("TICKERS", "").split(",") if t.strip()]
-        ticker_list = list(dict.fromkeys(ticker_list + extra))
-
     context.log.info(f"ohlcv_daily_ingest: {len(ticker_list)} tickers, {config.days_back}d back")
+
+    import time
 
     total_rows = 0
     failed: list[str] = []
@@ -88,6 +93,7 @@ def ohlcv_daily_ingest(context: AssetExecutionContext, config: OhlcvIngestConfig
         except Exception as exc:
             context.log.error(f"  {ticker} FAILED: {exc}")
             failed.append(ticker)
+        time.sleep(1.1)
 
     if failed:
         context.log.warning(f"Failed tickers: {failed}")

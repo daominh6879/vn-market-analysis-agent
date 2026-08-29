@@ -210,6 +210,38 @@ def test_classify_screening_find():
     assert r.intent == "screening", f"got {r.intent}: {r.reason}"
 
 
+# ── Nhóm 6b: investment_case ─────────────────────────────────────────────────
+
+def test_classify_investment_case_buy():
+    r = classify("HPG có nên mua không?")
+    assert r.intent == "investment_case", f"got {r.intent}: {r.reason}"
+    assert r.ticker == "HPG"
+
+
+def test_classify_investment_case_recommendation():
+    r = classify("khuyến nghị VCB lúc này: mua bán hay nắm giữ?")
+    assert r.intent == "investment_case", f"got {r.intent}: {r.reason}"
+    assert r.ticker == "VCB"
+
+
+def test_classify_investment_case_tong_ket():
+    r = classify("tổng kết FPT — bull case và bear case")
+    assert r.intent == "investment_case", f"got {r.intent}: {r.reason}"
+    assert r.ticker == "FPT"
+
+
+def test_classify_investment_case_dang_mua():
+    r = classify("MWG đáng đầu tư không?")
+    assert r.intent == "investment_case", f"got {r.intent}: {r.reason}"
+    assert r.ticker == "MWG"
+
+
+def test_classify_investment_case_phan_tich_toan_dien():
+    r = classify("phân tích toàn diện HPG")
+    assert r.intent == "investment_case", f"got {r.intent}: {r.reason}"
+    assert r.ticker == "HPG"
+
+
 # ── market_brief & conversation (existing, regression) ───────────────────────
 
 def test_classify_market_brief():
@@ -338,3 +370,29 @@ def test_route_screening_real():
     assert routing.get("agent") == "screening", f"wrong intent: {routing}"
     assert done is not None
     assert len(reply) > 20
+
+
+def test_route_investment_case_real():
+    """Nhóm 6b: investment case → calls all 5 intents → bull/bear/recommendation."""
+    cid, uid = _new_conv()
+    lines = _run_stream(cid, uid, "HPG có nên mua không? Cho mình bull case và bear case")
+
+    routing = _parse_routing(lines)
+    done = _parse_done(lines)
+    reply = _reply_text(lines)
+
+    print(f"\nRouting: {routing}")
+    print(f"Done: {done}")
+    print(f"Reply (first 500):\n{reply[:500]}")
+    print(f"Reply (last 500):\n{reply[-500:]}")
+
+    assert routing is not None, "routing event missing"
+    assert routing.get("agent") == "investment_case", f"wrong intent: {routing}"
+    assert done is not None, "done event missing"
+    assert len(reply) > 200, f"reply too short: {len(reply)}"
+    # Must contain key sections from the spec
+    reply_lower = reply.lower()
+    assert any(kw in reply_lower for kw in ["bull", "bear", "luận điểm", "khuyến nghị"]), \
+        "missing bull/bear/recommendation section"
+    assert any(kw in reply_lower for kw in ["mua", "bán", "nắm giữ", "tích lũy"]), \
+        "missing buy/sell/hold verdict"

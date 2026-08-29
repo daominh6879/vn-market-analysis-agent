@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from llm.factory import create_client
 from llm.types import Message
-from agents.intents import strip_preamble
+from agents.intents import strip_preamble, strip_thinking
 
 # ── pre-built SQL templates ────────────────────────────────────────────────────
 # All operate on financial_facts for period='2024', one row per ticker via DISTINCT ON.
@@ -80,11 +80,13 @@ def _narrate(query: str, rows_text: str) -> str:
         )],
         system=(
             "Bạn là trợ lý phân tích tài chính. Tóm tắt kết quả lọc cổ phiếu từ dữ liệu đã cho. "
-            "KHÔNG nhắc tên cột DB. Trả lời TRỰC TIẾP."
+            "KHÔNG nhắc tên cột DB. Trả lời TRỰC TIẾP. "
+            "TUYỆT ĐỐI KHÔNG viết suy nghĩ hay meta-commentary."
         ),
         max_tokens=512,
+        temperature=0,
     )
-    return strip_preamble(resp.text.strip())
+    return strip_thinking(strip_preamble(resp.text.strip()))
 
 
 def run(ticker: str | None, query: str) -> str:

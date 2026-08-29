@@ -84,7 +84,7 @@ def run_turn(
     response = client.generate(
         messages=lm_messages,
         system=system_prompt,
-        max_tokens=1024,
+        max_tokens=3000,
     )
     assistant_reply = response.text.strip()
 
@@ -147,7 +147,7 @@ async def _stream_via_queue(
             for chunk in client.stream(
                 messages=lm_messages,
                 system=system_prompt,
-                max_tokens=1024,
+                max_tokens=3000,
             ):
                 _safe_put(chunk)
         except Exception as exc:
@@ -360,6 +360,33 @@ async def stream_turn(
             yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
             return
         yield _sse_status("streaming", agent="news_sentiment")
+        for line in report.split("\n"):
+            yield _sse_chunk(line + "\n")
+        assistant_reply = report
+
+    # ── investment_case path (nhóm 6: tổng hợp khuyến nghị) ──────────────────
+    elif route.intent == "investment_case":
+        yield _sse_status("running_full_analysis", ticker=route.ticker)
+        try:
+            _ticker = route.ticker or "HPG"
+
+            def _run_investment_case():
+                from agents.intents.investment_case import run
+                return run(_ticker, user_message)
+
+            task = asyncio.create_task(_run_blocking_agent(_run_investment_case))
+            while not task.done():
+                try:
+                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
+                except asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+            report = task.result()
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
+            return
+        yield _sse_status("streaming", agent="investment_case")
         for line in report.split("\n"):
             yield _sse_chunk(line + "\n")
         assistant_reply = report

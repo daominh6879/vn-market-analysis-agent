@@ -16,7 +16,7 @@ from llm.factory import create_client
 from llm.types import Message
 from tools.price import get_realtime_price, get_historical_ohlcv
 from tools.result import ToolResult
-from agents.intents import strip_preamble
+from agents.intents import strip_preamble, strip_thinking
 
 
 def _get_foreign_flow_summary(ticker: str) -> str:
@@ -116,6 +116,11 @@ Viết báo cáo Markdown ngắn gọn (không văn bản trước báo cáo):
     resp = client.generate(
         [Message(role="user", content=prompt)],
         max_tokens=1500,
-        system="Bạn là chuyên gia phân tích kỹ thuật chứng khoán Việt Nam. Trả lời chỉ bằng báo cáo Markdown.",
+        temperature=0,
+        system=(
+            "Bạn là chuyên gia phân tích kỹ thuật chứng khoán Việt Nam. "
+            "Xuất NGAY báo cáo Markdown. TUYỆT ĐỐI KHÔNG viết suy nghĩ, lý luận, "
+            "hay meta-commentary. Chỉ báo cáo cuối cùng."
+        ),
     )
-    return strip_preamble(resp.text.strip())
+    return strip_thinking(strip_preamble(resp.text.strip()))

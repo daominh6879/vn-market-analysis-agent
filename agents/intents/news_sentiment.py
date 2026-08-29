@@ -10,7 +10,7 @@ from __future__ import annotations
 from llm.factory import create_client
 from llm.types import Message
 from tools.price import search_financial_news, analyze_market_sentiment
-from agents.intents import strip_preamble
+from agents.intents import strip_preamble, strip_thinking
 
 
 def _fetch_news_text(ticker: str | None, days: int) -> str:
@@ -62,35 +62,37 @@ def run(ticker: str | None, query: str) -> str:
 
 Tin tức & Tâm lý thị trường — {subject} ({days} ngày gần nhất):
 
-### Tin tức
+### Tin tức & Sự kiện
 {news_text}
 
 ### Sentiment
 {sentiment_text}
 
-Logic:
-- Nếu tin tức chứa "bắt giam", "vi phạm" → rủi ro cao; "trúng thầu", "cổ tức" → tích cực
-- 90% bình luận cực kỳ bullish + margin căng → cảnh báo "Cẩn trọng phân phối đỉnh"
-- Phân tích xem tin tức có giải thích được bất thường giá không
+Logic phân tích:
+- Từ khóa rủi ro cao: "bắt giam", "vi phạm", "điều tra", "cưỡng chế", "phát hành thêm", "pha loãng"
+- Từ khóa tích cực: "trúng thầu", "cổ tức", "mua lại cổ phiếu", "lợi nhuận kỷ lục", "ký kết hợp đồng"
+- Từ khóa cảnh báo insider: "cổ đông lớn đăng ký bán", "ban lãnh đạo thoái vốn"
+- 90% bình luận cực kỳ bullish + margin căng → cảnh báo "Phân phối đỉnh"
+- Sự kiện doanh nghiệp: cổ tức, tăng vốn, ESOP, M&A, thay CEO → xác định tác động tích cực/tiêu cực
 
 Viết báo cáo Markdown (không văn bản trước báo cáo):
 # Tin tức & Tâm lý {subject}
-## Tin tức nổi bật
-## Điểm Sentiment
-## Giải thích & Cảnh báo
+## Tin tức & Sự kiện Doanh nghiệp (cổ tức, tăng vốn, ESOP, insider trading)
+## Dòng tiền Tổ chức (Khối ngoại / Tự doanh — gần nhất)
+## Quản trị & Rủi ro Phi tài chính (governance, pháp lý, ESG)
+## Điểm Sentiment & Cảnh báo
 [Nguồn: CafeF/Tavily, LLM sentiment]"""
 
     client = create_client()
     resp = client.generate(
         [Message(role="user", content=prompt)],
         max_tokens=1500,
+        temperature=0,
         system=(
             "Bạn là chuyên gia phân tích tin tức và tâm lý thị trường chứng khoán Việt Nam. "
-            "Trả lời NGAY bằng báo cáo Markdown — KHÔNG có câu giới thiệu, "
-            "KHÔNG có văn bản trước dấu '#' đầu tiên, KHÔNG giải thích cách làm, "
-            "KHÔNG bình luận về dữ liệu thiếu. "
-            "Nếu không có tin tức mới, ghi rõ 'Không có tin tức mới' trong mục Tin tức nổi bật "
-            "và phân tích sentiment từ dữ liệu có sẵn."
+            "Xuất NGAY báo cáo Markdown. TUYỆT ĐỐI KHÔNG viết suy nghĩ, lý luận, "
+            "hay meta-commentary. Chỉ báo cáo cuối cùng. "
+            "Nếu không có tin tức mới, ghi 'Không có tin tức mới' và phân tích sentiment có sẵn."
         ),
     )
-    return strip_preamble(resp.text.strip())
+    return strip_thinking(strip_preamble(resp.text.strip()))

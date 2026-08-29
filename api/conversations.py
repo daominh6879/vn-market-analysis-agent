@@ -13,7 +13,13 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from memory.conversation import create_conversation, get_conversation, load_history
+from memory.conversation import (
+    create_conversation,
+    get_conversation,
+    get_latest_conversation,
+    list_conversations,
+    load_history,
+)
 from memory.reader import load_user_memory
 from memory.turn_handler import run_turn, stream_turn
 
@@ -39,6 +45,21 @@ class MessageRequest(BaseModel):
 
 
 # ── conversations ─────────────────────────────────────────────────────────────
+
+@router.get("/users/{user_id}/conversations")
+def user_conversations(user_id: str, tenant_id: str = "default", limit: int = 50):
+    convs = list_conversations(user_id, tenant_id, limit)
+    return {"conversations": convs}
+
+
+@router.get("/users/{user_id}/latest-conversation")
+def latest_conversation(user_id: str, tenant_id: str = "default"):
+    conv = get_latest_conversation(user_id, tenant_id)
+    if not conv:
+        return {"conversation_id": None, "messages": []}
+    messages = load_history(conv["conversation_id"], limit=20)
+    return {"conversation_id": conv["conversation_id"], "messages": messages}
+
 
 @router.post("/conversations")
 def create_conv(body: CreateConversationBody):

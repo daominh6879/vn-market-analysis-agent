@@ -18,19 +18,48 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from core.db import get_conn
-from tools.providers import VciDirectProvider, resolve_ticker
+from tools.providers import FallbackProvider, KbsProvider, VciDirectProvider, resolve_ticker
 
 
-_provider = VciDirectProvider()
+_provider = FallbackProvider(KbsProvider(), VciDirectProvider())
+
+
+def _latest_date(ticker: str) -> str | None:
+    """Return latest date in ohlcv_daily for ticker, or None if no rows."""
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT MAX(date) FROM ohlcv_daily WHERE ticker = %s", (ticker,)
+                )
+                row = cur.fetchone()
+        return str(row[0]) if row and row[0] else None
+    except Exception:
+        return None
 
 
 def fetch_and_upsert(ticker: str, days: int = 30) -> int:
-    """Fetch `days` phiên OHLCV từ VCI và upsert vào ohlcv_daily. Trả số rows upserted."""
+    """Fetch missing OHLCV from VCI and upsert into ohlcv_daily. Returns rows upserted."""
+    from datetime import date, timedelta
+
+    latest = _latest_date(ticker)
+    today = date.today().isoformat()
+
+    if latest and latest >= today:
+        return 0  # already up to date
+
+    if latest:
+        days_needed = (date.today() - date.fromisoformat(latest)).days + 1
+        days = min(days_needed, days)  # don't fetch more than requested max
+
     resolved = resolve_ticker(ticker)
     try:
         df = _provider.get_history(resolved, days)
     except Exception as e:
-        raise RuntimeError(f"VCI fetch failed for '{ticker}' (resolved='{resolved}'): {e}") from e
+        raise RuntimeError(f"OHLCV fetch failed for '{ticker}' (resolved='{resolved}'): {e}") from e
+
+    if latest:
+        df = df[df["time"] > latest]
 
     if df.empty:
         return 0

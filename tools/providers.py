@@ -348,6 +348,41 @@ class FallbackProvider(PriceProvider):
             return self._secondary.fetch_history(ticker, days)
 
 
+# ── KbsProvider ──────────────────────────────────────────────────────────────
+
+class KbsProvider(PriceProvider):
+    """vnstock KIS (kbs) source — fallback when VCI is down."""
+
+    def _kbs_history(self, ticker: str, start: str, end: str) -> "pd.DataFrame | None":
+        import warnings
+        warnings.filterwarnings("ignore")
+        from vnstock.api.quote import Quote
+        try:
+            q = Quote(symbol=ticker, source="kbs")
+            df = q.history(start=start, end=end, interval="1D")
+            return df if df is not None and not df.empty else None
+        except SystemExit:
+            raise ValueError(f"KBS rate limited for '{ticker}'")  # FallbackProvider → VCI
+        except Exception:
+            return None
+
+    def fetch_price(self, ticker: str) -> float:
+        from datetime import date, timedelta
+        df = self._kbs_history(ticker, str(date.today() - timedelta(days=7)), str(date.today()))
+        if df is None:
+            raise ValueError(f"No KBS price for '{ticker}'")
+        return float(df["close"].iloc[-1])
+
+    def fetch_history(self, ticker: str, days: int) -> pd.DataFrame:
+        from datetime import date, timedelta
+        start = str(date.today() - timedelta(days=days + 10))
+        df = self._kbs_history(ticker, start, str(date.today()))
+        if df is None:
+            raise ValueError(f"No KBS history for '{ticker}'")
+        df["time"] = df["time"].astype(str).str[:10]
+        return df[["time", "open", "high", "low", "close", "volume"]].tail(days).reset_index(drop=True)
+
+
 # ── YFinanceProvider ──────────────────────────────────────────────────────────
 
 class YFinanceProvider(PriceProvider):

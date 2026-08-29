@@ -13,7 +13,7 @@ from llm.factory import create_client
 from llm.types import Message
 from tools.global_market import get_fx_rates, get_commodities
 from tools.result import ToolResult
-from agents.intents import strip_preamble
+from agents.intents import strip_preamble, strip_thinking
 
 
 def _sector_performance_text() -> str:
@@ -62,23 +62,27 @@ Logic phân tích:
 - Tỷ giá USD/VND tăng → cộng điểm xuất khẩu (VHC, FPT), trừ điểm nợ USD (HVN, PC1)
 - Crack spread thép: HRC thế giới tăng + quặng sắt giảm → biên HPG quý tới phình to
 - Dầu Brent tăng → chi phí vận tải tăng (logistics), hưởng lợi (PVD, PVS)
+- Lãi suất tăng → bất lợi cho BĐS, bảo hiểm; ngân hàng hưởng lợi NIM
+- Chu kỳ ngành: Phục hồi → Tăng trưởng → Bão hòa → Suy thoái
 
 Viết báo cáo Markdown (không văn bản trước báo cáo):
 # Vĩ mô & Ngành
-## Tỷ giá & Tác động
+## Tác động Vĩ mô (Lãi suất, Lạm phát, Tỷ giá, Chính sách)
 ## Hàng hóa & Crack Spread
-## Ngành nổi bật
-## Kết luận
+## Chu kỳ Ngành (Giai đoạn hiện tại + Catalyst kích hoạt)
+## Vị thế {ticker if ticker else 'Doanh nghiệp'} (Leader / Laggard — căn cứ hiệu suất ngành)
+## Kết luận — Bối cảnh có ủng hộ cổ phiếu không?
 [Nguồn: yfinance / VCI]"""
 
     client = create_client()
     resp = client.generate(
         [Message(role="user", content=prompt)],
         max_tokens=2000,
+        temperature=0,
         system=(
             "Bạn là chuyên gia phân tích vĩ mô và ngành chứng khoán Việt Nam. "
-            "Trả lời NGAY bằng báo cáo Markdown — KHÔNG có câu giới thiệu, "
-            "KHÔNG có văn bản trước dấu '#' đầu tiên, KHÔNG giải thích cách làm."
+            "Xuất NGAY báo cáo Markdown. TUYỆT ĐỐI KHÔNG viết suy nghĩ, lý luận, "
+            "hay meta-commentary. Chỉ báo cáo cuối cùng."
         ),
     )
-    return strip_preamble(resp.text.strip())
+    return strip_thinking(strip_preamble(resp.text.strip()))
