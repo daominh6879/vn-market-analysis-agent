@@ -8,6 +8,8 @@ pre-built SQL templates to bypass LLM hallucination of non-existent views.
 
 from __future__ import annotations
 
+from langfuse import observe
+
 from llm.factory import create_client
 from llm.types import Message
 from agents.intents import strip_preamble, strip_thinking
@@ -89,6 +91,7 @@ def _narrate(query: str, rows_text: str) -> str:
     return strip_thinking(strip_preamble(resp.text.strip()))
 
 
+@observe(name="intent.screening")
 def run(ticker: str | None, query: str) -> str:
     """Execute screening — pre-built SQL template first, fall back to LLM-generated SQL."""
     sql = _pick_template(query)

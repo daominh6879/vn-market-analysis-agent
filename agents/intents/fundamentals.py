@@ -13,6 +13,7 @@ import math
 from typing import Optional
 
 import yfinance as yf
+from langfuse import observe
 
 from llm.factory import create_client
 from llm.types import Message
@@ -245,6 +246,7 @@ def _is_sector_comparison(query: str) -> bool:
     ])
 
 
+@observe(name="intent.fundamentals")
 def run(ticker: str | None, query: str) -> str:
     if ticker and _is_sector_comparison(query):
         peers = _SECTOR_MAP.get(ticker, [ticker])

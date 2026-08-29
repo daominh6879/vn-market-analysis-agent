@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import time
 
+from langfuse import observe
+
 from llm.factory import create_client
 from llm.types import Message
 from tools.global_market import get_fx_rates, get_commodities
@@ -34,6 +36,7 @@ def _sector_performance_text() -> str:
     return "Không có dữ liệu ngành."
 
 
+@observe(name="intent.macro_sector")
 def run(ticker: str | None, query: str) -> str:
     fx_r = get_fx_rates()
     comm_r = get_commodities()

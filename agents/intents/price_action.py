@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from langfuse import observe
+
 from llm.factory import create_client
 from llm.types import Message
 from tools.price import get_realtime_price, get_historical_ohlcv
@@ -78,6 +80,7 @@ def _load_ohlcv(ticker: str) -> pd.DataFrame | None:
     return None
 
 
+@observe(name="intent.price_action")
 def run(ticker: str, query: str) -> str:
     price_r = get_realtime_price(ticker)
     df = _load_ohlcv(ticker)

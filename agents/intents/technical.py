@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from langfuse import observe
+
 from llm.factory import create_client
 from llm.types import Message
 from tools.price import get_historical_ohlcv, calculate_indicators
@@ -72,6 +74,7 @@ def _fibonacci_levels(df: "pd.DataFrame") -> str:
     return "Fibonacci 60 phiên:\n" + "\n".join(f"  {k}: {v:,.0f}" for k, v in lvls.items())
 
 
+@observe(name="intent.technical_analysis")
 def run(ticker: str, query: str) -> str:
     status, df = _get_ohlcv(ticker)
 

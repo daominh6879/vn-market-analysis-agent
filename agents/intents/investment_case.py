@@ -10,6 +10,8 @@ Calls all 5 intent modules sequentially, then synthesizes:
 
 from __future__ import annotations
 
+from langfuse import observe
+
 from llm.factory import create_client
 from llm.types import Message
 from agents.intents import strip_preamble, strip_thinking
@@ -22,6 +24,7 @@ def _safe_run(module_run, ticker: str, query: str, label: str) -> str:
         return f"[{label}: lỗi — {exc}]"
 
 
+@observe(name="intent.investment_case")
 def run(ticker: str, query: str) -> str:
     from agents.intents import price_action, technical, fundamentals, macro_sector, news_sentiment
 

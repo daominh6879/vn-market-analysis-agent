@@ -9,8 +9,10 @@ from __future__ import annotations
 import pandas as pd
 
 from tools.result import ToolResult
+from tracing import instrument_tool
 
 
+@instrument_tool("find_support_resistance")
 def find_support_resistance(
     df: pd.DataFrame,
     window: int = 5,

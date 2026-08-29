@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Optional
 
 from tools.result import ToolResult
+from tracing import instrument_tool
 
 
 def _yf_filter_as_of(close, as_of_date: Optional[str]):
@@ -104,6 +105,7 @@ def get_global_indices(as_of_date: Optional[str] = None) -> ToolResult:
 
 # ── Tool: Commodities (Gold, Silver, WTI, Brent) ────────────────────────────
 
+@instrument_tool("get_commodities")
 def get_commodities(as_of_date: Optional[str] = None) -> ToolResult:
     """
     Fetch gold, silver, WTI, Brent prices + %change via yfinance futures.
@@ -300,6 +302,7 @@ def get_crypto_prices() -> ToolResult:
 
 # ── Tool: FX rates (USD/VND) ──────────────────────────────────────────────────
 
+@instrument_tool("get_fx_rates")
 def get_fx_rates() -> ToolResult:
     """
     Fetch USD/VND exchange rates: SBV central rate + Vietcombank commercial rates.

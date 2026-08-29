@@ -24,6 +24,7 @@ from tools.providers import (
     resolve_ticker,
 )
 from tools.result import ToolResult
+from tracing import instrument_tool
 
 
 _default_provider: PriceProvider = VciDirectProvider()
@@ -78,6 +79,7 @@ def _map_upstream_error(ticker: str, exc: Exception) -> ToolResult:
 
 # ── Tool 1: Giá hiện tại ─────────────────────────────────────────────────────
 
+@instrument_tool("get_realtime_price")
 def get_realtime_price(ticker: str, provider: PriceProvider | None = None) -> ToolResult:
     """Trả giá đóng cửa gần nhất (VND). Luôn trả ToolResult, không raise."""
     if not ticker or not ticker.strip():
@@ -141,6 +143,7 @@ def get_realtime_price_intl(ticker: str, provider: PriceProvider | None = None) 
 
 # ── Tool 2: Lịch sử OHLCV ────────────────────────────────────────────────────
 
+@instrument_tool("get_historical_ohlcv")
 def get_historical_ohlcv(
     ticker: str,
     days: int = 60,
@@ -224,6 +227,7 @@ def get_historical_ohlcv_intl(
 
 # ── Tool 3: Chỉ báo kỹ thuật ─────────────────────────────────────────────────
 
+@instrument_tool("calculate_indicators")
 def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> ToolResult:
     """
     Tính RSI(14), MACD(12,26,9), MA(20/50/200), EMA(200), ADX(14),
@@ -497,6 +501,7 @@ def _dedup_news(raw: list[dict], limit: int = 5) -> list[dict]:
     return unique
 
 
+@instrument_tool("search_financial_news")
 def search_financial_news(
     ticker: str,
     days: int = 7,
@@ -1317,6 +1322,7 @@ def _query_sector_performance_fallback() -> list[dict] | None:
 
 # ── Tool 9: Phân tích sentiment thị trường ───────────────────────────────────
 
+@instrument_tool("analyze_market_sentiment")
 def analyze_market_sentiment(ticker: str, days: int = 7) -> ToolResult:
     """Phân tích cảm xúc thị trường về ticker từ tin tức gần nhất (few-shot LLM).
 

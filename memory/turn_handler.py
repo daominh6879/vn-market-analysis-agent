@@ -23,6 +23,8 @@ import json
 import threading
 from typing import AsyncIterator
 
+from langfuse import observe
+
 from llm.factory import create_client
 from llm.types import Message
 from memory.conversation import load_history, save_turn
@@ -188,6 +190,65 @@ async def _run_blocking_agent(fn, *args, **kwargs) -> str:
     return await asyncio.to_thread(fn, *args, **kwargs)
 
 
+# ── Intent dispatcher (traced as Langfuse parent span) ────────────────────────
+
+@observe(name="agent.turn")
+def _dispatch_intent(
+    route,
+    user_message: str,
+    user_id: str,
+    conversation_id: str,
+) -> str:
+    """Single sync dispatch point for all intent types. Traced as Langfuse parent span.
+    All nested intent.run() and tool @observe calls become children of this span."""
+    try:
+        from langfuse import get_client
+        get_client().update_current_trace(
+            session_id=conversation_id,
+            user_id=user_id,
+            input=user_message,
+            metadata={"intent": route.intent, "ticker": route.ticker},
+        )
+    except Exception:
+        pass
+
+    ticker = route.ticker or "HPG"
+
+    if route.intent == "price_action":
+        from agents.intents.price_action import run
+        return run(ticker, user_message)
+
+    if route.intent == "technical_analysis":
+        from agents.intents.technical import run
+        return run(ticker, user_message)
+
+    if route.intent == "fundamentals":
+        from agents.intents.fundamentals import run
+        return run(route.ticker, user_message)
+
+    if route.intent == "macro_sector":
+        from agents.intents.macro_sector import run
+        return run(route.ticker, user_message)
+
+    if route.intent == "news_sentiment":
+        from agents.intents.news_sentiment import run
+        return run(route.ticker, user_message)
+
+    if route.intent == "investment_case":
+        from agents.intents.investment_case import run
+        return run(ticker, user_message)
+
+    if route.intent == "screening":
+        from agents.intents.screening import run
+        return run(route.ticker, user_message)
+
+    if route.intent == "qa_document":
+        from rag.qa import answer as qa_answer
+        return qa_answer(user_message, ticker=route.ticker)
+
+    return ""
+
+
 async def stream_turn(
     conversation_id: str,
     user_id: str,
@@ -234,17 +295,20 @@ async def stream_turn(
 
     assistant_reply = ""
 
-    # ── price_action path (nhóm 1) ────────────────────────────────────────────
-    if route.intent == "price_action":
-        yield _sse_status("collecting_data", ticker=route.ticker)
+    # ── All intent paths (traced via _dispatch_intent) ───────────────────────
+    _AGENT_INTENTS = {
+        "price_action", "technical_analysis", "fundamentals",
+        "macro_sector", "news_sentiment", "investment_case",
+        "screening", "qa_document",
+    }
+    _MARKET_BRIEF_INTENTS = {"market_brief"}
+
+    if route.intent in _AGENT_INTENTS:
+        yield _sse_status("collecting_data", ticker=route.ticker, intent=route.intent)
         try:
-            _ticker = route.ticker or "HPG"
-
-            def _run_price_action():
-                from agents.intents.price_action import run
-                return run(_ticker, user_message)
-
-            task = asyncio.create_task(_run_blocking_agent(_run_price_action))
+            task = asyncio.create_task(
+                _run_blocking_agent(_dispatch_intent, route, user_message, user_id, conversation_id)
+            )
             while not task.done():
                 try:
                     await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
@@ -256,143 +320,13 @@ async def stream_turn(
         except Exception as exc:
             yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
             return
-        yield _sse_status("streaming", agent="price_action")
-        for line in report.split("\n"):
-            yield _sse_chunk(line + "\n")
-        assistant_reply = report
-
-    # ── technical_analysis path (nhóm 2) ─────────────────────────────────────
-    elif route.intent == "technical_analysis":
-        yield _sse_status("collecting_data", ticker=route.ticker)
-        try:
-            _ticker = route.ticker or "HPG"
-
-            def _run_technical():
-                from agents.intents.technical import run
-                return run(_ticker, user_message)
-
-            task = asyncio.create_task(_run_blocking_agent(_run_technical))
-            while not task.done():
-                try:
-                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
-                except asyncio.TimeoutError:
-                    yield ": heartbeat\n\n"
-            report = task.result()
-        except asyncio.CancelledError:
-            return
-        except Exception as exc:
-            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
-            return
-
-        yield _sse_status("streaming", agent="technical_analysis")
-        for line in report.split("\n"):
-            yield _sse_chunk(line + "\n")
-        assistant_reply = report
-
-    # ── fundamentals path (nhóm 3) ───────────────────────────────────────────
-    elif route.intent == "fundamentals":
-        yield _sse_status("querying_documents", ticker=route.ticker)
-        try:
-            def _run_fundamentals():
-                from agents.intents.fundamentals import run
-                return run(route.ticker, user_message)
-
-            task = asyncio.create_task(_run_blocking_agent(_run_fundamentals))
-            while not task.done():
-                try:
-                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
-                except asyncio.TimeoutError:
-                    yield ": heartbeat\n\n"
-            qa_text = task.result()
-        except asyncio.CancelledError:
-            return
-        except Exception as exc:
-            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
-            return
-        yield _sse_status("streaming", agent="fundamentals")
-        for line in qa_text.split("\n"):
-            yield _sse_chunk(line + "\n")
-        assistant_reply = qa_text
-
-    # ── macro_sector path (nhóm 4) ────────────────────────────────────────────
-    elif route.intent == "macro_sector":
-        yield _sse_status("collecting_macro_data")
-        try:
-            def _run_macro():
-                from agents.intents.macro_sector import run
-                return run(route.ticker, user_message)
-
-            task = asyncio.create_task(_run_blocking_agent(_run_macro))
-            while not task.done():
-                try:
-                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
-                except asyncio.TimeoutError:
-                    yield ": heartbeat\n\n"
-            report = task.result()
-        except asyncio.CancelledError:
-            return
-        except Exception as exc:
-            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
-            return
-        yield _sse_status("streaming", agent="macro_sector")
-        for line in report.split("\n"):
-            yield _sse_chunk(line + "\n")
-        assistant_reply = report
-
-    # ── news_sentiment path (nhóm 5) ──────────────────────────────────────────
-    elif route.intent == "news_sentiment":
-        yield _sse_status("fetching_news", ticker=route.ticker)
-        try:
-            def _run_news():
-                from agents.intents.news_sentiment import run
-                return run(route.ticker, user_message)
-
-            task = asyncio.create_task(_run_blocking_agent(_run_news))
-            while not task.done():
-                try:
-                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
-                except asyncio.TimeoutError:
-                    yield ": heartbeat\n\n"
-            report = task.result()
-        except asyncio.CancelledError:
-            return
-        except Exception as exc:
-            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
-            return
-        yield _sse_status("streaming", agent="news_sentiment")
-        for line in report.split("\n"):
-            yield _sse_chunk(line + "\n")
-        assistant_reply = report
-
-    # ── investment_case path (nhóm 6: tổng hợp khuyến nghị) ──────────────────
-    elif route.intent == "investment_case":
-        yield _sse_status("running_full_analysis", ticker=route.ticker)
-        try:
-            _ticker = route.ticker or "HPG"
-
-            def _run_investment_case():
-                from agents.intents.investment_case import run
-                return run(_ticker, user_message)
-
-            task = asyncio.create_task(_run_blocking_agent(_run_investment_case))
-            while not task.done():
-                try:
-                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
-                except asyncio.TimeoutError:
-                    yield ": heartbeat\n\n"
-            report = task.result()
-        except asyncio.CancelledError:
-            return
-        except Exception as exc:
-            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
-            return
-        yield _sse_status("streaming", agent="investment_case")
+        yield _sse_status("streaming", agent=route.intent)
         for line in report.split("\n"):
             yield _sse_chunk(line + "\n")
         assistant_reply = report
 
     # ── market_brief path ─────────────────────────────────────────────────────
-    elif route.intent == "market_brief":
+    elif route.intent in _MARKET_BRIEF_INTENTS:
         yield _sse_status("collecting_market_data")
         try:
             from datetime import date as date_cls
@@ -416,62 +350,10 @@ async def stream_turn(
         except Exception as exc:
             yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
             return
-
         yield _sse_status("streaming", agent="market_brief")
         for line in report.split("\n"):
             yield _sse_chunk(line + "\n")
         assistant_reply = report
-
-    # ── screening path (nhóm 6) ───────────────────────────────────────────────
-    elif route.intent == "screening":
-        yield _sse_status("querying_documents", ticker=route.ticker)
-        try:
-            def _run_screening():
-                from agents.intents.screening import run
-                return run(route.ticker, user_message)
-
-            task = asyncio.create_task(_run_blocking_agent(_run_screening))
-            while not task.done():
-                try:
-                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
-                except asyncio.TimeoutError:
-                    yield ": heartbeat\n\n"
-            qa_text = task.result()
-        except asyncio.CancelledError:
-            return
-        except Exception as exc:
-            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
-            return
-        yield _sse_status("streaming", agent="screening")
-        for line in qa_text.split("\n"):
-            yield _sse_chunk(line + "\n")
-        assistant_reply = qa_text
-
-    # ── qa_document path (legacy — kept for backward compat) ──────────────────
-    elif route.intent == "qa_document":
-        yield _sse_status("querying_documents", ticker=route.ticker)
-        try:
-            def _run_qa():
-                from rag.qa import answer as qa_answer
-                return qa_answer(user_message, ticker=route.ticker)
-
-            task = asyncio.create_task(_run_blocking_agent(_run_qa))
-            while not task.done():
-                try:
-                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
-                except asyncio.TimeoutError:
-                    yield ": heartbeat\n\n"
-            qa_text = task.result()
-        except asyncio.CancelledError:
-            return
-        except Exception as exc:
-            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
-            return
-
-        yield _sse_status("streaming", agent="qa_document")
-        for line in qa_text.split("\n"):
-            yield _sse_chunk(line + "\n")
-        assistant_reply = qa_text
 
     # ── conversation path (LLM stream) ────────────────────────────────────────
     else:

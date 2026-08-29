@@ -7,6 +7,8 @@ LLM synthesizes: explains price anomalies, detects euphoria/panic extremes.
 
 from __future__ import annotations
 
+from langfuse import observe
+
 from llm.factory import create_client
 from llm.types import Message
 from tools.price import search_financial_news, analyze_market_sentiment
@@ -50,6 +52,7 @@ def _fetch_news_text(ticker: str | None, days: int) -> str:
     return f"Không có tin tức cho {subject} trong {days} ngày."
 
 
+@observe(name="intent.news_sentiment")
 def run(ticker: str | None, query: str) -> str:
     subject = ticker or "thị trường"
     days = 3
