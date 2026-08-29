@@ -80,3 +80,5 @@ dagster_home/
 # Temp
 *.tmp*/
 *.bak
+
+traces/

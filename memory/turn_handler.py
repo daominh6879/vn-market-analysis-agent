@@ -23,9 +23,12 @@ import json
 import threading
 from typing import AsyncIterator
 
+import uuid
+
 from langfuse import observe
 
 from llm.factory import create_client
+from tracing import current_request_id
 from llm.types import Message
 from memory.conversation import load_history, save_turn
 from memory.extractor import extract_preferences
@@ -201,13 +204,17 @@ def _dispatch_intent(
 ) -> str:
     """Single sync dispatch point for all intent types. Traced as Langfuse parent span.
     All nested intent.run() and tool @observe calls become children of this span."""
+    # Set request_id so all nested instrument_tool calls share it in traces/latest.jsonl
+    rid = f"{conversation_id[:8]}-{uuid.uuid4().hex[:6]}"
+    current_request_id.set(rid)
+
     try:
         from langfuse import get_client
         get_client().update_current_trace(
             session_id=conversation_id,
             user_id=user_id,
             input=user_message,
-            metadata={"intent": route.intent, "ticker": route.ticker},
+            metadata={"intent": route.intent, "ticker": route.ticker, "request_id": rid},
         )
     except Exception:
         pass
