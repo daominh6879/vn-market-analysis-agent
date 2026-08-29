@@ -48,18 +48,31 @@ Classify the user's question into exactly one of these labels:
 
   ngoài_phạm_vi — NOT in any data source (financial reports OR the database):
                   • Commodity/market prices (HRC, steel spot prices)
-                  • Investment advice ("có nên mua không")
+                  • Direct buy/sell advice with no screenable metric
+                    ("có nên mua HPG không?" — subjective, no DB criterion)
                   • Manufacturing/operational details (production volume in tonnes,
                     furnace technology, steel plant operations) — these are NOT in
                     financial reports or financial_facts/stock_prices tables
                   • Competitor data (other companies not in our DB)
                   • Future projections/dividend policy not yet disclosed
 
+  IMPORTANT — time phrases do NOT make a question out of scope:
+    "trong thời gian này", "hiện tại", "gần đây", "thời điểm này" are all
+    valid references to "use the most recent available data." Treat them as
+    implicit filters (latest period) and route to số_liệu or cả_hai.
+
+  IMPORTANT — screening questions ARE answerable via số_liệu:
+    "cổ phiếu nào đáng chú ý?" → screen by ROE/profit/revenue in DB → số_liệu
+    "mã nào nổi bật gần đây?"  → screen latest financial_facts → số_liệu
+    These are NOT investment advice — they are data queries with implicit criteria.
+
 Key distinctions:
   "how many employees/subsidiaries?" → STATED IN DOCUMENT → diễn_giải
   "highest stock price in 2024?"     → QUERY stock_prices DB → số_liệu
+  "cổ phiếu nào đáng chú ý?"        → screen financial_facts DB → số_liệu
   "production volume in tonnes?"     → NOT IN ANY DATA → ngoài_phạm_vi
   "furnace technology at Dung Quat?" → NOT IN ANY DATA → ngoài_phạm_vi
+  "có nên mua HPG không?"            → subjective advice → ngoài_phạm_vi
 
 Call the route_question tool with the correct label and a one-sentence reason."""
 

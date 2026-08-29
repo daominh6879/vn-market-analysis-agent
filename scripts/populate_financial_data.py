@@ -21,7 +21,9 @@ load_dotenv(ROOT / ".env")
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tickers", default=os.getenv("TICKERS", "HPG"))
+    from core.tickers import get_tickers as _get_tickers
+    default_tickers = ",".join(_get_tickers())
+    parser.add_argument("--tickers", default=default_tickers)
     parser.add_argument("--from", dest="period_from", type=int, default=2020)
     parser.add_argument("--to",   dest="period_to",   type=int, default=2025)
     parser.add_argument("--prices-from", default="2022-01-01")

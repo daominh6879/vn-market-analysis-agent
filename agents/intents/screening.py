@@ -56,6 +56,36 @@ ORDER BY ticker, value DESC NULLS LAST
 LIMIT 20;
 """
 
+# "đáng chú ý / nổi bật": top stocks by ROE with positive profit (2024)
+_NOTABLE_SQL = """
+SELECT ticker, roe_pct, profit_bil
+FROM (
+    SELECT DISTINCT ON (f1.ticker)
+        f1.ticker,
+        ROUND((f1.value / NULLIF(f2.value, 0) * 100)::numeric, 2) AS roe_pct,
+        ROUND((f1.value / 1e9)::numeric, 0) AS profit_bil
+    FROM financial_facts f1
+    JOIN financial_facts f2
+        ON f1.ticker = f2.ticker
+        AND f1.period = f2.period
+        AND f1.report_type = f2.report_type
+    WHERE f1.metric_code = 'lailo_thuan_sau_thue'
+      AND f2.metric_code = 'von_chu_so_huu'
+      AND f1.period = '2024'
+      AND f2.value > 0
+      AND f1.value > 0
+    ORDER BY f1.ticker, roe_pct DESC NULLS LAST
+) sub
+ORDER BY roe_pct DESC NULLS LAST
+LIMIT 15;
+"""
+
+_NOTABLE_PATTERNS = frozenset({
+    "đáng chú ý", "nổi bật", "đáng quan tâm", "đáng mua",
+    "tiềm năng", "tốt nhất", "tích lũy", "đáng đầu tư",
+    "cần chú ý", "đáng theo dõi", "khuyến nghị",
+})
+
 
 def _pick_template(query: str) -> str | None:
     """Return pre-built SQL if query matches a known screening pattern."""
@@ -66,6 +96,8 @@ def _pick_template(query: str) -> str | None:
         return _REVENUE_TOP_SQL
     if "lợi nhuận" in lower and ("cao nhất" in lower or "top" in lower or "lớn nhất" in lower):
         return _PROFIT_TOP_SQL
+    if any(pat in lower for pat in _NOTABLE_PATTERNS):
+        return _NOTABLE_SQL
     return None
 
 

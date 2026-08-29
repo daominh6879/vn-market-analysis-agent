@@ -22,7 +22,9 @@ load_dotenv(ROOT / ".env")
 from dagster import AssetExecutionContext, RetryPolicy, asset
 
 EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
-TICKERS = [t.strip().upper() for t in os.getenv("TICKERS", "HPG").split(",") if t.strip()]
+
+from core.tickers import get_tickers as _get_tickers
+TICKERS = _get_tickers()
 
 
 @asset(
