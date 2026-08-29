@@ -111,10 +111,11 @@ class TestSensor:
         mock_client.bucket_exists.return_value = True
         mock_client.list_objects.return_value = minio_objects
 
+        ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
         ctx = build_sensor_context(cursor=cursor)
 
         with patch("pipeline.assets._minio", return_value=mock_client), \
-             patch.dict("os.environ", {"TICKERS": tickers}):
+             patch("core.tickers.get_tickers", return_value=ticker_list):
             result = minio_new_pdf_sensor(ctx)
 
         return result.run_requests, result.cursor
@@ -209,7 +210,7 @@ class TestSensor:
 
         ctx = build_sensor_context(cursor="")
         with patch("pipeline.assets._minio", return_value=mock_client), \
-             patch.dict("os.environ", {"TICKERS": "HPG,VCB"}):
+             patch("core.tickers.get_tickers", return_value=["HPG", "VCB"]):
             result = minio_new_pdf_sensor(ctx)
 
         # Chỉ HPG có file → 1 request, VCB không có → 0
@@ -241,7 +242,7 @@ class TestSensor:
         ctx = build_sensor_context(cursor=old_cursor)
 
         with patch("pipeline.assets._minio", return_value=mock_client), \
-             patch.dict("os.environ", {"TICKERS": "HPG,VCB"}):
+             patch("core.tickers.get_tickers", return_value=["HPG", "VCB"]):
             result = minio_new_pdf_sensor(ctx)
 
         # Chỉ VCB mới → 1 request, HPG không trigger
@@ -335,12 +336,14 @@ class TestIngestionConfig:
     def test_custom_ticker(self):
         cfg = IngestionConfig(ticker="VCB")
         assert _bucket(cfg) == "vcb-docs"
-        assert "vcb" in _collection(cfg)
+        assert _collection(cfg) == "bctc_structural"  # shared collection — ticker isolated via payload
 
     def test_delete_config(self):
         cfg = DeleteConfig(ticker="HPG", object_key="2024/hpg_q4.pdf")
         assert cfg.ticker == "HPG"
         assert cfg.object_key == "2024/hpg_q4.pdf"
+
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -245,14 +245,135 @@ _REPORTS = [
 ]
 
 
+# ── TCBS direct API ────────────────────────────────────────────────────────────
+
+_TCBS_BASE = "https://apipubaws.tcbs.com.vn/tcanalysis/v1/finance"
+_TCBS_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+}
+
+# TCBS JSON field → metric_code
+_TCBS_INCOME_MAP: dict[str, str] = {
+    "revenue":          "doanh_thu_thuan",
+    "grossProfit":      "loi_nhuan_gop",
+    "operatingProfit":  "loi_nhuan_hoat_dong",
+    "preTaxProfit":     "loi_nhuan_truoc_thue",
+    "postTaxProfit":    "loi_nhuan_sau_thue",
+    "interestExpense":  "chi_phi_lai_vay",
+    "ebit":             "ebit",
+    "ebitda":           "ebitda",
+}
+
+_TCBS_BALANCE_MAP: dict[str, str] = {
+    "asset":            "tong_tai_san",
+    "shortAsset":       "tai_san_ngan_han",
+    "longAsset":        "tai_san_dai_han",
+    "debt":             "no_phai_tra",
+    "shortDebt":        "no_ngan_han",
+    "longDebt":         "no_dai_han",
+    "equity":           "von_chu_so_huu",
+    "capital":          "von_dieu_le",
+    "cash":             "tien_va_tuong_duong_tien",
+    "inventory":        "hang_ton_kho",
+}
+
+_TCBS_CASHFLOW_MAP: dict[str, str] = {
+    "operationCashFlow": "dong_tien_hoat_dong",
+    "investCashFlow":    "dong_tien_dau_tu",
+    "financeCashFlow":   "dong_tien_tai_chinh",
+}
+
+_TCBS_REPORT_CONFIGS = [
+    ("incomestatement", "income_statement", _TCBS_INCOME_MAP),
+    ("balancesheet",    "balance_sheet",    _TCBS_BALANCE_MAP),
+    ("cashflow",        "cash_flow",        _TCBS_CASHFLOW_MAP),
+]
+
+
+def _tcbs_fetch_report(ticker: str, endpoint: str) -> list[dict]:
+    import httpx
+
+    url = f"{_TCBS_BASE}/{ticker.upper()}/{endpoint}"
+    resp = httpx.get(url, params={"yearly": 1, "isAll": "true"}, headers=_TCBS_HEADERS, timeout=20)
+    resp.raise_for_status()
+    data = resp.json()
+    # response key varies: listYearlyData, data, or bare list
+    if isinstance(data, list):
+        return data
+    for key in ("listYearlyData", "data", "listData"):
+        if key in data and isinstance(data[key], list):
+            return data[key]
+    raise ValueError(f"Unexpected TCBS response shape for {endpoint}: keys={list(data.keys())}")
+
+
+def _tcbs_rows_to_facts(
+    rows: list[dict],
+    ticker: str,
+    report_type: str,
+    source_label: str,
+    field_map: dict[str, str],
+    period_from: int,
+    period_to: int,
+) -> list[dict]:
+    facts = []
+    for row in rows:
+        year = row.get("year") or row.get("fiscalYear")
+        try:
+            year_int = int(year)
+        except (TypeError, ValueError):
+            continue
+        if not (period_from <= year_int <= period_to):
+            continue
+        period = str(year_int)
+        for field, metric_code in field_map.items():
+            val = row.get(field)
+            try:
+                fval = float(val)
+            except (TypeError, ValueError):
+                continue
+            if fval == 0 or fval != fval:
+                continue
+            facts.append(_make_fact(ticker, period, report_type, metric_code, fval, source_label))
+    return facts
+
+
+def _fetch_finance_facts_tcbs(
+    ticker: str,
+    report_type: str,
+    period_from: int,
+    period_to: int,
+) -> list[dict]:
+    all_facts: list[dict] = []
+    for endpoint, source_label, field_map in _TCBS_REPORT_CONFIGS:
+        print(f"  Fetching {endpoint} (TCBS direct)...")
+        try:
+            rows = _tcbs_fetch_report(ticker, endpoint)
+            facts = _tcbs_rows_to_facts(
+                rows, ticker, report_type, source_label, field_map, period_from, period_to
+            )
+            print(f"  → {len(facts)} facts")
+            all_facts.extend(facts)
+        except Exception as exc:
+            print(f"  [WARN] {endpoint} failed: {exc}")
+    return all_facts
+
+
 def fetch_finance_facts(
     ticker: str,
     report_type: Literal["standalone", "consolidated"],
     period_from: int,
     period_to: int,
-    source: str = "VCI",
+    source: str = "TCBS",
     show_schema: bool = False,
 ) -> list[dict]:
+    if source == "TCBS":
+        return _fetch_finance_facts_tcbs(ticker, report_type, period_from, period_to)
+
+    # VCI / KBS path — uses vnstock SDK
     try:
         from vnstock import Finance  # type: ignore[import]
     except ImportError:
@@ -323,7 +444,7 @@ def main() -> None:
     parser.add_argument("--period-to",    dest="period_to",   type=int, default=2024)
     parser.add_argument("--report-type",  dest="report_type", default="consolidated",
                         choices=["standalone", "consolidated"])
-    parser.add_argument("--source",       default="VCI",  choices=["VCI", "KBS", "TCBS"])
+    parser.add_argument("--source",       default="TCBS", choices=["VCI", "KBS", "TCBS"])
     parser.add_argument("--dry-run",      action="store_true", help="Print only, no insert")
     parser.add_argument("--show-schema",  action="store_true", help="Print DataFrame schema and exit")
     args = parser.parse_args()

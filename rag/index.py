@@ -233,7 +233,7 @@ def _register_doc(doc_id: str, source_uri: str, collection: str) -> None:
                 )
         print(f"  registered in documents: doc_id={doc_id}")
     except Exception as e:
-        print(f"  [warn] không ghi được vào Postgres (chạy migration chưa?): {e}")
+        raise RuntimeError(f"_register_doc failed for doc_id={doc_id}: {e}") from e
 
 
 def parse_meta(raw: str | None) -> dict | None:

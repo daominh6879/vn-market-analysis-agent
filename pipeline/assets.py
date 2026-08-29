@@ -307,6 +307,20 @@ def embeddings(
             doc_id=doc["doc_id"],
             source_uri=doc["key"],
         )
+
+        # Verify documents row was written — catch any silent desync early.
+        from core.db import get_conn as _get_conn
+        with _get_conn() as _conn:
+            with _conn.cursor() as _cur:
+                _cur.execute(
+                    "SELECT 1 FROM documents WHERE doc_id = %s AND status = 'active'",
+                    (doc["doc_id"],),
+                )
+                if not _cur.fetchone():
+                    raise RuntimeError(
+                        f"documents row missing after index_run: doc_id={doc['doc_id']} key={doc['key']}"
+                    )
+
         total_chunks += n
         total_indexed += 1
         context.log.info(f"  → {n} chunks")
@@ -476,8 +490,8 @@ news_purge_schedule = ScheduleDefinition(
 )
 def minio_new_pdf_sensor(context):
     """Cursor = sorted PDF key list. Khi có key mới → run 1 job per file."""
-    # TICKERS env var: danh sách ticker cần monitor, ví dụ "HPG,VCB,MWG"
-    tickers = [t.strip().upper() for t in os.getenv("TICKERS", "HPG").split(",") if t.strip()]
+    from core.tickers import get_tickers
+    tickers = get_tickers()
 
     try:
         client = _minio()

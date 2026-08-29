@@ -23,22 +23,19 @@ load_dotenv(ROOT / ".env")
 from dagster import AssetExecutionContext, Config, RetryPolicy, ScheduleDefinition, asset, define_asset_job
 
 
-TICKERS = [t.strip().upper() for t in os.getenv("TICKERS", "HPG").split(",") if t.strip()]
-
-
 # ── Config ─────────────────────────────────────────────────────────────────────
 
 class VnstockFinancialsConfig(Config):
-    tickers: str = os.getenv("TICKERS", "HPG")        # comma-separated
+    tickers: str = ""   # empty = all active tickers from securities table
     period_from: int = 2020
     period_to: int = date.today().year
     report_type: str = "consolidated"
-    source: str = "VCI"
+    source: str = "TCBS"
 
 
 class VnstockPricesConfig(Config):
-    tickers: str = os.getenv("TICKERS", "HPG")        # comma-separated
-    days_back: int = 2                                  # fetch last N days (idempotent via ON CONFLICT)
+    tickers: str = ""   # empty = all active tickers from securities table
+    days_back: int = 2  # fetch last N days (idempotent via ON CONFLICT)
 
 
 # ── Assets ─────────────────────────────────────────────────────────────────────
@@ -49,10 +46,13 @@ class VnstockPricesConfig(Config):
     retry_policy=RetryPolicy(max_retries=3, delay=60),
 )
 def vnstock_financials(context: AssetExecutionContext, config: VnstockFinancialsConfig) -> dict:
+    import time
     from ingest.fetch_financials import fetch_finance_facts, insert_vnstock_facts
+    from core.tickers import get_tickers
 
-    ticker_list = [t.strip().upper() for t in config.tickers.split(",") if t.strip()]
+    ticker_list = [t.strip().upper() for t in config.tickers.split(",") if t.strip()] or get_tickers()
     total_facts = 0
+    failed: list[str] = []
 
     for ticker in ticker_list:
         context.log.info(f"Fetching financials: {ticker} ({config.period_from}–{config.period_to})")
@@ -72,10 +72,13 @@ def vnstock_financials(context: AssetExecutionContext, config: VnstockFinancials
                 context.log.warning(f"  {ticker}: 0 facts returned")
         except Exception as exc:
             context.log.error(f"  {ticker} FAILED: {exc}")
-            raise
+            failed.append(ticker)
+        time.sleep(0.5)
 
+    if failed:
+        context.log.warning(f"vnstock_financials: {len(failed)} tickers failed: {failed}")
     context.log.info(f"vnstock_financials done: {total_facts} total facts")
-    return {"total_facts": total_facts, "tickers": ticker_list}
+    return {"total_facts": total_facts, "tickers": ticker_list, "failed": failed}
 
 
 @asset(
@@ -84,13 +87,16 @@ def vnstock_financials(context: AssetExecutionContext, config: VnstockFinancials
     retry_policy=RetryPolicy(max_retries=3, delay=30),
 )
 def vnstock_prices(context: AssetExecutionContext, config: VnstockPricesConfig) -> dict:
+    import time
     from ingest.fetch_prices import fetch_and_insert
+    from core.tickers import get_tickers
 
-    ticker_list = [t.strip().upper() for t in config.tickers.split(",") if t.strip()]
+    ticker_list = [t.strip().upper() for t in config.tickers.split(",") if t.strip()] or get_tickers()
     today = date.today()
     from_date = str(today - timedelta(days=config.days_back))
     to_date = str(today)
     total_rows = 0
+    failed: list[str] = []
 
     for ticker in ticker_list:
         context.log.info(f"Fetching prices: {ticker} ({from_date} → {to_date})")
@@ -100,10 +106,13 @@ def vnstock_prices(context: AssetExecutionContext, config: VnstockPricesConfig) 
             context.log.info(f"  {ticker}: {n} rows upserted")
         except Exception as exc:
             context.log.error(f"  {ticker} FAILED: {exc}")
-            raise
+            failed.append(ticker)
+        time.sleep(0.3)
 
+    if failed:
+        context.log.warning(f"vnstock_prices: {len(failed)} tickers failed: {failed}")
     context.log.info(f"vnstock_prices done: {total_rows} total rows")
-    return {"total_rows": total_rows, "tickers": ticker_list, "date_range": f"{from_date}→{to_date}"}
+    return {"total_rows": total_rows, "tickers": ticker_list, "failed": failed, "date_range": f"{from_date}→{to_date}"}
 
 
 # ── Jobs ───────────────────────────────────────────────────────────────────────

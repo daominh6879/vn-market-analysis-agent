@@ -81,7 +81,7 @@ def reset_qdrant(dry: bool) -> None:
 def reset_postgres(dry: bool) -> None:
     from data.db import get_conn
 
-    tables = ["financial_facts", "quarantine_log", "documents"]
+    tables = ["quarantine_log", "documents"]
 
     with get_conn() as conn:
         with conn.cursor() as cur:

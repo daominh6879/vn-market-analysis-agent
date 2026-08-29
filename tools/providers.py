@@ -3,6 +3,8 @@ tools/providers.py — PriceProvider interface + concrete implementations (bài 
 
 Providers:
   VciDirectProvider  — VCI REST API, không dùng vnstock
+  TcbsDirectProvider — TCBS public API, fallback for VN stocks
+  FallbackProvider   — wraps two providers, tries primary first
   YFinanceProvider   — yfinance cho mã NYSE/NASDAQ
 
 Không import vnstock ở đây.
@@ -253,6 +255,99 @@ class VciDirectProvider(PriceProvider):
         return rows
 
 
+# ── TcbsDirectProvider ───────────────────────────────────────────────────────
+
+class TcbsDirectProvider(PriceProvider):
+    """
+    TCBS public API — no auth, no vnstock.
+    GET https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term
+    VN stock tickers only (not indices).
+    """
+
+    _URL = "https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term"
+    _HEADERS = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+    }
+
+    def _fetch_ohlcv(self, ticker: str, count_back: int) -> pd.DataFrame:
+        import httpx
+
+        to_ts = int(datetime.now().timestamp())
+        from_ts = to_ts - count_back * 2 * 86400  # 2x days buffer for weekends/holidays
+        params = {
+            "ticker": ticker.upper(),
+            "type": "stock",
+            "resolution": "D",
+            "from": from_ts,
+            "to": to_ts,
+        }
+        resp = httpx.get(self._URL, params=params, headers=self._HEADERS, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+
+        bars = data.get("data") or []
+        if not bars:
+            raise ValueError(f"No TCBS data for '{ticker}'")
+
+        rows = []
+        for bar in bars:
+            td = bar.get("tradingDate") or ""
+            date_str = td[:10] if td else ""
+            if not date_str:
+                continue
+            rows.append({
+                "time":   date_str,
+                "open":   float(bar.get("open") or 0),
+                "high":   float(bar.get("high") or 0),
+                "low":    float(bar.get("low") or 0),
+                "close":  float(bar.get("close") or 0),
+                "volume": int(bar.get("volume") or 0),
+            })
+
+        df = pd.DataFrame(rows)
+        if df.empty:
+            raise ValueError(f"Empty TCBS bars for '{ticker}'")
+        return df.sort_values("time").drop_duplicates(subset=["time"]).reset_index(drop=True)
+
+    def fetch_price(self, ticker: str) -> float:
+        df = self._fetch_ohlcv(ticker, count_back=5)
+        if df.empty:
+            raise ValueError(f"No TCBS price for '{ticker}'")
+        return float(df["close"].iloc[-1])
+
+    def fetch_history(self, ticker: str, days: int) -> pd.DataFrame:
+        df = self._fetch_ohlcv(ticker, count_back=days + 10)
+        if df.empty:
+            raise ValueError(f"No TCBS history for '{ticker}'")
+        return df.tail(days).reset_index(drop=True)
+
+
+# ── FallbackProvider ──────────────────────────────────────────────────────────
+
+class FallbackProvider(PriceProvider):
+    """Try primary provider; on any exception fall back to secondary."""
+
+    def __init__(self, primary: PriceProvider, secondary: PriceProvider) -> None:
+        self._primary = primary
+        self._secondary = secondary
+
+    def fetch_price(self, ticker: str) -> float:
+        try:
+            return self._primary.fetch_price(ticker)
+        except Exception:
+            return self._secondary.fetch_price(ticker)
+
+    def fetch_history(self, ticker: str, days: int) -> pd.DataFrame:
+        try:
+            return self._primary.fetch_history(ticker, days)
+        except Exception:
+            return self._secondary.fetch_history(ticker, days)
+
+
 # ── YFinanceProvider ──────────────────────────────────────────────────────────
 
 class YFinanceProvider(PriceProvider):
@@ -420,5 +515,5 @@ def _detect_provider(ticker: str) -> PriceProvider:
     if "." not in resolved and len(resolved) <= 4:
         vn_tickers = _vn_ticker_set()
         if resolved in vn_tickers or not vn_tickers:
-            return VciDirectProvider()
+            return FallbackProvider(VciDirectProvider(), TcbsDirectProvider())
     return YFinanceProvider()
