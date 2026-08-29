@@ -114,6 +114,36 @@ def store_episode(
     return point_id
 
 
+def delete_episode(conversation_id: str) -> int:
+    """Delete all Qdrant points for this conversation_id. Returns count deleted."""
+    client = _qdrant()
+    _ensure_collection(client)
+
+    # Scroll to find matching point ids
+    point_ids = []
+    offset = None
+    while True:
+        results, offset = client.scroll(
+            collection_name=COLLECTION,
+            scroll_filter=Filter(
+                must=[FieldCondition(key="conversation_id", match=MatchValue(value=conversation_id))]
+            ),
+            limit=100,
+            offset=offset,
+            with_payload=False,
+        )
+        point_ids.extend(r.id for r in results)
+        if offset is None:
+            break
+
+    if point_ids:
+        client.delete(
+            collection_name=COLLECTION,
+            points_selector=point_ids,
+        )
+    return len(point_ids)
+
+
 def retrieve_similar(
     query: str,
     user_id: str,

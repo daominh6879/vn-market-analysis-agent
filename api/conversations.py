@@ -15,12 +15,13 @@ from pydantic import BaseModel
 
 from memory.conversation import (
     create_conversation,
+    delete_conversation,
     get_conversation,
     get_latest_conversation,
     list_conversations,
     load_history,
 )
-from memory.reader import load_user_memory
+from memory.reader import delete_memory_item, load_user_memory
 from memory.turn_handler import run_turn, stream_turn
 
 router = APIRouter(tags=["conversations"])
@@ -115,7 +116,23 @@ async def stream_message(conversation_id: str, body: MessageRequest):
     )
 
 
+@router.delete("/conversations/{conversation_id}")
+def delete_conv(conversation_id: str):
+    found = delete_conversation(conversation_id)
+    if not found:
+        raise HTTPException(404, f"Conversation {conversation_id} not found")
+    return {"deleted": conversation_id}
+
+
 @router.get("/users/{user_id}/memory")
-def user_memory(user_id: str, tenant_id: str = "default", max_items: int = 5):
+def user_memory(user_id: str, tenant_id: str = "default", max_items: int = 20):
     items = load_user_memory(user_id, tenant_id, max_items)
     return {"user_id": user_id, "memory": items}
+
+
+@router.delete("/users/{user_id}/memory/{item_id}")
+def delete_memory(user_id: str, item_id: str):
+    found = delete_memory_item(item_id, user_id)
+    if not found:
+        raise HTTPException(404, f"Memory item {item_id} not found")
+    return {"deleted": item_id}

@@ -146,3 +146,22 @@ def get_conversation(conversation_id: str) -> Optional[dict]:
             )
             row = cur.fetchone()
     return dict(row) if row else None
+
+
+def delete_conversation(conversation_id: str) -> bool:
+    """Delete conversation, all its messages, and episodic Qdrant point. Return True if row existed."""
+    from memory.episodic import delete_episode  # local import avoids circular deps
+
+    with _conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM messages WHERE conversation_id = %s", (conversation_id,))
+            cur.execute("DELETE FROM conversations WHERE conversation_id = %s", (conversation_id,))
+            found = cur.rowcount > 0
+
+    if found:
+        try:
+            delete_episode(conversation_id)
+        except Exception:
+            pass  # Qdrant unavailable — Postgres already cleaned up
+
+    return found

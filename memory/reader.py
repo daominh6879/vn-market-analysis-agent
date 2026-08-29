@@ -114,3 +114,14 @@ def save_memory_item(
                     (new_id, existing[0]),
                 )
     return new_id
+
+
+def delete_memory_item(item_id: str, user_id: str) -> bool:
+    """Hard-delete one active memory item. Return True if row existed."""
+    with _conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM user_memory WHERE id = %s AND user_id = %s",
+                (item_id, user_id),
+            )
+            return cur.rowcount > 0
