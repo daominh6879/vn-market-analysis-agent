@@ -1,4 +1,4 @@
-.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-fetch-ticker news-backfill news-reindex test-sentiment mcp-server mcp-inspect test-tools test-chaos migrate-b28 test-b28 api-b28 test-b30 eval-b30 eval-b30-notes
+.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-fetch-ticker news-backfill news-reindex test-sentiment mcp-server mcp-inspect test-tools test-chaos migrate-b28 test-b28 api-b28 test-b30 eval-b30 eval-b30-notes test-b31 api-b31 curl-stream-b31
 
 up:
 	docker compose up -d
@@ -214,3 +214,18 @@ eval-b30:
 
 eval-b30-notes:
 	python evals/eval_memory_b30.py --update-notes
+
+# Bài 31 — Streaming
+test-b31:
+	pytest tests/test_bai31_streaming.py -v -s
+
+api-b31:
+	python -m uvicorn api.main:app --reload --port 8031
+
+curl-stream-b31:
+ifndef CID
+	$(error Usage: make curl-stream-b31 CID=<conversation_id> MSG="câu hỏi")
+endif
+	curl -N --no-buffer -s -X POST http://localhost:8031/conversations/$(CID)/messages/stream \
+	  -H "Content-Type: application/json" \
+	  -d "{\"user_id\":\"test\",\"message\":\"$(MSG)\"}"

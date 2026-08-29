@@ -10,11 +10,12 @@ GET  /users/{user_id}/memory   → list active user memory items
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from memory.conversation import create_conversation, get_conversation, load_history
 from memory.reader import load_user_memory
-from memory.turn_handler import run_turn
+from memory.turn_handler import run_turn, stream_turn
 
 router = APIRouter(tags=["conversations"])
 
@@ -28,6 +29,13 @@ class TurnBody(BaseModel):
     user_id: str
     tenant_id: str = "default"
     message: str
+
+
+class MessageRequest(BaseModel):
+    user_id: str
+    tenant_id: str = "default"
+    message: str
+    is_first_turn: bool = False
 
 
 # ── conversations ─────────────────────────────────────────────────────────────
@@ -65,6 +73,25 @@ def conversation_history(conversation_id: str, limit: int = 20):
         raise HTTPException(404, f"Conversation {conversation_id} not found")
     messages = load_history(conversation_id, limit=limit)
     return {"conversation_id": conversation_id, "messages": messages}
+
+
+@router.post("/conversations/{conversation_id}/messages/stream")
+async def stream_message(conversation_id: str, body: MessageRequest):
+    conv = get_conversation(conversation_id)
+    if not conv:
+        raise HTTPException(404, f"Conversation {conversation_id} not found")
+
+    return StreamingResponse(
+        stream_turn(
+            conversation_id=conversation_id,
+            user_id=body.user_id,
+            user_message=body.message,
+            tenant_id=body.tenant_id,
+            is_first_turn=body.is_first_turn,
+        ),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/users/{user_id}/memory")
