@@ -247,44 +247,63 @@
 
 ---
 
-### Bài 28 · Memory: khi nào ghi, và xử lý mâu thuẫn 🔴
-**~2 ngày**
+### Bài 28 · Conversation + Memory: hạ tầng chat và khi nào ghi 🔴
+**~2.5 ngày**
 
-**Bối cảnh.** Người dùng nói "tôi theo dõi FPT, HPG và ưa rủi ro thấp" ở phiên 1. Phiên 2 họ không nói lại — nhưng hệ thống nên nhớ. Bài này xây lớp memory lưu sở thích giữa phiên và giải quyết hai vấn đề hay bị bỏ qua: **khi nào ghi** và **khi họ tự mâu thuẫn thì xử lý thế nào**.
+**Bối cảnh.** Đây là bài xây hạ tầng nền cho toàn bộ trải nghiệm chat kiểu ChatGPT: mỗi cuộc trò chuyện có `conversation_id`, mỗi lượt hỏi-đáp được lưu lại và đưa vào ngữ cảnh lượt sau. Song song với đó, hệ thống trích xuất sở thích từ hội thoại và nhớ chúng qua các cuộc trò chuyện khác nhau — nhưng chỉ ghi khi đủ tự tin, và xử lý được khi người dùng tự mâu thuẫn.
 
-**Để hiểu gì.** Phần khó của memory **không phải lưu** — mà là quyết định khi nào ghi và xử lý khi người dùng tự mâu thuẫn.
+**Để hiểu gì.** Hai thứ: (1) conversation history làm cho agent trở thành chatbot thật thay vì công cụ một lần; (2) phần khó của memory **không phải lưu** — mà là quyết định khi nào ghi và xử lý khi người dùng tự mâu thuẫn.
 
 **Làm gì.**
 
 **Bắt đầu từ đâu:**
-1. Tạo bảng Postgres `user_memory` (với `id`, `tenant_id`, `user_id`, `key`, `value JSONB`, `confidence`, `source_message`, `superseded_by`).
-2. Tạo `memory/extractor.py` với `extract_preferences(conversation) -> list[MemoryItem]`.
-3. Test thủ công với đoạn hội thoại có câu "tôi theo dõi HPG".
+1. Tạo 2 bảng Postgres mới:
+   ```sql
+   conversations (conversation_id UUID PK, user_id, tenant_id, created_at)
+   messages      (message_id UUID PK, conversation_id FK, role TEXT, content TEXT,
+                  agent_session_id FK NULLABLE, created_at)
+   ```
+2. Tạo `memory/conversation.py` với `load_history(conversation_id, limit=10)` và `save_turn(conversation_id, user_msg, assistant_msg, session_id)`.
+3. Thêm `conversation_id: str` và `messages: list[dict]` vào `agents/state.py`.
+4. Tạo bảng `user_memory` (với `id`, `tenant_id`, `user_id`, `key`, `value JSONB`, `confidence`, `source_message`, `superseded_by`).
+5. Tạo `memory/extractor.py` với `extract_preferences(conversation) -> list[MemoryItem]`.
 
 **Chi tiết từng việc:**
 
-- **Cửa lọc:** chỉ ghi khi `confidence >= 0.7`. Câu mơ hồ ("chắc là tôi hơi thích ngành thép") phải ra `confidence < 0.7`.
+- **Luồng mỗi turn:**
+  1. `load_history(conversation_id)` → đưa vào `state["messages"]`
+  2. `load_user_memory(user_id)` → inject vào system prompt đầu agent
+  3. Agent chạy bình thường (plan → execute → replan)
+  4. `save_turn(...)` → lưu cặp (user, assistant) vào `messages`
+  5. Sau turn kết thúc → `extract_preferences(turn_messages)` → ghi `user_memory`
+
+- **`state["messages"]`** — chỉ chứa N turn gần nhất (mặc định 10). Tuyệt đối không nhét toàn bộ lịch sử — context sẽ phình.
+
+- **Cửa lọc memory:** chỉ ghi khi `confidence >= 0.7`. Câu mơ hồ ("chắc là tôi hơi thích ngành thép") phải ra `confidence < 0.7`.
 
 - **Xử lý mâu thuẫn:** khi ghi item mới, đánh dấu record cũ bị thay thế bằng `superseded_by`. Không XOÁ — giữ lại trong DB để audit. Chỉ không đưa vào ngữ cảnh nữa.
 
 - **`memory/reader.py`** — đầu mỗi phiên, chỉ lấy record có `superseded_by IS NULL`, sort theo `confidence DESC`, tối đa 5 item.
 
-- Chạy extractor **sau khi phiên kết thúc**, không trong phiên — tránh câu giả định bị ghi thành sở thích thật.
+- Chạy extractor **sau khi turn kết thúc**, không trong turn — tránh câu giả định bị ghi thành sở thích thật.
 
 **Xong khi.**
-- [ ] Phiên 1 nói sở thích → bảng có 2 record đúng
-- [ ] Phiên 2 (session mới) hỏi → hệ thống biết danh mục, báo cáo đổi giọng
-- [ ] Phiên 3 thay đổi sở thích → record cũ bị thay thế, vẫn còn trong DB
+- [ ] `POST /conversations` → tạo conversation mới, trả `conversation_id`
+- [ ] Turn 1 hỏi về FPT → `messages` có 1 cặp; turn 2 cùng conversation → agent thấy lịch sử turn 1
+- [ ] Conversation A và Conversation B không lẫn lịch sử vào nhau
+- [ ] Phiên 1 nói sở thích → bảng `user_memory` có record đúng
+- [ ] Conversation mới (khác conversation_id) hỏi → agent vẫn biết sở thích từ phiên trước
+- [ ] Thay đổi sở thích → record cũ bị thay thế, vẫn còn trong DB
 - [ ] Câu mơ hồ → **không** được ghi
 
-**Cái bẫy.** Nếu chạy extractor giữa phiên, câu giả định ("nếu tôi ưa rủi ro cao thì sao?") bị ghi thành sở thích thật.
+**Cái bẫy.** Nếu chạy extractor giữa turn, câu giả định ("nếu tôi ưa rủi ro cao thì sao?") bị ghi thành sở thích thật. Và nếu load toàn bộ `messages` không giới hạn — context bài 31 sẽ timeout.
 
 ---
 
 ### Bài 29 · Memory: quên đi 🔴
 **~1.5 ngày**
 
-**Bối cảnh.** Memory ở bài 28 chỉ ghi thêm mà không quên — sau vài trăm phiên, ngữ cảnh bị nhồi đầy sở thích cũ. Bài này xây cơ chế quên có kiểm soát: memory cũ mờ dần, chỉ những gì liên quan đến câu hỏi hiện tại mới được đưa vào ngữ cảnh.
+**Bối cảnh.** Memory ở bài 28 chỉ ghi thêm mà không quên — sau vài trăm conversation, ngữ cảnh bị nhồi đầy sở thích cũ. Bài này xây cơ chế quên có kiểm soát: memory cũ mờ dần, chỉ những gì liên quan đến câu hỏi hiện tại mới được đưa vào ngữ cảnh. **Episode** ở đây là một conversation hoàn chỉnh (nhiều turn), không phải một lần chạy agent đơn lẻ.
 
 **Để hiểu gì.** Memory chỉ ghi thêm mà không quên sẽ **tự đầu độc** sau vài trăm lượt.
 
@@ -297,21 +316,23 @@
 
 **Chi tiết từng việc:**
 
-- **Episodic storage** — mỗi phiên thành công lưu vào Qdrant: câu hỏi gốc, tóm tắt kế hoạch, kết luận, feedback người dùng.
+- **Episodic storage** — mỗi conversation kết thúc lưu vào Qdrant: câu hỏi đầu conversation, tóm tắt toàn bộ turns, kết luận cuối, feedback người dùng nếu có. Metadata: `conversation_id`, `user_id`, `created_at`.
 
 - **Cơ chế quên — 3 lớp:**
   1. **Thời hạn:** episodic memory hết hạn sau 90 ngày.
   2. **Điểm suy giảm:** nhân score với `decay = exp(-days_old / 30)`.
   3. **Giới hạn cứng:** chỉ lấy top 3 vào ngữ cảnh.
 
+- **Retrieval đầu conversation mới** — khi người dùng bắt đầu conversation mới, `retrieve_similar(first_user_message, user_id)` lấy top 3 episode liên quan để agent biết họ đã hỏi gì tương tự trước đây. Inject vào system prompt, không vào `state["messages"]`.
+
 - **`memory/procedural.py`** — sinh rule từ feedback người dùng. **Chỉ ghi khi có tín hiệu ngoài** (người dùng chủ động), không khi model tự "cảm thấy".
 
-- **Kiểm tra tải** — giả lập 200 item memory cho một user: ngữ cảnh không được phình (vẫn ≤ 3 item), đo quality không tụt.
+- **Kiểm tra tải** — giả lập 200 conversation (episode) cho một user: ngữ cảnh mỗi turn mới không phình (vẫn ≤ 3 episode inject), đo quality không tụt.
 
 **Xong khi.**
-- [ ] 20 phiên giả lập → lấy về đúng những lần liên quan
+- [ ] 20 conversation giả lập → episode mới retrieve đúng những conversation liên quan
 - [ ] Bật/tắt episodic memory → chạy eval → **có số** cho biết nó giúp hay không
-- [ ] Nhồi 200 item → ngữ cảnh **không phình**, chất lượng không tụt
+- [ ] Nhồi 200 episode → ngữ cảnh **không phình**, chất lượng không tụt
 
 **Cái bẫy.** Episodic memory rất dễ **giảm** chất lượng vì nó dạy model sai hướng. Phải đo, đừng giả định.
 
@@ -320,33 +341,38 @@
 ### Bài 30 · Đo memory + test rò rỉ giữa người dùng 🔴
 **~1.5 ngày**
 
-**Bối cảnh.** Memory có hai loại lỗi thầm lặng: nhớ sai thứ chưa từng nói (bịa sở thích) và rò rỉ sở thích người dùng A sang người dùng B. Cả hai không gây crash. Bài này đo cả hai và tự tấn công để kiểm chứng cách ly.
+**Bối cảnh.** Memory có hai loại lỗi thầm lặng: nhớ sai thứ chưa từng nói (bịa sở thích) và rò rỉ sở thích người dùng A sang người dùng B. Cả hai không gây crash. Bài này đo cả hai và tự tấn công để kiểm chứng cách ly — **ở cả cấp memory lẫn cấp conversation history**.
 
 **Để hiểu gì.** Hai thứ gần như không ai làm: **đo memory** và **test cách ly memory**. **Nhớ sai nguy hiểm hơn không nhớ.**
 
 **Làm gì.**
 
 **Bắt đầu từ đâu:**
-1. Tạo `evals/memory_multi_session.yaml` với 10 tình huống × 3 phiên.
-2. Tạo `tests/test_memory_isolation.py` với 3 test case. Chạy để xem fail hết trước khi có isolation code.
+1. Tạo `evals/memory_multi_session.yaml` với 10 tình huống × 3 conversation (mỗi conversation nhiều turn).
+2. Tạo `tests/test_memory_isolation.py` với 5 test case. Chạy để xem fail hết trước khi có isolation code.
 3. Chạy 2 tình huống đầu thủ công để hiểu format.
 
 **Chi tiết từng việc:**
 
 - **Đo 2 chỉ số:**
-  1. **Recall** (nhớ đúng thứ đã nói): kiểm tra `expected_remembered` có xuất hiện trong báo cáo phiên 3 không.
+  1. **Recall** (nhớ đúng thứ đã nói): kiểm tra `expected_remembered` có xuất hiện trong báo cáo conversation thứ 3 không.
   2. **Precision** (không bịa thứ chưa nói): kiểm tra `expected_NOT_mentioned` **không** xuất hiện trong báo cáo. Chỉ số này khó hơn — phải thiết kế tình huống sao cho nếu hệ thống "bịa" thì phần tử sẽ xuất hiện.
 
-- **3 test isolation:** người dùng A không thể thấy memory của B, hai user có sở thích gần giống nhau không bị lẫn, không rò rỉ cross-tenant.
+- **5 test isolation:**
+  1. User A không thấy `user_memory` của user B.
+  2. User A không thấy `messages` history của conversation B (dù cùng user).
+  3. Hai user có sở thích gần giống nhau không bị lẫn.
+  4. Không rò rỉ cross-tenant.
+  5. `load_history(conversation_id)` chỉ trả messages đúng conversation — không lẫn conversation khác cùng user.
 
 - Ghi 2 con số vào `NOTES.md`: `memory_recall = X%` và `memory_precision = Y%`.
 
 **Xong khi.**
 - [ ] 10 tình huống chạy tự động, ra 2 con số
-- [ ] Test cách ly xanh cả 3 trường hợp
+- [ ] Test cách ly xanh cả 5 trường hợp
 
 **Tự trả lời được.**
 - Hai chỉ số của bạn là bao nhiêu? Vì sao chỉ số thứ hai (không bịa) **nguy hiểm hơn** khi thấp?
 - Làm sao bạn *đo* được việc "không bịa"?
 
-**Cái bẫy.** Với sản phẩm tài chính, nhớ sai một sở thích chưa từng nói ra khiến hệ thống đưa khuyến nghị lệch mà người dùng không hiểu tại sao.
+**Cái bẫy.** Với sản phẩm tài chính, nhớ sai một sở thích chưa từng nói ra khiến hệ thống đưa khuyến nghị lệch mà người dùng không hiểu tại sao. Tương tự: load nhầm history của conversation khác → agent trả lời về FPT khi user đang hỏi về HPG.

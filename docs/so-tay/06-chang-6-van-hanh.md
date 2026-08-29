@@ -7,7 +7,7 @@
 ### Bài 31 · Streaming — chữ hiện từng từ thay vì chờ hết 🔴
 **~1 ngày**
 
-**Bối cảnh.** Câu trả lời mất 8–10 giây. Người dùng thấy spinner im lặng rồi text xuất hiện một lần — trải nghiệm tệ. Streaming hiện từng mảnh output ngay khi model tạo ra, giúp người dùng cảm thấy hệ thống phản hồi nhanh hơn nhiều so với thực tế.
+**Bối cảnh.** Câu trả lời mất 8–10 giây. Người dùng thấy spinner im lặng rồi text xuất hiện một lần — trải nghiệm tệ. Streaming hiện từng mảnh output ngay khi model tạo ra, giúp người dùng cảm thấy hệ thống phản hồi nhanh hơn nhiều so với thực tế. Endpoint nhận `conversation_id` từ bài 28 — load history trước khi stream, lưu turn sau khi stream xong.
 
 **Để hiểu gì.** Vì sao streaming là yêu cầu UX không thể thiếu với LLM — và hai bẫy kỹ thuật hay gặp.
 
@@ -18,10 +18,10 @@
    ```python
    from fastapi.responses import StreamingResponse
 
-   @router.get("/query/stream")
-   async def stream_query(ticker: str, question: str):
+   @router.post("/conversations/{conversation_id}/messages/stream")
+   async def stream_message(conversation_id: str, body: MessageRequest):
        return StreamingResponse(
-           generate(ticker, question),
+           generate_with_history(conversation_id, body.question),
            media_type="text/event-stream",
            headers={"X-Accel-Buffering": "no"},
        )
@@ -29,6 +29,11 @@
 2. Test bằng `curl --no-buffer` để thấy chunk xuất hiện từng cái.
 
 **Chi tiết từng việc:**
+
+- **`generate_with_history(conversation_id, question)`** — trước khi stream:
+  1. `load_history(conversation_id, limit=10)` → inject vào agent state
+  2. Stream response ra client
+  3. Sau khi stream kết thúc (hoặc client ngắt) → `save_turn(...)` nếu response hoàn chỉnh
 
 - **SSE format** — mỗi event gồm `event:` và `data:` trên 2 dòng, kết thúc bằng `\n\n`. Gửi status event **trước** khi gửi content: `event: status\ndata: {"step": "retrieving"}\n\n`.
 
@@ -41,31 +46,33 @@
           yield f"data: {chunk}\n\n"
   except asyncio.CancelledError:
       await cancel_running_task()  # hủy task tốn tiền đang chạy
-      return
+      return  # không save_turn nếu response không hoàn chỉnh
   ```
 
 - **Không bao giờ cache kết quả streaming một phần.** Cache chỉ dùng cho kết quả hoàn chỉnh.
 
-- **Test Streamlit** — thêm `st.write_stream()` vào UI, demo cho đồng nghiệp.
+- **Test Streamlit** — thêm `st.chat_input()` + `st.write_stream()` vào UI, lưu `conversation_id` vào `st.session_state`. Mỗi lần gửi câu hỏi mới trong cùng tab = cùng conversation.
 
 **Xong khi.**
 - [ ] `curl --no-buffer` thấy chunk xuất hiện từng cái, không đợi hết
-- [ ] Ngắt kết nối giữa chừng → server không tiếp tục gọi model, token usage dừng
+- [ ] Turn 2 cùng `conversation_id` → agent thấy lịch sử turn 1 trong khi stream
+- [ ] Ngắt kết nối giữa chừng → server không tiếp tục gọi model, turn không được save
+- [ ] Streamlit: gõ 3 câu liên tiếp → câu 3 biết context câu 1 và 2
 
 **Tự trả lời được.**
 - Header `X-Accel-Buffering: no` làm gì và cần thiết khi nào?
 - Vì sao ngắt kết nối phải huỷ task đang chạy?
 
-**Cái bẫy.** Quên `X-Accel-Buffering: no` khi có nginx ở giữa — buffer gom tất cả rồi trả cùng lúc, streaming vô nghĩa.
+**Cái bẫy.** Quên `X-Accel-Buffering: no` khi có nginx ở giữa — buffer gom tất cả rồi trả cùng lúc, streaming vô nghĩa. Và đừng `save_turn` khi stream bị cancel — response một phần trong history sẽ làm model bối rối ở turn tiếp theo.
 
 ---
 
 ### Bài 32 · Cache: đúng và sai ở đâu 🔴
 **~1.5 ngày**
 
-**Bối cảnh.** Cache giảm chi phí và latency nhưng trả kết quả cũ cho câu hỏi mới là lỗi nghiêm trọng với dữ liệu tài chính. Bài này xây 2-tier cache với key chính xác, và thực nghiệm để xác định khi nào vector similarity cache **gây hại** thay vì giúp.
+**Bối cảnh.** Cache giảm chi phí và latency nhưng trả kết quả cũ cho câu hỏi mới là lỗi nghiêm trọng với dữ liệu tài chính. Bài này xây 2-tier cache với key chính xác, và thực nghiệm để xác định khi nào vector similarity cache **gây hại** thay vì giúp. **Lưu ý quan trọng:** turn trong conversation KHÔNG được cache theo `conversation_id` — cùng câu hỏi ở turn 2 của hai conversation khác nhau có history khác nhau → kết quả phải khác nhau.
 
-**Để hiểu gì.** Cache sai nguy hiểm hơn không cache — đặc biệt với dữ liệu tài chính.
+**Để hiểu gì.** Cache sai nguy hiểm hơn không cache — đặc biệt với dữ liệu tài chính. Và với conversation history, exact-match cache gần như vô dụng (mỗi turn unique); vector cache cũng nguy hiểm nếu không loại trừ conversation context.
 
 **Làm gì.**
 
@@ -84,10 +91,16 @@
       normalized_question: str  # lowercase, bỏ dấu, bỏ dấu câu
       prompt_version: str
       model_version: str
+      # KHÔNG có conversation_id — cache là cross-conversation
+      # KHÔNG cache khi messages history không rỗng — turn có context ≠ câu hỏi đơn lẻ
   ```
   Thiếu `tenant_id` → user A thấy kết quả của user B. Thiếu `prompt_version` → thay prompt không có tác dụng.
 
-- **2-tier cache:**
+- **Khi nào KHÔNG cache:**
+  - Turn 2 trở đi trong conversation (history không rỗng → kết quả phụ thuộc context, không an toàn cache)
+  - Chỉ cache turn đầu tiên của conversation (hoặc câu hỏi độc lập từ endpoint non-conversation)
+
+- **2-tier cache (áp dụng cho turn đầu / câu hỏi đơn lẻ):**
   - Tier 1 (exact): hash SHA-256 của key → cache hit chắc chắn đúng.
   - Tier 2 (vector): embedding của câu hỏi → tìm câu tương tự đã cache.
 
@@ -100,12 +113,14 @@
 **Xong khi.**
 - [ ] Demo HPG vs HSG: gõ câu hỏi về HSG sau khi cache HPG → **không trả nhầm**
 - [ ] Thay prompt version → cache bị invalidate đúng
+- [ ] Turn 2 trong conversation → **không hit cache**, dù câu hỏi y hệt turn 1 của conversation khác
 
 **Tự trả lời được.**
 - Nếu bỏ `ticker` khỏi cache key vector tier, điều gì xảy ra?
 - Vì sao TTL ngắn hơn trong giờ giao dịch?
+- Vì sao turn có history **không được cache**?
 
-**Cái bẫy.** Vector cache dựa thuần vào cosine similarity không đủ cho dữ liệu tài chính theo mã cụ thể.
+**Cái bẫy.** Vector cache dựa thuần vào cosine similarity không đủ cho dữ liệu tài chính theo mã cụ thể. Và cache turn có conversation history → agent trả lời như thể không có context → người dùng mất tin tưởng.
 
 ---
 
