@@ -54,10 +54,17 @@ TABLE financial_facts
   ticker       TEXT     -- stock ticker, e.g. 'HPG'
   period       TEXT     -- e.g. '2024', '2023', 'Q3/2024'
   report_type  TEXT     -- 'standalone' or 'consolidated'
-  metric_code  TEXT     -- e.g. 'tong_tai_san', 'doanh_thu_thuan', 'loi_nhuan_sau_thue',
-                        --      'von_chu_so_huu', 'no_phai_tra', 'roe', 'eps'
-  value        NUMERIC  -- raw value in VND (or ratio for roe/eps)
-  unit         TEXT     -- 'VND' or 'ratio'
+  metric_code  TEXT     -- actual codes in DB (use ILIKE or exact match):
+                        --   Revenue:   'doanh_thu_thuan', 'doanh_thu_ban_hang_va_cung_cap_dich_vu'
+                        --   Profit:    'lailo_thuan_sau_thue', 'loi_nhuan_truoc_thue', 'loi_nhuan_gop'
+                        --   Assets:    'tong_tai_san', 'tai_san_ngan_han', 'tai_san_dai_han'
+                        --   Equity:    'von_chu_so_huu', 'von_gop'
+                        --   Debt:      'no_phai_tra', 'vay_ngan_han', 'vay_dai_han'
+                        --   Cash flow: 'luu_chuyen_tien_te_rong_tu_cac_hoat_ong_san_xuat_kinh_doanh'
+                        -- When user asks broadly (e.g. "doanh thu lợi nhuận"), do NOT filter by metric_code.
+                        -- Use: SELECT metric_code, value FROM financial_facts WHERE ticker=... AND period=...
+  value        NUMERIC  -- raw value in VND (billions: divide by 1e9 for display)
+  unit         TEXT     -- 'VND'
   source       TEXT     -- 'pdf' or 'vnstock'
 
 TABLE stock_prices
@@ -78,10 +85,32 @@ Period filter rules:
 - Quarterly: WHERE period LIKE 'Q%/2024' (e.g. 'Q3/2024')
 - Any 2024 data: WHERE period = '2024' OR period LIKE '%/2024'
 
+Example — top 5 ROE cao nhất (một dòng mỗi ticker, period='2024'):
+SELECT DISTINCT ON (f1.ticker)
+       f1.ticker,
+       ROUND((f1.value / NULLIF(f2.value, 0) * 100)::numeric, 2) AS roe_pct
+FROM financial_facts f1
+JOIN financial_facts f2
+  ON f1.ticker = f2.ticker
+  AND f1.period = f2.period
+  AND f1.report_type = f2.report_type
+WHERE f1.metric_code = 'lailo_thuan_sau_thue'
+  AND f2.metric_code = 'von_chu_so_huu'
+  AND f1.period = '2024'
+ORDER BY f1.ticker, roe_pct DESC NULLS LAST
+LIMIT 5;
+-- IMPORTANT: DISTINCT ON prevents duplicate rows per ticker.
+-- roe_pct should be a % (e.g. 15.50 means 15.5%). Values in DB are raw VND.
+-- ROUND requires ::numeric cast in PostgreSQL.
+
 Rules:
 - Generate PostgreSQL SELECT queries ONLY.
-- Return ONLY the SQL query, no explanation, no markdown fences.
+- Return ONLY the SQL query — no explanation, no markdown fences, no notes after the query.
+- End the query with a semicolon (;).
 - Do NOT include any DML (INSERT/UPDATE/DELETE) or DDL (CREATE/DROP/ALTER).
+- Use ONLY the three tables: financial_facts, stock_prices, securities. NO other tables or views.
+- NEVER use: latest, latest_annual, company_metrics, financials, or any unlisted name.
+- When using ROUND with a decimal places argument, always cast to ::numeric first: ROUND(expr::numeric, 2).
 - Keep queries focused on the user's question."""
 
 _SQL_SYSTEM = (
@@ -114,7 +143,7 @@ class QueryResult:
             return "Không có dữ liệu thỏa mãn điều kiện."
         header = " | ".join(self.columns)
         sep = "-" * max(len(header), 40)
-        data = "\n".join(" | ".join(str(v) for v in row) for row in self.rows)
+        data = "\n".join(" | ".join(str(row[c]) for c in self.columns) for row in self.rows)
         return f"{header}\n{sep}\n{data}"
 
     def as_context(self) -> str:
@@ -188,11 +217,10 @@ def _strip_fences(text: str) -> str:
 
 
 def _extract_sql(text: str) -> str:
-    """Extract the last SELECT statement from text.
+    """Extract the last SELECT statement from LLM output.
 
-    Handles DeepSeek reasoning prefix: the model may output chain-of-thought
-    before the final SQL. We find the last occurrence of SELECT and take
-    from there to the end of the statement.
+    Handles DeepSeek reasoning prefix and trailing commentary.
+    Priority order for termination: semicolon > blank line > end of text.
     """
     text = _strip_fences(text)
     # Find the last SELECT keyword (case-insensitive)
@@ -200,14 +228,18 @@ def _extract_sql(text: str) -> str:
     if idx == -1:
         return text.strip()
     sql = text[idx:].strip()
-    # Trim trailing reasoning: only split on blank line if the part after it
-    # does NOT look like SQL continuation (avoid truncating CTEs).
+
+    # 1. Cut at semicolon (clean SQL terminator)
+    semi = sql.find(";")
+    if semi != -1:
+        return sql[: semi + 1].strip()
+
+    # 2. Cut at blank line (trailing LLM commentary)
     if "\n\n" in sql:
         first_part = sql.split("\n\n")[0].strip()
-        upper_first = first_part.upper()
-        # If the first part has no SELECT it's probably a CTE fragment — keep all
-        if "SELECT" in upper_first:
-            sql = first_part
+        if "SELECT" in first_part.upper():
+            return first_part
+
     return sql
 
 
@@ -224,7 +256,7 @@ def generate_sql(question: str, client=None) -> str:
     resp = client.generate(
         messages=[Message(role="user", content=question)],
         system=_SQL_SYSTEM,
-        max_tokens=1024,
+        max_tokens=2048,
     )
     sql = _extract_sql(resp.text)
     if not sql:
@@ -247,6 +279,28 @@ def _readonly_dsn() -> str:
 
 
 # ── full pipeline ─────────────────────────────────────────────────────────────
+
+
+def run_raw_sql(sql: str) -> QueryResult:
+    """Validate + execute a pre-built SQL string (no LLM generation step)."""
+    safe_sql = validate_sql(sql)
+    try:
+        conn = psycopg2.connect(_readonly_dsn())
+    except psycopg2.OperationalError as exc:
+        raise SQLAgentError(f"DB connection failed: {exc}") from exc
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SET statement_timeout = '5s'")
+            cur.execute(safe_sql)
+            columns = [desc[0] for desc in cur.description] if cur.description else []
+            rows = [dict(r) for r in cur.fetchall()]
+        conn.commit()
+        return QueryResult(sql=safe_sql, columns=columns, rows=rows)
+    except psycopg2.Error as exc:
+        conn.rollback()
+        raise SQLAgentError(f"Query execution failed: {exc}") from exc
+    finally:
+        conn.close()
 
 
 def execute_safe(question: str, client=None) -> QueryResult:

@@ -234,20 +234,44 @@ async def stream_turn(
 
     assistant_reply = ""
 
-    # ── ticker_analysis path ──────────────────────────────────────────────────
-    if route.intent == "ticker_analysis":
+    # ── price_action path (nhóm 1) ────────────────────────────────────────────
+    if route.intent == "price_action":
         yield _sse_status("collecting_data", ticker=route.ticker)
         try:
-            def _run_ticker():
-                from agents.graph import build_graph
-                from agents.state import make_initial_state
-                app = build_graph()
-                initial = make_initial_state(user_message)
-                final = app.invoke(initial)
-                return final.get("report") or "[Không có báo cáo]"
+            _ticker = route.ticker or "HPG"
 
-            # Heartbeat while agent runs (blocks 5-15s)
-            task = asyncio.create_task(_run_blocking_agent(_run_ticker))
+            def _run_price_action():
+                from agents.intents.price_action import run
+                return run(_ticker, user_message)
+
+            task = asyncio.create_task(_run_blocking_agent(_run_price_action))
+            while not task.done():
+                try:
+                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
+                except asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+            report = task.result()
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
+            return
+        yield _sse_status("streaming", agent="price_action")
+        for line in report.split("\n"):
+            yield _sse_chunk(line + "\n")
+        assistant_reply = report
+
+    # ── technical_analysis path (nhóm 2) ─────────────────────────────────────
+    elif route.intent == "technical_analysis":
+        yield _sse_status("collecting_data", ticker=route.ticker)
+        try:
+            _ticker = route.ticker or "HPG"
+
+            def _run_technical():
+                from agents.intents.technical import run
+                return run(_ticker, user_message)
+
+            task = asyncio.create_task(_run_blocking_agent(_run_technical))
             while not task.done():
                 try:
                     await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
@@ -260,8 +284,82 @@ async def stream_turn(
             yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
             return
 
-        # Yield report line-by-line for progressive display
-        yield _sse_status("streaming", agent="ticker_analysis")
+        yield _sse_status("streaming", agent="technical_analysis")
+        for line in report.split("\n"):
+            yield _sse_chunk(line + "\n")
+        assistant_reply = report
+
+    # ── fundamentals path (nhóm 3) ───────────────────────────────────────────
+    elif route.intent == "fundamentals":
+        yield _sse_status("querying_documents", ticker=route.ticker)
+        try:
+            def _run_fundamentals():
+                from agents.intents.fundamentals import run
+                return run(route.ticker, user_message)
+
+            task = asyncio.create_task(_run_blocking_agent(_run_fundamentals))
+            while not task.done():
+                try:
+                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
+                except asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+            qa_text = task.result()
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
+            return
+        yield _sse_status("streaming", agent="fundamentals")
+        for line in qa_text.split("\n"):
+            yield _sse_chunk(line + "\n")
+        assistant_reply = qa_text
+
+    # ── macro_sector path (nhóm 4) ────────────────────────────────────────────
+    elif route.intent == "macro_sector":
+        yield _sse_status("collecting_macro_data")
+        try:
+            def _run_macro():
+                from agents.intents.macro_sector import run
+                return run(route.ticker, user_message)
+
+            task = asyncio.create_task(_run_blocking_agent(_run_macro))
+            while not task.done():
+                try:
+                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
+                except asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+            report = task.result()
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
+            return
+        yield _sse_status("streaming", agent="macro_sector")
+        for line in report.split("\n"):
+            yield _sse_chunk(line + "\n")
+        assistant_reply = report
+
+    # ── news_sentiment path (nhóm 5) ──────────────────────────────────────────
+    elif route.intent == "news_sentiment":
+        yield _sse_status("fetching_news", ticker=route.ticker)
+        try:
+            def _run_news():
+                from agents.intents.news_sentiment import run
+                return run(route.ticker, user_message)
+
+            task = asyncio.create_task(_run_blocking_agent(_run_news))
+            while not task.done():
+                try:
+                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
+                except asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+            report = task.result()
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
+            return
+        yield _sse_status("streaming", agent="news_sentiment")
         for line in report.split("\n"):
             yield _sse_chunk(line + "\n")
         assistant_reply = report
@@ -297,7 +395,32 @@ async def stream_turn(
             yield _sse_chunk(line + "\n")
         assistant_reply = report
 
-    # ── qa_document path ──────────────────────────────────────────────────────
+    # ── screening path (nhóm 6) ───────────────────────────────────────────────
+    elif route.intent == "screening":
+        yield _sse_status("querying_documents", ticker=route.ticker)
+        try:
+            def _run_screening():
+                from agents.intents.screening import run
+                return run(route.ticker, user_message)
+
+            task = asyncio.create_task(_run_blocking_agent(_run_screening))
+            while not task.done():
+                try:
+                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
+                except asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+            qa_text = task.result()
+        except asyncio.CancelledError:
+            return
+        except Exception as exc:
+            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
+            return
+        yield _sse_status("streaming", agent="screening")
+        for line in qa_text.split("\n"):
+            yield _sse_chunk(line + "\n")
+        assistant_reply = qa_text
+
+    # ── qa_document path (legacy — kept for backward compat) ──────────────────
     elif route.intent == "qa_document":
         yield _sse_status("querying_documents", ticker=route.ticker)
         try:
@@ -349,22 +472,25 @@ async def stream_turn(
         return
 
     # ── Persist + extract preferences (all paths) ─────────────────────────────
-    save_turn(conversation_id, user_message, assistant_reply)
+    try:
+        save_turn(conversation_id, user_message, assistant_reply)
 
-    turn_messages = [
-        {"role": "user", "content": user_message},
-        {"role": "assistant", "content": assistant_reply},
-    ]
-    preferences = extract_preferences(turn_messages)
-    for pref in preferences:
-        save_memory_item(
-            user_id=user_id,
-            tenant_id=tenant_id,
-            key=pref.key,
-            value=pref.value,
-            confidence=pref.confidence,
-            source_message=pref.source_message,
-        )
+        turn_messages = [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": assistant_reply},
+        ]
+        preferences = extract_preferences(turn_messages)
+        for pref in preferences:
+            save_memory_item(
+                user_id=user_id,
+                tenant_id=tenant_id,
+                key=pref.key,
+                value=pref.value,
+                confidence=pref.confidence,
+                source_message=pref.source_message,
+            )
+    except Exception:
+        pass  # persistence failure must not suppress the done event
 
     yield _sse_done(len(assistant_reply), route.intent)
 

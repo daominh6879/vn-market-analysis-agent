@@ -22,9 +22,8 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 _RSS_FEEDS = [
-    ("https://cafef.vn/rss/thi-truong-chung-khoan.rss",  "cafef"),
-    ("https://cafef.vn/rss/doanh-nghiep-7.rss",           "cafef"),
-    ("https://tinnhanhchungkhoan.vn/feed/",                "tinnhanhchungkhoan"),
+    ("https://cafef.vn/thi-truong-chung-khoan.rss", "cafef"),
+    ("https://cafef.vn/doanh-nghiep.rss",            "cafef"),
 ]
 
 _CAFEF_MARKET_URL = "https://cafef.vn/thi-truong-chung-khoan.chn"

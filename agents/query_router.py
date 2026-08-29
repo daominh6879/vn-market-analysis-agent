@@ -1,19 +1,24 @@
 """
-agents/query_router.py — Keyword-based intent router for conversation queries.
+agents/query_router.py — Keyword-based intent router.
 
 classify(query) → RouterResult
 
-Intent labels:
-  ticker_analysis  — single ticker price/technical analysis → agents/graph.py
-  market_brief     — full market overview → agents/market_brief_graph.py
-  qa_document      — HPG financial document / SQL query → rag pipeline
-  conversation     — general chat fallback → LLM direct
+Intent labels (maps to 6 nhóm in stock-agent.md):
+  price_action        — nhóm 1: giá hiện tại, dòng tiền, khối ngoại, volume
+  technical_analysis  — nhóm 2: RSI, MACD, MA, support/resistance, xu hướng kỹ thuật
+  fundamentals        — nhóm 3: P/E, P/B, ROE, định giá, tài chính công ty
+  macro_sector        — nhóm 4: tỷ giá, dầu thô, thép, ngành, vĩ mô
+  news_sentiment      — nhóm 5: tin tức, sentiment, bình luận cộng đồng
+  screening           — nhóm 6: lọc cổ phiếu, tìm cổ phiếu theo tiêu chí
+  market_brief        — tổng quan thị trường (VNINDEX / "thị trường")
+  conversation        — fallback chat
 
 Rules:
-  - No LLM call — pure keyword matching for speed (<1ms).
-  - Market indices (VNINDEX/VN30) → market_brief, not ticker_analysis.
-  - Ticker alone without analysis keywords → ticker_analysis (default).
-  - Financial statement keywords (doanh thu, lợi nhuận…) → qa_document.
+  - No LLM call — pure keyword matching (<1ms).
+  - Market indices (VNINDEX/VN30) → market_brief first.
+  - Priority (high → low): market_brief > screening > news_sentiment >
+    macro_sector > fundamentals > technical_analysis > price_action > conversation
+  - Ticker alone (no other keywords) → technical_analysis default.
 """
 
 from __future__ import annotations
@@ -24,44 +29,110 @@ from dataclasses import dataclass
 # ── keyword sets ──────────────────────────────────────────────────────────────
 
 _MARKET_KW = frozenset({
-    "thị trường", "vn-index", "vnindex", "vn30", "vn100",
+    # Require compound phrases — bare "thị trường" is too broad (appears in macro/sector queries too)
+    "vn-index", "vnindex", "vn30", "vn100",
     "ttck", "toàn thị trường", "chứng khoán hôm nay",
     "thị trường hôm nay", "thị trường chung", "thị trường tuần",
     "thị trường mở cửa", "thị trường đóng cửa", "thị trường tuần này",
     "thị trường việt nam", "index hôm nay",
+    "thị trường chứng khoán",
 })
 
 _MARKET_INDICES = frozenset({
     "VNINDEX", "VN-INDEX", "VN30", "VN100", "HOSE", "HNX30",
 })
 
-_ANALYSIS_KW = frozenset({
-    "phân tích", "giá hôm nay", "kỹ thuật", "chỉ số kỹ thuật",
-    "rsi", "macd", "ema", "sma", "bollinger",
-    "hôm nay", "tuần này", "biến động", "xu hướng",
-    "tín hiệu", "support", "resistance", "tin tức",
-    "phân tích kỹ thuật", "phân tích cổ phiếu",
-    "giá cổ phiếu", "diễn biến giá",
+_SCREENING_KW = frozenset({
+    "lọc cổ phiếu", "tìm cổ phiếu", "bộ lọc",
+    "cổ phiếu nào", "mã nào", "danh sách cổ phiếu",
+    "top 5 mã", "top 10 mã", "top mã",
+    "cổ phiếu có rsi", "cổ phiếu có pe", "cổ phiếu có roe",
+    "tích lũy ngành", "cổ phiếu ngành",
+    "screen", "screener", "lọc theo",
+    "tất cả mã", "toàn bộ mã", "nhiều mã",
 })
 
-_DOC_KW = frozenset({
-    "doanh thu", "lợi nhuận", "tài sản", "công ty con", "nhân viên",
-    "kế toán", "chi phí", "dòng tiền", "vốn chủ sở hữu", "vốn chủ",
-    "bctc", "báo cáo tài chính", "kiểm toán", "nợ phải trả",
-    "cổ tức", "eps", "roe", "roa", "pe ratio", "p/b",
+_NEWS_KW = frozenset({
+    "tin tức", "tin mới", "tin về", "bản tin",
+    "sentiment", "tâm lý", "bình luận", "cộng đồng",
+    "fireant", "cafef", "báo", "truyền thông",
+    "mentions", "nhắc đến", "diễn đàn",
+    "bullish", "bearish", "thị trường nói gì",
+})
+
+_MACRO_KW = frozenset({
+    "tỷ giá", "usd/vnd", "usd vnd", "đô la",
+    "dầu thô", "dầu brent", "wti", "dầu",
+    "thép hrc", "hrc", "quặng sắt",
+    "giá heo", "baltic dry", "cước vận tải",
+    "lạm phát", "lãi suất", "fed", "nhnn",
+    "vĩ mô", "macro", "kinh tế",
+    "crack spread", "biên lợi nhuận kỳ vọng",
+    "ngành thép", "ngành dầu khí", "ngành bán lẻ",
+    "ngành ngân hàng", "sector",
+    "xuất khẩu", "nhập khẩu",
+})
+
+_FUNDAMENTALS_KW = frozenset({
+    "p/e", "pe ratio", "pe ", " pe",
+    "p/b", "pb ratio",
+    "roe", "roa", "eps",
+    "định giá", "định giá cổ phiếu",
+    "doanh thu", "lợi nhuận", "tài sản",
+    "biên lợi nhuận gộp", "biên lợi nhuận",
+    "nợ vay", "d/e", "đòn bẩy",
+    "bctc", "báo cáo tài chính", "kiểm toán",
+    "tăng trưởng doanh thu", "tăng trưởng lợi nhuận",
     "quý 1", "quý 2", "quý 3", "quý 4", "năm tài chính",
-    "hợp nhất", "riêng lẻ", "tổng tài sản", "doanh số",
+    "hợp nhất", "riêng lẻ", "tổng tài sản",
     "lợi nhuận gộp", "lợi nhuận ròng", "ebitda",
-    "top 5", "top 10", "xếp hạng", "cao nhất", "thấp nhất",  # SQL aggregation
+    "cổ tức", "chi phí vốn",
+    "vốn chủ sở hữu", "vốn chủ",
+})
+
+_TECHNICAL_KW = frozenset({
+    "phân tích kỹ thuật", "kỹ thuật",
+    "rsi", "macd", "ema", "sma", "bollinger",
+    "ma20", "ma50", "ma200",
+    "support", "resistance", "hỗ trợ", "kháng cự",
+    "xu hướng", "trend", "tín hiệu kỹ thuật",
+    "mô hình nến", "nến nhật", "candlestick",
+    "đỉnh", "đáy", "pivot",
+    "cutloss", "cắt lỗ",
+    "breakout", "breakdown",
+    "phân kỳ", "hội tụ",
+})
+
+_PRICE_ACTION_KW = frozenset({
+    "giá hiện tại", "giá hôm nay", "giá đóng cửa",
+    "dòng tiền", "khối ngoại", "foreign",
+    "active buy", "active sell", "mua chủ động", "bán chủ động",
+    "khối lượng", "volume", "thanh khoản",
+    "mua ròng", "bán ròng", "net buy", "net sell",
+    "đột biến khối lượng",
+    "tự doanh",
+    "giá cổ phiếu",
 })
 
 # VN words that match ticker regex but aren't tickers
 _VN_NOISE = frozenset({
+    # Vietnamese stopwords
     "PHÂN", "TÍCH", "HÔM", "NAY", "TUẦN", "TỚI", "NGÀNH",
     "CỔ", "PHIẾU", "CHỈ", "SỐ", "VÀ", "CÁC", "NHỀ", "GIÁ",
     "THỊ", "TIN", "TỨC", "XEM", "CÓ", "CỦA", "CHO", "BỊ",
     "HỎI", "LOẠI", "NÀO", "NHƯ", "ĐỂ", "VỀ", "MUA", "BÁN",
-    "THE", "AND", "FOR", "WITH", "ROE", "ROA", "EPS",
+    "THE", "AND", "FOR", "WITH",
+    # Financial ratios (look like tickers but aren't)
+    "ROE", "ROA", "EPS", "PE", "PB", "NPM", "GPM",
+    "TOP", "SQL", "DB",
+    # Technical indicators
+    "RSI", "MACD", "EMA", "SMA", "MA", "ATR", "ADX", "OBV",
+    "TEMA", "DEMA", "WMA", "CCI", "MFI", "PPO",
+    # Currency & commodity codes — never tickers
+    "USD", "VND", "EUR", "JPY", "GBP", "CNY", "THB", "SGD",
+    "WTI", "HRC", "LME",
+    # Common English words that match A-Z{2-5}
+    "BUY", "SELL", "HOLD", "ETF", "IPO", "NAV",
 })
 
 
@@ -69,8 +140,9 @@ _VN_NOISE = frozenset({
 
 @dataclass
 class RouterResult:
-    intent: str           # ticker_analysis | market_brief | qa_document | conversation
-    ticker: str | None    # for ticker_analysis / qa_document
+    intent: str   # price_action | technical_analysis | fundamentals | macro_sector |
+                  # news_sentiment | screening | market_brief | conversation
+    ticker: str | None
     reason: str
 
 
@@ -81,16 +153,15 @@ def classify(query: str) -> RouterResult:
     lower = query.lower()
     upper = query.upper()
 
-    # 1. Market-level check first (VNINDEX looks like a ticker — intercept it)
+    # 1. Market-level (VNINDEX looks like ticker — intercept first)
     if any(kw in lower for kw in _MARKET_KW):
         return RouterResult("market_brief", None, "market keyword")
     for idx in _MARKET_INDICES:
         if idx in upper:
             return RouterResult("market_brief", None, f"market index {idx}")
 
-    # 2. Extract first plausible ticker from ORIGINAL string (not uppercased).
-    # Real tickers (HPG, VNM, FPT) are written ALL-CAPS by users.
-    # Vietnamese words (xin, bạn, doanh, thu) are lowercase → won't match.
+    # 2. Extract first plausible ticker from ORIGINAL string.
+    # Real tickers (HPG, VNM) are ALL-CAPS by convention. VN words are lowercase → won't match.
     ticker: str | None = None
     for m in re.finditer(r"\b([A-Z]{2,5})\b", query):
         t = m.group(1)
@@ -98,17 +169,33 @@ def classify(query: str) -> RouterResult:
             ticker = t
             break
 
-    # 3. Financial document / SQL keywords → qa_document
-    if any(kw in lower for kw in _DOC_KW):
-        return RouterResult("qa_document", ticker, "financial doc/SQL keyword")
+    # 3. Screening — must check before fundamentals (both share financial keywords)
+    if any(kw in lower for kw in _SCREENING_KW):
+        return RouterResult("screening", ticker, "screening keyword")
 
-    # 4. Ticker + analysis keyword → ticker_analysis
-    if ticker and any(kw in lower for kw in _ANALYSIS_KW):
-        return RouterResult("ticker_analysis", ticker, f"ticker {ticker} + analysis keyword")
+    # 4. News / Sentiment
+    if any(kw in lower for kw in _NEWS_KW):
+        return RouterResult("news_sentiment", ticker, "news/sentiment keyword")
 
-    # 5. Ticker alone → ticker_analysis (default for any stock mention)
+    # 5. Macro / Sector
+    if any(kw in lower for kw in _MACRO_KW):
+        return RouterResult("macro_sector", ticker, "macro/sector keyword")
+
+    # 6. Fundamentals (financial statement / valuation)
+    if any(kw in lower for kw in _FUNDAMENTALS_KW):
+        return RouterResult("fundamentals", ticker, "fundamentals keyword")
+
+    # 7. Technical analysis
+    if any(kw in lower for kw in _TECHNICAL_KW):
+        return RouterResult("technical_analysis", ticker, "technical keyword")
+
+    # 8. Price action / money flow
+    if any(kw in lower for kw in _PRICE_ACTION_KW):
+        return RouterResult("price_action", ticker, "price action keyword")
+
+    # 9. Ticker alone → default technical_analysis
     if ticker:
-        return RouterResult("ticker_analysis", ticker, f"ticker {ticker} mentioned")
+        return RouterResult("technical_analysis", ticker, f"ticker {ticker} default")
 
-    # 6. Fallback: conversational LLM
+    # 10. Fallback
     return RouterResult("conversation", None, "no financial intent detected")

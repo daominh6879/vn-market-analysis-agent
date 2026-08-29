@@ -19,35 +19,55 @@ from typing import Optional
 from llm.types import Message
 from rag.router import classify as route_classify
 
-_COLLECTION = os.environ.get("RAG_COLLECTION", "hpg_b7_structural_meta")
+_COLLECTION = os.environ.get("RAG_COLLECTION", "bctc_structural")
 _EMBED_MODEL = os.environ.get("EMBED_MODEL", "bge-m3")
 _OLLAMA_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
 
 def _sql_answer(question: str, client) -> str:
-    """Generate + execute SQL, return formatted answer."""
+    """Generate + execute SQL, return formatted answer.
+
+    Retries up to 2 times when the LLM hallucinates a forbidden table name —
+    each retry appends the bad table name so the LLM knows to avoid it.
+    """
+    import re as _re
     from rag.sql_agent import execute_safe, SQLAgentError, SecurityError
-    try:
-        result = execute_safe(question, client=client)
-        rows_text = result.format_answer()
-        # Ask LLM to narrate the result
-        resp = client.generate(
-            messages=[Message(
-                role="user",
-                content=(
-                    f"Câu hỏi: {question}\n\n"
-                    f"Dữ liệu từ DB:\n{rows_text}\n\n"
-                    "Trả lời ngắn gọn bằng tiếng Việt, trích dẫn số liệu cụ thể."
+
+    extra_ctx = ""
+    for attempt in range(3):
+        q = question if not extra_ctx else f"{question}\n\n[CORRECTION: {extra_ctx}]"
+        try:
+            result = execute_safe(q, client=client)
+            rows_text = result.format_answer()
+            resp = client.generate(
+                messages=[Message(
+                    role="user",
+                    content=(
+                        f"Câu hỏi: {question}\n\n"
+                        f"Dữ liệu từ DB:\n{rows_text}\n\n"
+                        "Trả lời ngắn gọn bằng tiếng Việt, trích dẫn số liệu cụ thể. "
+                        "Đổi đơn vị cho dễ đọc (chia 1e9 → tỷ đồng)."
+                    ),
+                )],
+                system=(
+                    "Bạn là trợ lý phân tích tài chính. Dựa vào dữ liệu đã cho, trả lời câu hỏi. "
+                    "KHÔNG giải thích cách làm, KHÔNG suy luận, KHÔNG nhắc tên cột hay metric_code. "
+                    "Trả lời TRỰC TIẾP bằng 1-3 câu sạch."
                 ),
-            )],
-            system="Bạn là trợ lý phân tích tài chính. Dựa vào dữ liệu đã cho, trả lời câu hỏi.",
-            max_tokens=512,
-        )
-        return resp.text.strip()
-    except SecurityError as exc:
-        return f"Câu hỏi không thể thực thi vì lý do bảo mật: {exc}"
-    except Exception as exc:
-        return f"Lỗi truy vấn DB: {exc}"
+                max_tokens=512,
+            )
+            return resp.text.strip()
+        except SecurityError as exc:
+            m = _re.search(r"Access to table '(\w+)'", str(exc))
+            if m:
+                bad = m.group(1)
+                extra_ctx += (
+                    f"Table '{bad}' does NOT exist. "
+                    "Use ONLY: financial_facts, stock_prices, securities. "
+                )
+        except Exception as exc:
+            return f"Lỗi truy vấn DB: {exc}"
+    return "Không thể tạo SQL hợp lệ sau 3 lần thử. Hãy thử câu hỏi khác."
 
 
 def _rag_answer(question: str, ticker: Optional[str], client) -> str:
@@ -66,9 +86,19 @@ def _rag_answer(question: str, ticker: Optional[str], client) -> str:
         qvec = r.json()["embedding"]
 
         qdrant = QdrantClient("localhost", port=6333)
+
+        # Build ticker filter when known (collection has ticker payload field)
+        search_filter = None
+        if ticker:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            search_filter = Filter(
+                must=[FieldCondition(key="ticker", match=MatchValue(value=ticker.upper()))]
+            )
+
         points = qdrant.query_points(
             collection_name=_COLLECTION,
             query=qvec,
+            query_filter=search_filter,
             limit=5,
         ).points
 

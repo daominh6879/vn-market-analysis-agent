@@ -99,7 +99,7 @@ def _new_conv():
 
 def test_classify_ticker_analysis():
     r = classify("phân tích HPG hôm nay")
-    assert r.intent == "ticker_analysis"
+    assert r.intent == "technical_analysis"
     assert r.ticker == "HPG"
 
 
@@ -116,13 +116,13 @@ def test_classify_market_brief_vnindex():
 
 def test_classify_qa_document():
     r = classify("doanh thu HPG năm 2024 là bao nhiêu?")
-    assert r.intent == "qa_document"
+    assert r.intent == "fundamentals"  # qa_document split → fundamentals
     assert r.ticker == "HPG"
 
 
 def test_classify_qa_document_sql():
     r = classify("top 5 mã có ROE cao nhất trong DB")
-    assert r.intent == "qa_document"
+    assert r.intent == "screening"  # qa_document split → screening
 
 
 def test_classify_conversation():
@@ -132,20 +132,20 @@ def test_classify_conversation():
 
 def test_classify_fpt_analysis():
     r = classify("chỉ số kỹ thuật của FPT tuần này")
-    assert r.intent == "ticker_analysis"
+    assert r.intent == "technical_analysis"
     assert r.ticker == "FPT"
 
 
 def test_classify_vnm():
     r = classify("phân tích VNM hôm nay")
-    assert r.intent == "ticker_analysis"
+    assert r.intent == "technical_analysis"
     assert r.ticker == "VNM"
 
 
 # ── Integration: ticker_analysis hits real price API ─────────────────────────
 
 def test_route_ticker_analysis_real():
-    """HPG analysis query → ticker_agent → real price data + technical report."""
+    """HPG analysis query → technical_analysis agent → real price data + technical report."""
     cid, uid = _new_conv()
     lines = _run(cid, uid, "phân tích kỹ thuật HPG hôm nay", is_first_turn=True)
 
@@ -159,9 +159,9 @@ def test_route_ticker_analysis_real():
     print(f"Reply preview: {reply[:300]}")
 
     assert routing is not None, "routing event missing"
-    assert routing.get("agent") == "ticker_analysis", f"expected ticker_analysis, got {routing}"
+    assert routing.get("agent") == "technical_analysis", f"expected technical_analysis, got {routing}"
     assert done is not None, "done event missing"
-    assert done.get("agent") == "ticker_analysis"
+    assert done.get("agent") == "technical_analysis"
     assert done.get("saved") is True
     assert len(reply) > 100, f"report too short: {len(reply)} chars"
 
