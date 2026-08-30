@@ -23,8 +23,7 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from data.db import get_conn
-
-QDRANT_URL = "http://localhost:6333"
+from core.config import settings
 
 
 def soft_delete(doc_id: str, collection: str) -> None:
@@ -32,7 +31,7 @@ def soft_delete(doc_id: str, collection: str) -> None:
     Xoá 1 tài liệu: đánh dấu Postgres + xoá Qdrant chunks.
     Atomic: Postgres rollback nếu Qdrant fail.
     """
-    qdrant = QdrantClient("localhost", port=6333)
+    qdrant = QdrantClient(settings.QDRANT_HOST, port=settings.QDRANT_PORT)
 
     with get_conn() as conn:
         with conn.cursor() as cur:

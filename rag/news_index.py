@@ -37,10 +37,12 @@ try:
 except ImportError:
     pass
 
+from core.config import settings  # noqa: E402
+
 # ── constants ─────────────────────────────────────────────────────────────────
 
 COLLECTION = "news_chunks"
-QDRANT_URL = "http://localhost:6333"
+QDRANT_URL = f"http://{settings.QDRANT_HOST}:{settings.QDRANT_PORT}"
 OLLAMA_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 DEFAULT_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 VALID_SENTIMENTS = frozenset({"positive", "neutral", "negative"})

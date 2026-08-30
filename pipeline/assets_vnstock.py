@@ -30,7 +30,7 @@ class VnstockFinancialsConfig(Config):
     period_from: int = 2020
     period_to: int = date.today().year
     report_type: str = "consolidated"
-    source: str = "TCBS"
+    source: str = "VCI"
 
 
 class VnstockPricesConfig(Config):
@@ -73,7 +73,7 @@ def vnstock_financials(context: AssetExecutionContext, config: VnstockFinancials
         except Exception as exc:
             context.log.error(f"  {ticker} FAILED: {exc}")
             failed.append(ticker)
-        time.sleep(0.5)
+        time.sleep(1.5)
 
     if failed:
         context.log.warning(f"vnstock_financials: {len(failed)} tickers failed: {failed}")

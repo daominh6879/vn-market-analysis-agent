@@ -10,6 +10,7 @@ Usage:
 import argparse
 import os
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
@@ -47,7 +48,6 @@ def main():
                     report_type="consolidated",
                     period_from=args.period_from,
                     period_to=args.period_to,
-                    source="VCI",
                 )
                 if facts:
                     n = insert_vnstock_facts(facts)
@@ -57,6 +57,7 @@ def main():
                     print(f"  → 0 facts returned")
             except Exception as e:
                 print(f"  ERROR: {e}")
+            time.sleep(1.5)  # stay under 60 req/min community rate limit
         print(f"\nFinancials done: {total_facts} total facts")
 
     # --- Stock prices ---

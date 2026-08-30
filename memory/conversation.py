@@ -20,7 +20,7 @@ from core.config import settings
 
 def _dsn() -> str:
     return (
-        f"host=127.0.0.1 port=5432 "
+        f"host={settings.POSTGRES_HOST} port={settings.POSTGRES_PORT} "
         f"dbname={settings.POSTGRES_DB} "
         f"user={settings.POSTGRES_USER} "
         f"password={settings.POSTGRES_PASSWORD}"

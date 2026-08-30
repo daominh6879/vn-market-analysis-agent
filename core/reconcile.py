@@ -28,8 +28,7 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from data.db import get_conn
-
-QDRANT_URL = "http://localhost:6333"
+from core.config import settings
 
 
 def get_active_pg_ids(collection: str) -> set[str]:
@@ -66,7 +65,7 @@ def scroll_all_doc_ids(qdrant: QdrantClient, collection: str) -> set[str]:
 
 
 def reconcile(collection: str, fix: bool = False) -> dict:
-    qdrant = QdrantClient("localhost", port=6333)
+    qdrant = QdrantClient(settings.QDRANT_HOST, port=settings.QDRANT_PORT)
 
     print(f"Đối chiếu collection: {collection}")
     pg_ids = get_active_pg_ids(collection)

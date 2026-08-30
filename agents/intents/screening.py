@@ -8,56 +8,72 @@ pre-built SQL templates to bypass LLM hallucination of non-existent views.
 
 from __future__ import annotations
 
+from datetime import date
+
 from langfuse import observe
 
 from llm.factory import create_client
 from llm.types import Message
 from agents.intents import strip_preamble, strip_thinking
 
+_LATEST_PERIOD = str(date.today().year)
+
 # ── pre-built SQL templates ────────────────────────────────────────────────────
-# All operate on financial_facts for period='2024', one row per ticker via DISTINCT ON.
+# All operate on financial_facts for period=_LATEST_PERIOD, one row per ticker via DISTINCT ON.
 
-_ROE_TOP_SQL = """
-SELECT DISTINCT ON (f1.ticker)
-    f1.ticker,
-    ROUND((f1.value / NULLIF(f2.value, 0) * 100)::numeric, 2) AS roe_pct
-FROM financial_facts f1
-JOIN financial_facts f2
-    ON f1.ticker = f2.ticker
-    AND f1.period = f2.period
-    AND f1.report_type = f2.report_type
-WHERE f1.metric_code = 'lailo_thuan_sau_thue'
-  AND f2.metric_code = 'von_chu_so_huu'
-  AND f1.period = '2024'
-  AND f2.value > 0
-ORDER BY f1.ticker, roe_pct DESC NULLS LAST
+_ROE_TOP_SQL = f"""
+SELECT ticker, roe_pct
+FROM (
+    SELECT DISTINCT ON (f1.ticker)
+        f1.ticker,
+        ROUND((f1.value / NULLIF(f2.value, 0) * 100)::numeric, 2) AS roe_pct
+    FROM financial_facts f1
+    JOIN financial_facts f2
+        ON f1.ticker = f2.ticker
+        AND f1.period = f2.period
+        AND f1.report_type = f2.report_type
+    WHERE f1.metric_code IN ('lailo_thuan_sau_thue', 'loi_nhuan_sau_thue')
+      AND f2.metric_code = 'von_chu_so_huu'
+      AND f1.period = '{_LATEST_PERIOD}'
+      AND f2.value > 0
+    ORDER BY f1.ticker, roe_pct DESC NULLS LAST
+) sub
+ORDER BY roe_pct DESC NULLS LAST
 LIMIT 20;
 """
 
-_REVENUE_TOP_SQL = """
-SELECT DISTINCT ON (ticker)
-    ticker,
-    ROUND((value / 1e9)::numeric, 0) AS revenue_billion_vnd
-FROM financial_facts
-WHERE metric_code = 'doanh_thu_thuan'
-  AND period = '2024'
-ORDER BY ticker, value DESC NULLS LAST
+_REVENUE_TOP_SQL = f"""
+SELECT ticker, revenue_billion_vnd
+FROM (
+    SELECT DISTINCT ON (ticker)
+        ticker,
+        ROUND((value / 1e9)::numeric, 0) AS revenue_billion_vnd
+    FROM financial_facts
+    WHERE metric_code = 'doanh_thu_thuan'
+      AND period = '{_LATEST_PERIOD}'
+    ORDER BY ticker, value DESC NULLS LAST
+) sub
+ORDER BY revenue_billion_vnd DESC NULLS LAST
 LIMIT 20;
 """
 
-_PROFIT_TOP_SQL = """
-SELECT DISTINCT ON (ticker)
-    ticker,
-    ROUND((value / 1e9)::numeric, 0) AS profit_billion_vnd
-FROM financial_facts
-WHERE metric_code = 'lailo_thuan_sau_thue'
-  AND period = '2024'
-ORDER BY ticker, value DESC NULLS LAST
+_PROFIT_TOP_SQL = f"""
+SELECT ticker, profit_billion_vnd
+FROM (
+    SELECT DISTINCT ON (ticker)
+        ticker,
+        ROUND((value / 1e9)::numeric, 0) AS profit_billion_vnd
+    FROM financial_facts
+    WHERE metric_code IN ('lailo_thuan_sau_thue', 'loi_nhuan_sau_thue')
+      AND period = '{_LATEST_PERIOD}'
+    ORDER BY ticker, value DESC NULLS LAST
+) sub
+ORDER BY profit_billion_vnd DESC NULLS LAST
 LIMIT 20;
 """
 
-# "đáng chú ý / nổi bật": top stocks by ROE with positive profit (2024)
-_NOTABLE_SQL = """
+# "đáng chú ý / nổi bật": top stocks by ROE with positive profit
+_NOTABLE_SQL = f"""
 SELECT ticker, roe_pct, profit_bil
 FROM (
     SELECT DISTINCT ON (f1.ticker)
@@ -69,9 +85,9 @@ FROM (
         ON f1.ticker = f2.ticker
         AND f1.period = f2.period
         AND f1.report_type = f2.report_type
-    WHERE f1.metric_code = 'lailo_thuan_sau_thue'
+    WHERE f1.metric_code IN ('lailo_thuan_sau_thue', 'loi_nhuan_sau_thue')
       AND f2.metric_code = 'von_chu_so_huu'
-      AND f1.period = '2024'
+      AND f1.period = '{_LATEST_PERIOD}'
       AND f2.value > 0
       AND f1.value > 0
     ORDER BY f1.ticker, roe_pct DESC NULLS LAST
@@ -135,7 +151,7 @@ def run(ticker: str | None, query: str) -> str:
                 rows_text = result.format_answer()
                 return _narrate(query, rows_text)
             return "Không có dữ liệu trong database cho tiêu chí này."
-        except Exception as exc:
+        except Exception:
             pass  # fall through to LLM path
 
     # LLM-generated SQL path (for queries without a matching template)

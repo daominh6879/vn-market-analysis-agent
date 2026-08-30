@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
+from core.config import settings
 from llm.types import Message
 from rag.router import classify as route_classify
 
@@ -85,7 +86,7 @@ def _rag_answer(question: str, ticker: Optional[str], client) -> str:
         r.raise_for_status()
         qvec = r.json()["embedding"]
 
-        qdrant = QdrantClient("localhost", port=6333)
+        qdrant = QdrantClient(settings.QDRANT_HOST, port=settings.QDRANT_PORT)
 
         # Build ticker filter when known (collection has ticker payload field)
         search_filter = None

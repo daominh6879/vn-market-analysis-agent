@@ -51,6 +51,7 @@ except ImportError:
 
 from langgraph.graph import StateGraph, END
 
+from core.config import settings
 from llm.factory import create_client
 from llm.types import Message
 from rag.multi_query import generate_sub_queries, query_postgres_facts, format_postgres_facts_as_text
@@ -92,7 +93,7 @@ def _hybrid_retrieve(
     r.raise_for_status()
     qvec = r.json()["embedding"]
 
-    qdrant = QdrantClient("localhost", port=6333)
+    qdrant = QdrantClient(settings.QDRANT_HOST, port=settings.QDRANT_PORT)
     points = qdrant.query_points(collection_name=collection, query=qvec, limit=top_k).points
     vec_scored = [(p.payload["text"], float(p.score)) for p in points]
 

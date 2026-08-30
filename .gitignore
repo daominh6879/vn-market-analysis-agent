@@ -82,3 +82,5 @@ dagster_home/
 *.bak
 
 traces/
+ui/react/node_modules/
+ui/react/dist/

@@ -31,8 +31,12 @@ from dagster import RetryPolicy
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
+from datetime import date
+
 from dotenv import load_dotenv
 load_dotenv(ROOT / ".env")
+
+from core.config import settings
 
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
 
@@ -42,7 +46,7 @@ MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "http://localhost:9000")
 class IngestionConfig(Config):
     mode: str = "incremental"         # "incremental" | "full_rebuild"
     ticker: str = "HPG"
-    period: str = "2024"
+    period: str = str(date.today().year)
     report_type: str = "standalone"
     object_key: str = ""              # nếu có → chỉ xử lý file này
     embed_model: str = os.getenv("EMBED_MODEL", "bge-m3")
@@ -261,7 +265,7 @@ def embeddings(
     from rag.index import run as index_run
     from qdrant_client import QdrantClient
 
-    qdrant = QdrantClient("localhost", port=6333)
+    qdrant = QdrantClient(settings.QDRANT_HOST, port=settings.QDRANT_PORT)
     total_indexed = 0
     total_chunks = 0
 
@@ -355,7 +359,7 @@ def delete_doc(context: AssetExecutionContext, config: DeleteConfig) -> dict:
     from qdrant_client.models import FieldCondition, Filter, MatchValue
 
     cfg = IngestionConfig(ticker=config.ticker)
-    qdrant = QdrantClient("localhost", port=6333)
+    qdrant = QdrantClient(settings.QDRANT_HOST, port=settings.QDRANT_PORT)
 
     with get_conn() as conn:
         with conn.cursor() as cur:

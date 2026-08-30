@@ -23,6 +23,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass, field
+from datetime import date
 
 import psycopg2
 import psycopg2.extras
@@ -47,12 +48,14 @@ _FORBIDDEN_STMT_NAMES: frozenset[str] = frozenset({
 
 # ── schema context for LLM ────────────────────────────────────────────────────
 
-_SCHEMA_CONTEXT = """\
+_LATEST_YEAR = date.today().year
+
+_SCHEMA_CONTEXT = f"""\
 PostgreSQL database schema (READ-ONLY):
 
 TABLE financial_facts
   ticker       TEXT     -- stock ticker, e.g. 'HPG'
-  period       TEXT     -- e.g. '2024', '2023', 'Q3/2024'
+  period       TEXT     -- e.g. '{_LATEST_YEAR}', '{_LATEST_YEAR - 1}', 'Q3/{_LATEST_YEAR}'
   report_type  TEXT     -- 'standalone' or 'consolidated'
   metric_code  TEXT     -- actual codes in DB (use ILIKE or exact match):
                         --   Revenue:   'doanh_thu_thuan', 'doanh_thu_ban_hang_va_cung_cap_dich_vu'
@@ -81,11 +84,11 @@ TABLE securities
   company_name TEXT
 
 Period filter rules:
-- Annual data: WHERE period = '2024'
-- Quarterly: WHERE period LIKE 'Q%/2024' (e.g. 'Q3/2024')
-- Any 2024 data: WHERE period = '2024' OR period LIKE '%/2024'
+- Annual data: WHERE period = '{_LATEST_YEAR}'
+- Quarterly: WHERE period LIKE 'Q%/{_LATEST_YEAR}' (e.g. 'Q3/{_LATEST_YEAR}')
+- Any {_LATEST_YEAR} data: WHERE period = '{_LATEST_YEAR}' OR period LIKE '%/{_LATEST_YEAR}'
 
-Example — top 5 ROE cao nhất (một dòng mỗi ticker, period='2024'):
+Example — top 5 ROE cao nhất (một dòng mỗi ticker, period='{_LATEST_YEAR}'):
 SELECT DISTINCT ON (f1.ticker)
        f1.ticker,
        ROUND((f1.value / NULLIF(f2.value, 0) * 100)::numeric, 2) AS roe_pct
@@ -96,7 +99,7 @@ JOIN financial_facts f2
   AND f1.report_type = f2.report_type
 WHERE f1.metric_code = 'lailo_thuan_sau_thue'
   AND f2.metric_code = 'von_chu_so_huu'
-  AND f1.period = '2024'
+  AND f1.period = '{_LATEST_YEAR}'
 ORDER BY f1.ticker, roe_pct DESC NULLS LAST
 LIMIT 5;
 -- IMPORTANT: DISTINCT ON prevents duplicate rows per ticker.
@@ -271,7 +274,7 @@ def _readonly_dsn() -> str:
     user = os.environ.get("POSTGRES_READONLY_USER", "rag_readonly")
     password = os.environ.get("POSTGRES_READONLY_PASSWORD", "readonly_pass")
     return (
-        f"host=127.0.0.1 port=5432 "
+        f"host={settings.POSTGRES_HOST} port={settings.POSTGRES_PORT} "
         f"dbname={settings.POSTGRES_DB} "
         f"user={user} "
         f"password={password}"
