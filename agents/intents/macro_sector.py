@@ -15,7 +15,7 @@ from llm.factory import create_client
 from llm.types import Message
 from tools.global_market import get_fx_rates, get_commodities
 from tools.result import ToolResult
-from agents.intents import strip_preamble, strip_thinking
+from agents.intents import strip_preamble, strip_thinking, extract_report
 
 
 def _sector_performance_text() -> str:
@@ -84,8 +84,8 @@ Viết báo cáo Markdown (không văn bản trước báo cáo):
         temperature=0,
         system=(
             "Bạn là chuyên gia phân tích vĩ mô và ngành chứng khoán Việt Nam. "
-            "Xuất NGAY báo cáo Markdown. TUYỆT ĐỐI KHÔNG viết suy nghĩ, lý luận, "
-            "hay meta-commentary. Chỉ báo cáo cuối cùng."
+            "Bọc toàn bộ báo cáo Markdown trong <report> và </report>. "
+            "KHÔNG có text nào ngoài hai thẻ đó."
         ),
     )
-    return strip_thinking(strip_preamble(resp.text.strip()))
+    return strip_thinking(strip_preamble(extract_report(resp.text.strip())))

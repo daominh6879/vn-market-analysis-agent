@@ -12,7 +12,7 @@ from langfuse import observe
 from llm.factory import create_client
 from llm.types import Message
 from tools.price import search_financial_news, analyze_market_sentiment
-from agents.intents import strip_preamble, strip_thinking
+from agents.intents import strip_preamble, strip_thinking, extract_report
 
 
 def _fetch_news_text(ticker: str | None, days: int) -> str:
@@ -93,9 +93,9 @@ Viết báo cáo Markdown (không văn bản trước báo cáo):
         temperature=0,
         system=(
             "Bạn là chuyên gia phân tích tin tức và tâm lý thị trường chứng khoán Việt Nam. "
-            "Xuất NGAY báo cáo Markdown. TUYỆT ĐỐI KHÔNG viết suy nghĩ, lý luận, "
-            "hay meta-commentary. Chỉ báo cáo cuối cùng. "
+            "Bọc toàn bộ báo cáo Markdown trong <report> và </report>. "
+            "KHÔNG có text nào ngoài hai thẻ đó. "
             "Nếu không có tin tức mới, ghi 'Không có tin tức mới' và phân tích sentiment có sẵn."
         ),
     )
-    return strip_thinking(strip_preamble(resp.text.strip()))
+    return strip_thinking(strip_preamble(extract_report(resp.text.strip())))

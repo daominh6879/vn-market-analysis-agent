@@ -65,6 +65,7 @@ def create_client() -> LLMClient:
             api_key=os.environ.get("DEEPSEEK_API_KEY"),
             default_model=os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
             base_url="https://api.deepseek.com",
+            strip_thinking_output=True,
         )
 
     elif provider == "gemini":

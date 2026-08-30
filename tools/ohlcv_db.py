@@ -50,6 +50,15 @@ def query_ohlcv(ticker: str, days: int) -> Optional[pd.DataFrame]:
         if pct_below > 0.8:
             for col in ("open", "high", "low", "close"):
                 df[col] = df[col] * 1000
+
+        # Remove outlier rows: corrupt DB entries whose close deviates by >95% from median.
+        # A single bad row (e.g., stored as 0.021 instead of 21,000) skews RSI and Fibonacci.
+        median_close = df["close"].median()
+        if pd.notna(median_close) and median_close > 0:
+            price_mask = df["close"].between(median_close * 0.05, median_close * 20.0)
+            if price_mask.sum() >= 20:
+                df = df[price_mask].reset_index(drop=True)
+
         return df
     except Exception as e:
         sys.stderr.write(f"[ohlcv_db] query_ohlcv({ticker}, {days}) failed: {e}\n")

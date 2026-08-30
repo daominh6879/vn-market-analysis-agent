@@ -18,9 +18,11 @@ class OpenAIClient(LLMClient):
         api_key: str | None = None,
         default_model: str = _DEFAULT_MODEL,
         base_url: str | None = None,
+        strip_thinking_output: bool = False,
     ):
         self._client = openai.OpenAI(api_key=api_key, base_url=base_url)
         self._default_model = default_model
+        self._strip_thinking = strip_thinking_output
 
     def generate(
         self,
@@ -65,9 +67,12 @@ class OpenAIClient(LLMClient):
         # DeepSeek reasoning models: content may be empty; answer lives in reasoning_content
         if not text.strip():
             text = getattr(msg, "reasoning_content", None) or ""
-        # Strip inline <think>...</think> blocks (deepseek-chat thinking mode)
-        import re as _re
-        text = _re.sub(r"<think>.*?</think>", "", text, flags=_re.DOTALL).strip()
+        if self._strip_thinking:
+            from llm.utils import strip_thinking as _strip
+            text = _strip(text)
+        else:
+            import re as _re
+            text = _re.sub(r"<think>.*?</think>", "", text, flags=_re.DOTALL).strip()
 
         tool_calls: list[ToolCall] = []
         import json

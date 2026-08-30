@@ -17,7 +17,7 @@ from langfuse import observe
 
 from llm.factory import create_client
 from llm.types import Message
-from agents.intents import strip_preamble, strip_thinking
+from agents.intents import strip_preamble, strip_thinking, extract_report
 
 _BANKING_PEERS  = ["VCB", "BID", "CTG", "MBB", "TCB", "VPB", "ACB", "STB"]
 _STEEL_PEERS    = ["HPG", "HSG", "NKG", "TLH"]
@@ -278,14 +278,13 @@ Viết báo cáo Markdown (không văn bản trước báo cáo):
             temperature=0,
             system=(
                 "Bạn là chuyên gia phân tích định giá chứng khoán Việt Nam. "
-                "Xuất NGAY báo cáo Markdown. "
+                "Bọc toàn bộ báo cáo Markdown trong <report> và </report>. "
+                "KHÔNG có text nào ngoài hai thẻ đó. "
                 "TUYỆT ĐỐI KHÔNG tự tính lại thứ hạng — dùng nguyên kết quả đã cho. "
-                "TUYỆT ĐỐI KHÔNG thêm 'có thể', 'có lẽ', 'dường như' khi so sánh số liệu từ bảng — "
-                "số đã cho là sự thật, viết dứt khoát. "
-                "TUYỆT ĐỐI KHÔNG viết suy nghĩ hay meta-commentary. Chỉ báo cáo cuối cùng."
+                "Số đã cho là sự thật, viết dứt khoát — không dùng 'có thể', 'dường như'."
             ),
         )
-        return strip_thinking(strip_preamble(resp.text.strip()))
+        return strip_thinking(strip_preamble(extract_report(resp.text.strip())))
 
     from rag.qa import answer as qa_answer
     return qa_answer(query, ticker=ticker)

@@ -14,7 +14,7 @@ from langfuse import observe
 
 from llm.factory import create_client
 from llm.types import Message
-from agents.intents import strip_preamble, strip_thinking
+from agents.intents import strip_preamble, strip_thinking, extract_report
 
 
 def _safe_run(module_run, ticker: str, query: str, label: str) -> str:
@@ -97,12 +97,11 @@ Viết báo cáo Markdown tổng hợp (không văn bản trước báo cáo):
         temperature=0,
         system=(
             "Bạn là chuyên gia phân tích đầu tư chứng khoán Việt Nam với 15 năm kinh nghiệm. "
-            "Xuất NGAY báo cáo Markdown — bắt đầu bằng '# Khuyến nghị Đầu tư'. "
-            "TUYỆT ĐỐI KHÔNG viết suy nghĩ, lý luận, hay meta-commentary. "
+            "Bọc toàn bộ báo cáo Markdown trong <report> và </report>. "
+            "KHÔNG có text nào ngoài hai thẻ đó. "
             "Khuyến nghị PHẢI rõ ràng: MUA / TÍCH LŨY / NẮM GIỮ / BÁN — không được mập mờ. "
             "Mỗi luận điểm Bull/Bear PHẢI dẫn số liệu cụ thể từ các báo cáo. "
-            "KHÔNG được nói 'thiếu dữ liệu' — dùng tất cả thông tin có sẵn để kết luận. "
-            "Chỉ báo cáo cuối cùng."
+            "KHÔNG được nói 'thiếu dữ liệu' — dùng tất cả thông tin có sẵn để kết luận."
         ),
     )
-    return strip_thinking(strip_preamble(resp.text.strip()))
+    return strip_thinking(strip_preamble(extract_report(resp.text.strip())))

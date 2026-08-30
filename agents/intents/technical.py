@@ -18,7 +18,7 @@ from llm.factory import create_client
 from llm.types import Message
 from tools.price import get_historical_ohlcv, calculate_indicators
 from tools.result import ToolResult
-from agents.intents import strip_preamble, strip_thinking
+from agents.intents import strip_preamble, strip_thinking, extract_report
 
 _CACHE_DIR = Path("outputs/agent_cache")
 
@@ -58,8 +58,9 @@ def _fibonacci_levels(df: "pd.DataFrame") -> str:
     if df.empty or len(df) < 20:
         return "N/A"
     recent = df.tail(60)
-    high = recent["high"].max() if "high" in df.columns else recent["close"].max()
-    low  = recent["low"].min()  if "low"  in df.columns else recent["close"].min()
+    # Use 97th/3rd percentile to ignore single-session outlier prices (corrupt DB rows).
+    high = recent["high"].quantile(0.97) if "high" in df.columns else recent["close"].quantile(0.97)
+    low  = recent["low"].quantile(0.03)  if "low"  in df.columns else recent["close"].quantile(0.03)
     diff = high - low
     if diff == 0:
         return "N/A"
@@ -77,6 +78,12 @@ def _fibonacci_levels(df: "pd.DataFrame") -> str:
 @observe(name="intent.technical_analysis")
 def run(ticker: str, query: str) -> str:
     status, df = _get_ohlcv(ticker)
+
+    if status != "ok" or df is None:
+        return (
+            f"Không tìm thấy dữ liệu giá cho mã **{ticker}**. "
+            f"Vui lòng kiểm tra lại mã cổ phiếu (ví dụ: MBB thay vì MB, VCB thay vì Vietcombank)."
+        )
 
     tech_signals = "Không có dữ liệu kỹ thuật."
     sr_text      = "Không xác định."
@@ -156,7 +163,9 @@ Viết báo cáo Markdown (không văn bản trước báo cáo):
 | **Take Profit 1** | [kháng cự gần nhất] |
 | **Take Profit 2** | [kháng cự tiếp theo] |
 | **R:R** | [tính = (TP1-Entry)/(Entry-SL) — bắt buộc ≥ 1:2] |
-[Nguồn: VCI REST API]"""
+[Nguồn: VCI REST API]
+
+Bắt đầu NGAY bằng thẻ mở <report>:"""
 
     client = create_client()
     resp = client.generate(
@@ -165,12 +174,10 @@ Viết báo cáo Markdown (không văn bản trước báo cáo):
         temperature=0,
         system=(
             "Bạn là chuyên gia phân tích kỹ thuật chứng khoán Việt Nam. "
-            "Xuất NGAY báo cáo Markdown — bắt đầu bằng '# Phân tích Kỹ thuật ...'. "
-            "TUYỆT ĐỐI KHÔNG viết suy nghĩ, lý luận, phân vân, hay meta-commentary. "
-            "KHÔNG có văn bản trước '#' đầu tiên. "
+            "Bọc toàn bộ báo cáo Markdown trong <report> và </report>. "
+            "KHÔNG có text nào ngoài hai thẻ đó. "
             "Kế hoạch Giao dịch BẮT BUỘC có Entry / SL / TP1 / TP2 / R:R — "
-            "R:R phải ≥ 1:2, nếu không đạt thì ghi 'Setup chưa đủ hấp dẫn'. "
-            "Chỉ báo cáo cuối cùng."
+            "R:R phải ≥ 1:2, nếu không đạt thì ghi 'Setup chưa đủ hấp dẫn'."
         ),
     )
-    return strip_thinking(strip_preamble(resp.text.strip()))
+    return strip_thinking(strip_preamble(extract_report(resp.text.strip())))
