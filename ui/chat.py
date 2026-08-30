@@ -516,6 +516,7 @@ _AGENT_LABELS = {
 _STEP_LABELS = {
     "loading_history":        "Đang tải lịch sử",
     "routing":                "Đang phân tích câu hỏi",
+    "clarifying":             "Cần thêm thông tin",
     "collecting_data":        "Đang thu thập dữ liệu giá",
     "collecting_market_data": "Đang thu thập dữ liệu thị trường",
     "collecting_macro_data":  "Đang thu thập dữ liệu vĩ mô",
@@ -533,8 +534,10 @@ _SUGGESTIONS = [
 
 
 def _sse_chunks(conversation_id: str, user_id: str, tenant_id: str,
-                message: str, is_first_turn: bool, status_placeholder):
-    """Sync generator → text chunks for st.write_stream()."""
+                message: str, is_first_turn: bool, status_placeholder,
+                _cache_badge_holder: list):
+    """Sync generator → text chunks for st.write_stream().
+    Sets _cache_badge_holder[0] to the done-badge markdown when agent is cached."""
     with httpx.stream(
         "POST",
         f"{API_URL}/conversations/{conversation_id}/messages/stream",
@@ -569,11 +572,13 @@ def _sse_chunks(conversation_id: str, user_id: str, tenant_id: str,
                         )
                     elif current_event == "done":
                         agent = payload.get("agent", "")
-                        agent_label = _AGENT_LABELS.get(agent, agent)
-                        status_placeholder.markdown(
-                            f'<div class="status-thinking" style="color:#10a37f;">✓ {agent_label}</div>',
-                            unsafe_allow_html=True,
-                        )
+                        agent_label = _AGENT_LABELS.get(agent.replace(":cache", ""), agent.replace(":cache", ""))
+                        cached = ":cache" in agent
+                        badge = " · ⚡ cached" if cached else ""
+                        badge_html = f'<div class="status-thinking" style="color:#10a37f;">✓ {agent_label}{badge}</div>'
+                        status_placeholder.markdown(badge_html, unsafe_allow_html=True)
+                        if cached:
+                            _cache_badge_holder.append(badge_html)
                     elif current_event == "error":
                         err = payload.get("error", "Lỗi không xác định")
                         status_placeholder.error(f"❌ {err}")
@@ -815,6 +820,7 @@ if prompt:
 
     with st.chat_message("assistant"):
         status_box = st.empty()
+        _cache_badge: list[str] = []
         try:
             full_reply = st.write_stream(
                 _sse_chunks(
@@ -824,9 +830,13 @@ if prompt:
                     message=prompt,
                     is_first_turn=is_first_turn,
                     status_placeholder=status_box,
+                    _cache_badge_holder=_cache_badge,
                 )
             )
-            status_box.empty()
+            if _cache_badge:
+                status_box.markdown(_cache_badge[-1], unsafe_allow_html=True)
+            else:
+                status_box.empty()
         except Exception as exc:
             st.error(f"Lỗi stream: {exc}\n\nKiểm tra API đang chạy: make api-b31")
             st.stop()

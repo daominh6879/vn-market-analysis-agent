@@ -50,6 +50,9 @@ _INVESTMENT_CASE_KW = frozenset({
     "tổng kết", "tổng hợp", "kết luận đầu tư",
     "investment case", "luận điểm", "bull case", "bear case",
     "đánh giá tổng thể", "nhìn tổng thể",
+    "đánh giá ngắn gọn", "đánh giá sơ bộ", "đánh giá cổ phiếu",
+    "đánh giá công ty", "đánh giá mã", "đánh giá về",
+    "nhận xét về", "nhận xét ngắn", "review cổ phiếu",
     "có tiềm năng không", "đáng mua không", "đáng đầu tư không",
     "nắm giữ hay bán", "tích lũy hay bán",
     "phân tích toàn diện", "phân tích đầy đủ",
@@ -135,6 +138,96 @@ _PRICE_ACTION_KW = frozenset({
     "giá cổ phiếu",
 })
 
+# Common Vietnamese company name fragments → ticker.
+# Matched case-insensitively on the lowercase query after diacritic stripping.
+# Keys are substrings (longest match wins via sorted order at lookup time).
+_COMPANY_NAME_MAP: dict[str, str] = {
+    # Banks
+    "ngan hang quan doi": "MBB",
+    "quan doi": "MBB",
+    "mb bank": "MBB",
+    "ngan hang ngoai thuong": "VCB",
+    "vietcombank": "VCB",
+    "ngan hang dau tu": "BID",
+    "bidv": "BID",
+    "vietinbank": "CTG",
+    "ngan hang cong thuong": "CTG",
+    "techcombank": "TCB",
+    "vpbank": "VPB",
+    "ngan hang thinh vuong": "VPB",
+    "acb": "ACB",
+    "a chau": "ACB",
+    "ngan hang a chau": "ACB",
+    "sacombank": "STB",
+    "mbbank": "MBB",
+    "hdbank": "HDB",
+    "lpbank": "LPB",
+    "lien viet": "LPB",
+    "seabank": "SSB",
+    "ocb": "OCB",
+    "ngan hang phuong dong": "OCB",
+    "msb": "MSB",
+    "maritime": "MSB",
+    "ncb": "NVB",
+    # Steel / industry
+    "hoa phat": "HPG",
+    "hoa sen": "HSG",
+    "nam kim": "NKG",
+    # Real estate
+    "vinhomes": "VHM",
+    "vingroup": "VIC",
+    "novaland": "NVL",
+    "khang dien": "KDH",
+    "dat xanh": "DXG",
+    "nam long": "NLG",
+    # Tech / telecom
+    "fpt": "FPT",
+    "viettel": "VGI",
+    "cmc": "CMG",
+    # Consumer / dairy
+    "vinamilk": "VNM",
+    "masan": "MSN",
+    "sabeco": "SAB",
+    "bia sai gon": "SAB",
+    "habeco": "BHN",
+    # Aviation / logistics
+    "vietnam airlines": "HVN",
+    "vietjet": "VJC",
+    "gemadept": "GMD",
+    # Energy / oil
+    "pvn": "GAS",
+    "petrovietnam gas": "GAS",
+    "pv gas": "GAS",
+    "pvgas": "GAS",
+    "bsr": "BSR",
+    "binh son": "BSR",
+    "pv oil": "OIL",
+    # Insurance
+    "bao viet": "BVH",
+    # Pharma
+    "imexpharm": "IMP",
+    "duoc hau giang": "DHG",
+}
+
+
+def _resolve_company_name(query_lower: str) -> str | None:
+    """Return ticker if any company name fragment matches query_lower, else None.
+
+    Matches longest key first to avoid partial false positives.
+    query_lower must already be lowercased + diacritics stripped by caller.
+    """
+    for name in sorted(_COMPANY_NAME_MAP, key=len, reverse=True):
+        if name in query_lower:
+            return _COMPANY_NAME_MAP[name]
+    return None
+
+
+def _strip_diacritics(text: str) -> str:
+    import unicodedata
+    nfkd = unicodedata.normalize("NFKD", text.lower())
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+
 # VN words that match ticker regex but aren't tickers
 _VN_NOISE = frozenset({
     # Vietnamese stopwords
@@ -181,7 +274,7 @@ def classify(query: str) -> RouterResult:
         if idx in upper:
             return RouterResult("market_brief", None, f"market index {idx}")
 
-    # 2. Extract first plausible ticker from ORIGINAL string.
+    # 2. Extract ticker: try ALL-CAPS first, then company name lookup.
     # Real tickers (HPG, VNM) are ALL-CAPS by convention. VN words are lowercase → won't match.
     ticker: str | None = None
     for m in re.finditer(r"\b([A-Z]{2,5})\b", query):
@@ -189,6 +282,8 @@ def classify(query: str) -> RouterResult:
         if t not in _VN_NOISE and t not in _MARKET_INDICES:
             ticker = t
             break
+    if ticker is None:
+        ticker = _resolve_company_name(_strip_diacritics(query))
 
     # 3. Investment case (comprehensive recommendation) — before all single-domain intents
     if any(kw in lower for kw in _INVESTMENT_CASE_KW):

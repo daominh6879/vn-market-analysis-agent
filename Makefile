@@ -202,6 +202,10 @@ migrate-b29:
 test-b29:
 	pytest tests/test_bai29_episodic.py -v -s
 
+# Bài 32 — Cache + clarification context
+migrate-b32:
+	python -c "from data.db import run_migration; run_migration('infra/migrations/030_pending_context.sql')"
+
 test-b29-load:
 	pytest tests/test_bai29_episodic.py::test_load_20_episodes_no_context_bloat -v -s
 

@@ -73,9 +73,12 @@ def run_turn(
     history = load_history(conversation_id, limit=10)
     user_memory = load_user_memory(user_id, tenant_id, max_items=5)
 
-    # ── Cache check (conversation path only; no routing here) ─────────────────
+    # ── Route + cache check ───────────────────────────────────────────────────
+    from agents.query_router import classify_hybrid as _route_classify
+    _route = _route_classify(user_message)
+
     from core.cache import make_cache_key, cache_get, cache_set
-    _ck = make_cache_key(tenant_id, user_message, "", "conversation", history)
+    _ck = make_cache_key(tenant_id, user_message, _route.ticker or "", _route.intent, history)
     if _ck is not None:
         cached_reply, _tier = cache_get(_ck)
         if cached_reply:
@@ -108,8 +111,13 @@ def run_turn(
     # Persist turn
     save_turn(conversation_id, user_message, assistant_reply)
 
-    # Cache set (only turn 1)
-    if _ck is not None:
+    # Cache set — skip clarification replies (ticker=None on ticker-required intent)
+    _TICKER_REQUIRED_SET = {
+        "price_action", "technical_analysis", "rag_qa",
+        "news_sentiment", "investment_case",
+    }
+    _is_clarification = (_route.ticker is None and _route.intent in _TICKER_REQUIRED_SET)
+    if _ck is not None and not _is_clarification:
         cache_set(_ck, assistant_reply)
 
     # Extract preferences from this turn only (run AFTER turn completes)
@@ -324,18 +332,50 @@ async def stream_turn(
         except Exception:
             episodes = []
 
+    # ── Pending clarification: merge previous unresolved query ───────────────
+    from memory.conversation import get_pending_context, set_pending_context, clear_pending_context
+    from memory.clarification import (
+        PendingContext, pending_from_dict, pending_to_dict,
+        detect_ambiguity, build_clarification_message, merge_with_pending,
+    )
+    _pending_raw = get_pending_context(conversation_id)
+    _pending: PendingContext | None = pending_from_dict(_pending_raw) if _pending_raw else None
+
+    routed_message = user_message
+    if _pending is not None:
+        routed_message = merge_with_pending(_pending, user_message)
+        clear_pending_context(conversation_id)
+        log.info("clarification.resume conv=%s missing=%s merged=%r",
+                 conversation_id[:8], _pending.missing, routed_message[:80])
+
     # ── Route query ───────────────────────────────────────────────────────────
     from agents.query_router import classify_hybrid as route_classify
-    route = route_classify(user_message)
+    route = route_classify(routed_message)
 
     yield _sse_status("routing", agent=route.intent, reason=route.reason,
                       ticker=route.ticker)
+
+    # ── Detect ambiguity → clarify and park pending context ──────────────────
+    _ambiguity = detect_ambiguity(route, routed_message)
+    if _ambiguity is not None:
+        clarification = build_clarification_message(_ambiguity)
+        log.info("clarification.needed conv=%s missing=%s", conversation_id[:8], _ambiguity.missing)
+        try:
+            set_pending_context(conversation_id, pending_to_dict(_ambiguity))
+            save_turn(conversation_id, user_message, clarification)
+        except Exception:
+            pass
+        yield _sse_status("clarifying", missing=_ambiguity.missing)
+        for line in clarification.split("\n"):
+            yield _sse_chunk(line + "\n")
+        yield _sse_done(len(clarification), "clarification")
+        return
 
     assistant_reply = ""
 
     # ── Cache check (first turn only; intent + ticker from router) ──────────────
     from core.cache import make_cache_key, cache_get, cache_set
-    _ck = make_cache_key(tenant_id, user_message, route.ticker or "", route.intent, history)
+    _ck = make_cache_key(tenant_id, routed_message, route.ticker or "", route.intent, history)
     if _ck is not None:
         _cached_reply, _cache_tier = cache_get(_ck)
         if _cached_reply:
@@ -373,7 +413,7 @@ async def stream_turn(
         yield _sse_status("collecting_data", ticker=route.ticker, intent=route.intent)
         try:
             task = asyncio.create_task(
-                _run_blocking_agent(_dispatch_intent, route, user_message, user_id, conversation_id)
+                _run_blocking_agent(_dispatch_intent, route, routed_message, user_id, conversation_id)
             )
             while not task.done():
                 try:

@@ -46,6 +46,18 @@ _VN_TZ = timezone(timedelta(hours=7))
 # Pure-tool intents (same tools, same data for same ticker) — key on (intent, ticker) only.
 _RAG_INTENTS = frozenset({"rag_qa", "screening"})
 
+# Pure-tool intents: result is data-driven only, independent of conversation history.
+# Cache these regardless of turn number — history context doesn't affect the output.
+# RAG intents and conversation stay turn-1-only (history may affect the answer).
+_HISTORY_INDEPENDENT = frozenset({
+    "price_action",
+    "technical_analysis",
+    "news_sentiment",
+    "macro_sector",
+    "market_brief",
+    "investment_case",  # tool-driven (financial statements), not RAG — history-independent
+})
+
 # ── Key model ─────────────────────────────────────────────────────────────────
 
 class CacheKey(BaseModel):
@@ -73,17 +85,19 @@ def make_cache_key(
     intent: str,
     history: list,
 ) -> Optional[CacheKey]:
-    """Return CacheKey only for turn 1 (history empty). Returns None otherwise.
+    """Return CacheKey, or None if this turn should not be cached.
 
-    RAG intents (fundamentals, qa_document, screening): key includes normalized_question
-    because different questions retrieve different chunks → different answers.
+    Pure-tool intents (_HISTORY_INDEPENDENT): cache any turn — result is data-driven,
+    conversation history doesn't change the output.
 
-    Pure-tool intents (price_action, technical_analysis, etc.): key on (intent, ticker) only —
-    same tools always run regardless of how the question was phrased.
-    Also handles company-name → ticker normalization for free: "vinamilk" and "VNM" both
-    resolve to ticker="VNM" via the hybrid router before reaching here.
+    RAG intents (rag_qa, screening) and conversation: turn 1 only — history may affect answer.
+
+    RAG intents include normalized_question in key (different questions → different RAG chunks).
+    Pure-tool intents use normalized_question="" — same tools run regardless of phrasing.
     """
-    if history:
+    # Pure-tool intents are history-independent — cache regardless of turn.
+    # RAG/conversation intents: turn 1 only (history changes the answer).
+    if history and intent not in _HISTORY_INDEPENDENT:
         return None
     model_version = os.environ.get("DEEPSEEK_MODEL", "unknown")
     nq = normalize_question(question) if intent in _RAG_INTENTS else ""
@@ -216,6 +230,11 @@ def get_vector(ck: CacheKey) -> Optional[str]:
                 log.debug("cache.vector.guard_fail reason=ticker expected=%s got=%s score=%.4f",
                           ck.ticker, p.get("ticker"), score)
                 continue
+            # Intent guard — rag_qa and screening can share same ticker+question text
+            if p.get("intent", "") != ck.intent:
+                log.debug("cache.vector.guard_fail reason=intent expected=%s got=%s score=%.4f",
+                          ck.intent, p.get("intent"), score)
+                continue
             # Tenant guard
             if p.get("tenant_id", "") != ck.tenant_id:
                 log.debug("cache.vector.guard_fail reason=tenant score=%.4f", score)
@@ -258,6 +277,7 @@ def set_vector(ck: CacheKey, reply: str) -> None:
                 id=point_id,
                 vector=vec,
                 payload={
+                    "intent": ck.intent,
                     "ticker": ck.ticker,
                     "tenant_id": ck.tenant_id,
                     "prompt_version": ck.prompt_version,
@@ -270,6 +290,34 @@ def set_vector(ck: CacheKey, reply: str) -> None:
         log.debug("cache.vector.set intent=%s ticker=%s ttl=%ds", ck.intent, ck.ticker, ttl)
     except Exception as exc:
         log.warning("cache.vector.set_error intent=%s ticker=%s err=%s", ck.intent, ck.ticker, exc)
+
+
+# ── Maintenance ───────────────────────────────────────────────────────────────
+
+def purge_expired_vectors(batch_size: int = 500) -> int:
+    """Delete expired points from Qdrant cache collection. Returns count deleted.
+
+    Qdrant has no native TTL — expired points accumulate and must be purged manually.
+    Call periodically (e.g. via a Dagster sensor or cron).
+    """
+    try:
+        from qdrant_client.models import Filter, FieldCondition, Range
+        client = _qdrant()
+        existing = {c.name for c in client.get_collections().collections}
+        if _COLLECTION not in existing:
+            return 0
+        now = time.time()
+        client.delete(
+            collection_name=_COLLECTION,
+            points_selector=Filter(
+                must=[FieldCondition(key="expires_at", range=Range(lte=now))]
+            ),
+        )
+        log.info("cache.vector.purge completed ts=%.0f", now)
+        return 0  # Qdrant delete doesn't return count
+    except Exception as exc:
+        log.warning("cache.vector.purge_error err=%s", exc)
+        return 0
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -286,6 +334,8 @@ def cache_get(ck: CacheKey) -> tuple[Optional[str], str]:
 
 
 def cache_set(ck: CacheKey, reply: str) -> None:
-    """Write to both tiers."""
+    """Write exact tier synchronously; vector tier in background thread (Ollama embed is slow)."""
+    import threading
     set_exact(ck, reply)
-    set_vector(ck, reply)
+    if ck.normalized_question:
+        threading.Thread(target=set_vector, args=(ck, reply), daemon=True).start()

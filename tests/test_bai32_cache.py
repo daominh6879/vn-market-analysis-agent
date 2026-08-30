@@ -140,9 +140,20 @@ def test_make_cache_key_turn1_rag():
 
 
 def test_make_cache_key_turn2_returns_none():
+    """RAG/conversation intents: turn 2+ must NOT be cached (history changes answer)."""
     history = [{"role": "user", "content": "xin chào"}, {"role": "assistant", "content": "Chào bạn"}]
     ck = make_cache_key("t1", "HPG có nên mua không?", "HPG", "investment_case", history=history)
-    assert ck is None, "Turn 2+ must not be cached"
+    assert ck is None, "investment_case turn 2+ must not be cached"
+    ck2 = make_cache_key("t1", "doanh thu HPG?", "HPG", "rag_qa", history=history)
+    assert ck2 is None, "rag_qa turn 2+ must not be cached"
+
+
+def test_make_cache_key_pure_tool_turn2_cached():
+    """Pure-tool intents: turn 2+ CAN be cached — result is data-driven, history-independent."""
+    history = [{"role": "user", "content": "xin chào"}, {"role": "assistant", "content": "Chào bạn"}]
+    for intent in ("technical_analysis", "price_action", "news_sentiment", "macro_sector"):
+        ck = make_cache_key("t1", "phan tich MBB", "MBB", intent, history=history)
+        assert ck is not None, f"{intent} turn 2+ should be cacheable"
 
 
 def test_same_ticker_different_intent_no_cross_hit():

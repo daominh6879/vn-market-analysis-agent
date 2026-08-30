@@ -42,24 +42,16 @@ Rules:
 - A ticker alone with no other signal → technical_analysis
 - "phân tích X" / "analyze X" / "phân tích X hôm nay" where X is a company or ticker → technical_analysis
 - "should I buy / worth buying / good investment?" → investment_case
+- "đánh giá [company/ticker]" / "nhận xét về [company]" / "review [ticker]" → investment_case
 - "what is [metric]?" or "revenue/profit/P/E of X?" → rag_qa
 - English or mixed-language queries follow the same rules — look at meaning, not language
 - Time words ("hôm nay", "today", "tuần này") do NOT change intent — classify by the financial action, not the time
-- If the query mentions a Vietnamese company by name (not ticker), resolve it to its ticker symbol.
-  Common mappings (not exhaustive — use your knowledge for others):
-  Hòa Phát / tập đoàn Hòa Phát → HPG
-  Vinamilk / sữa Vinamilk → VNM
-  VPBank / Ngân hàng Thịnh Vượng / Việt Nam Thịnh Vượng → VPB
-  Vietcombank / ngân hàng ngoại thương → VCB
-  Techcombank → TCB
-  FPT / tập đoàn FPT → FPT
-  Masan → MSN
-  Vinhomes / Vingroup → VHM / VIC
-  Thế Giới Di Động / TGDĐ → MWG
-  Hoa Sen → HSG
-  Nam Kim → NKG
-  PetroVietnam Gas → GAS
-  Sabeco / bia Sài Gòn → SAB
+- If the query mentions a Vietnamese company by name (not ticker), use your knowledge to resolve it
+  to its HOSE/HNX ticker symbol (e.g. "Agribank" → "AGB", "Ngân hàng Nông nghiệp..." → "AGB").
+  Common examples: "Ngân hàng Quân đội" → "MBB", "Hòa Phát" → "HPG", "Hòa Sen" → "HSG",
+  "Vinamilk" → "VNM", "Vietcombank" → "VCB", "Techcombank" → "TCB", "VPBank" → "VPB",
+  "Masan" → "MSN", "Vinhomes" → "VHM", "Vingroup" → "VIC", "FPT" → "FPT".
+  If you do not know the ticker, leave ticker empty and classify intent based on context.
 
 Call the classify_intent tool."""
 
@@ -78,10 +70,9 @@ _TOOL = {
                 "type": "string",
                 "description": (
                     "Stock ticker symbol (2-5 uppercase letters). "
-                    "If the query mentions a company by name, resolve it to ticker "
-                    "(e.g. 'Vinamilk' → 'VNM', 'Hòa Phát' → 'HPG', "
-                    "'Ngân hàng Thịnh Vượng' → 'VPB', 'Vietcombank' → 'VCB'). "
-                    "Use empty string if no company mentioned."
+                    "If the query mentions a Vietnamese company by name, resolve it to its "
+                    "HOSE/HNX ticker using your knowledge. "
+                    "Use empty string if no company is mentioned or ticker is unknown."
                 ),
             },
             "reason": {
@@ -110,6 +101,7 @@ def llm_classify(query: str, client=None) -> RouterResult | None:
             system=_SYSTEM,
             tools=[_TOOL],
             max_tokens=256,
+            temperature=0,
         )
 
         if resp.tool_calls:

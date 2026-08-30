@@ -148,6 +148,40 @@ def get_conversation(conversation_id: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def get_pending_context(conversation_id: str) -> Optional[dict]:
+    """Return the pending_context JSON for this conversation, or None."""
+    with _conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT pending_context FROM conversations WHERE conversation_id = %s",
+                (conversation_id,),
+            )
+            row = cur.fetchone()
+    if row and row["pending_context"]:
+        return dict(row["pending_context"])
+    return None
+
+
+def set_pending_context(conversation_id: str, ctx: dict) -> None:
+    """Store pending_context JSON on the conversation row."""
+    with _conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE conversations SET pending_context = %s WHERE conversation_id = %s",
+                (psycopg2.extras.Json(ctx), conversation_id),
+            )
+
+
+def clear_pending_context(conversation_id: str) -> None:
+    """Remove pending_context (set to NULL)."""
+    with _conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE conversations SET pending_context = NULL WHERE conversation_id = %s",
+                (conversation_id,),
+            )
+
+
 def delete_conversation(conversation_id: str) -> bool:
     """Delete conversation, all its messages, and episodic Qdrant point. Return True if row existed."""
     from memory.episodic import delete_episode  # local import avoids circular deps
