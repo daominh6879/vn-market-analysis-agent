@@ -1,0 +1,1100 @@
+<title>Chat Message Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<style>
+:root {
+  --bg:         #07090f;
+  --bg-stage:   #0d1420;
+  --surface:    #111827;
+  --border:     #1a2840;
+  --border-hi:  #2c4468;
+  --text:       #d4e0f4;
+  --dim:        #5c7898;
+  --faint:      #1e2d42;
+
+  --c-http:   #4d88ff;
+  --c-mem:    #30d470;
+  --c-route:  #f0a020;
+  --c-tool:   #f87040;
+  --c-llm:    #14cfc4;
+  --c-post:   #ae62f0;
+  --c-sse:    #4d88ff;
+
+  --font: 'Space Grotesk', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', 'Cascadia Code', monospace;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg:        #edf2fb;
+    --bg-stage:  #f7f9ff;
+    --surface:   #ffffff;
+    --border:    #cad5ec;
+    --border-hi: #91aad0;
+    --text:      #0f1b30;
+    --dim:       #4a6080;
+    --faint:     #dce5f4;
+
+    --c-http:  #1c58e0;
+    --c-mem:   #148040;
+    --c-route: #c07000;
+    --c-tool:  #c44010;
+    --c-llm:   #0a8f8c;
+    --c-post:  #8020c4;
+    --c-sse:   #1c58e0;
+    color-scheme: light;
+  }
+}
+
+:root[data-theme="light"] {
+  --bg:        #edf2fb;
+  --bg-stage:  #f7f9ff;
+  --surface:   #ffffff;
+  --border:    #cad5ec;
+  --border-hi: #91aad0;
+  --text:      #0f1b30;
+  --dim:       #4a6080;
+  --faint:     #dce5f4;
+  --c-http:  #1c58e0;
+  --c-mem:   #148040;
+  --c-route: #c07000;
+  --c-tool:  #c44010;
+  --c-llm:   #0a8f8c;
+  --c-post:  #8020c4;
+  --c-sse:   #1c58e0;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg:        #07090f;
+  --bg-stage:  #0d1420;
+  --surface:   #111827;
+  --border:    #1a2840;
+  --border-hi: #2c4468;
+  --text:      #d4e0f4;
+  --dim:       #5c7898;
+  --faint:     #1e2d42;
+  --c-http:  #4d88ff;
+  --c-mem:   #30d470;
+  --c-route: #f0a020;
+  --c-tool:  #f87040;
+  --c-llm:   #14cfc4;
+  --c-post:  #ae62f0;
+  --c-sse:   #4d88ff;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.55;
+  min-height: 100vh;
+  padding-bottom: 60px;
+}
+
+/* HEADER */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 24px 18px;
+  max-width: 900px;
+  margin: 0 auto;
+  gap: 16px;
+}
+
+.header-left h1 {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.header-left p {
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--dim);
+  margin-top: 3px;
+}
+
+.header-right { display: flex; gap: 8px; align-items: center; }
+
+.icon-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11px;
+  transition: border-color .15s, color .15s;
+  white-space: nowrap;
+}
+.icon-btn:hover { border-color: var(--border-hi); color: var(--text); }
+
+/* LEGEND */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0 24px 20px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--dim);
+}
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* FLOW CONTAINER */
+.flow {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* STAGE BAND */
+.stage {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-stage);
+  overflow: hidden;
+  position: relative;
+}
+
+.stage--http     { border-left: 3px solid var(--c-http); }
+.stage--mem      { border-left: 3px solid var(--c-mem); }
+.stage--route    { border-left: 3px solid var(--c-route); }
+.stage--dispatch { border-left: 3px solid var(--c-route); }
+.stage--llm      { border-left: 3px solid var(--c-llm); }
+.stage--post     { border-left: 3px solid var(--c-post); }
+.stage--sse      { border-left: 3px solid var(--c-sse); }
+
+.stage-label {
+  width: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border-right: 1px solid var(--border);
+  padding: 14px 0;
+}
+.stage--http  .stage-label  { color: var(--c-http); }
+.stage--mem   .stage-label  { color: var(--c-mem); }
+.stage--route .stage-label  { color: var(--c-route); }
+.stage--dispatch .stage-label { color: var(--c-route); }
+.stage--llm   .stage-label  { color: var(--c-llm); }
+.stage--post  .stage-label  { color: var(--c-post); }
+.stage--sse   .stage-label  { color: var(--c-sse); }
+
+.stage-content {
+  flex: 1;
+  padding: 14px 16px;
+  min-width: 0;
+}
+
+/* PIPE CONNECTOR */
+.pipe {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  height: 20px;
+  position: relative;
+  margin-left: calc(36px + 24px); /* align with stage content center */
+}
+.pipe-line {
+  width: 2px;
+  background: var(--border);
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+/* NODE CARD */
+.node {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--accent, var(--border));
+  border-radius: 6px;
+  padding: 9px 12px 8px;
+  transition: border-color .15s;
+  vertical-align: top;
+}
+.node:hover { border-color: var(--border-hi); border-top-color: var(--accent, var(--border-hi)); }
+
+.node-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+}
+.node-file {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--c-route);
+  margin-top: 1px;
+}
+.node-desc {
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 3px;
+  font-family: var(--mono);
+}
+.node--http   { --accent: var(--c-http); }
+.node--mem    { --accent: var(--c-mem); }
+.node--db     { --accent: var(--c-mem); }
+.node--route  { --accent: var(--c-route); }
+.node--tool   { --accent: var(--c-tool); }
+.node--llm    { --accent: var(--c-llm); }
+.node--post   { --accent: var(--c-post); }
+.node--sse    { --accent: var(--c-sse); }
+
+/* NODE ROW */
+.node-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+/* BADGES */
+.badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  display: inline-block;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.badge--warn  { background: color-mix(in srgb,var(--c-route) 15%,transparent); color:var(--c-route); border:1px solid color-mix(in srgb,var(--c-route) 30%,transparent); }
+.badge--trace { background: color-mix(in srgb,var(--c-post) 15%,transparent);  color:var(--c-post);  border:1px solid color-mix(in srgb,var(--c-post) 30%,transparent); }
+.badge--para  { background: color-mix(in srgb,var(--c-mem) 15%,transparent);   color:var(--c-mem);   border:1px solid color-mix(in srgb,var(--c-mem) 30%,transparent); }
+
+/* ROUTER NOTE */
+.inline-note {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--dim);
+  background: var(--surface);
+  border: 1px solid var(--faint);
+  border-left: 3px solid var(--c-route);
+  padding: 7px 12px;
+  border-radius: 5px;
+  margin-top: 10px;
+  line-height: 1.65;
+}
+.inline-note b { color: var(--text); font-weight: 500; }
+
+/* DISPATCH */
+.dispatch-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.dispatch-arrow {
+  font-size: 11px;
+  color: var(--dim);
+  font-family: var(--mono);
+}
+
+/* INTENT GRID */
+.intent-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 7px;
+}
+@media (max-width: 640px) {
+  .intent-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 420px) {
+  .intent-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.intent-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--ic-color, var(--border));
+  border-radius: 6px;
+  padding: 9px 10px 8px;
+  cursor: pointer;
+  transition: border-color .15s, transform .1s, box-shadow .15s;
+  position: relative;
+  user-select: none;
+}
+.intent-card:hover {
+  border-color: var(--ic-color, var(--border-hi));
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,.25);
+}
+.intent-card.active {
+  border-color: var(--ic-color);
+  box-shadow: 0 0 0 1px var(--ic-color), 0 4px 12px rgba(0,0,0,.3);
+}
+
+.intent-card .ic-name {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.intent-card .ic-sub {
+  font-size: 10px;
+  color: var(--dim);
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.intent-card .ic-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ic-color);
+  display: inline-block;
+  margin-right: 4px;
+  vertical-align: middle;
+  opacity: 0.7;
+}
+
+/* LLM ROW */
+.llm-chain {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.llm-arrow {
+  color: var(--dim);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.provider-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  background: color-mix(in srgb,var(--c-llm) 12%,transparent);
+  border: 1px solid color-mix(in srgb,var(--c-llm) 25%,transparent);
+  color: var(--c-llm);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+}
+.env-hint {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+}
+
+/* SSE CHIPS */
+.sse-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sse-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--c-sse);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: var(--mono);
+}
+.sse-chip .sse-evt {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--c-sse);
+  opacity: 0.8;
+}
+.sse-chip .sse-data {
+  font-size: 11px;
+  color: var(--text);
+  margin-top: 1px;
+}
+.sse-chip .sse-note {
+  font-size: 10px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+
+/* HYBRID FLOW DIAGRAM */
+.hybrid-flow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 12px 14px;
+}
+.hf-step {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  min-width: 160px;
+}
+.hf-step--kw {
+  background: color-mix(in srgb,var(--c-route) 10%,transparent);
+  border: 1px solid color-mix(in srgb,var(--c-route) 25%,transparent);
+}
+.hf-step--llm {
+  background: color-mix(in srgb,var(--c-llm) 10%,transparent);
+  border: 1px solid color-mix(in srgb,var(--c-llm) 25%,transparent);
+}
+.hf-step-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 1px;
+}
+.hf-step-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.hf-step-file {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--dim);
+  margin-top: 1px;
+}
+.hf-arrow {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--dim);
+  flex-shrink: 0;
+}
+.hf-arrow--llm { color: var(--c-llm); }
+.hf-branch {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: color-mix(in srgb,var(--c-route) 6%,transparent);
+  border: 1px dashed color-mix(in srgb,var(--c-route) 30%,transparent);
+  border-radius: 6px;
+  padding: 9px 12px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.hf-branch-title {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--c-route);
+  margin-bottom: 3px;
+}
+.hf-branch-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.hf-trigger {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--c-route);
+  padding: 5px 9px;
+  border-radius: 5px;
+  color: var(--text);
+  line-height: 1.5;
+  font-size: 10.5px;
+}
+.hf-or {
+  font-size: 10px;
+  color: var(--dim);
+  align-self: center;
+  font-style: italic;
+}
+.hf-also {
+  font-size: 10px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+@media (max-width: 640px) {
+  .hybrid-flow { flex-direction: column; align-items: flex-start; }
+  .hf-arrow { transform: rotate(90deg); }
+}
+
+/* DETAIL PANEL */
+.detail-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 310px;
+  height: 100vh;
+  background: var(--bg-stage);
+  border-left: 1px solid var(--border);
+  padding: 20px 18px 20px;
+  overflow-y: auto;
+  transform: translateX(100%);
+  transition: transform .22s cubic-bezier(.22,1,.36,1);
+  z-index: 100;
+  box-shadow: -6px 0 28px rgba(0,0,0,.5);
+}
+.detail-panel.open { transform: translateX(0); }
+
+.dp-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color .15s;
+  line-height: 1;
+}
+.dp-close:hover { border-color: var(--border-hi); color: var(--text); }
+
+.dp-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  margin-bottom: 14px;
+  margin-top: 2px;
+}
+
+.dp-section { margin-bottom: 14px; }
+.dp-section-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 6px;
+  display: block;
+}
+.dp-file {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--c-route);
+  background: var(--surface);
+  padding: 6px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  display: block;
+  word-break: break-all;
+}
+.dp-route {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--dim);
+  background: var(--surface);
+  padding: 6px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  display: block;
+  line-height: 1.6;
+}
+.dp-tool-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.dp-tool-list li {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--c-tool);
+  padding: 6px 10px;
+  border-radius: 5px;
+  line-height: 1.5;
+}
+.dp-llm-box {
+  font-size: 11.5px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--c-llm);
+  padding: 8px 12px;
+  border-radius: 5px;
+  line-height: 1.65;
+}
+.dp-db-box {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--dim);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--c-mem);
+  padding: 6px 10px;
+  border-radius: 5px;
+}
+</style>
+
+<!-- DETAIL PANEL (intent detail) -->
+<div class="detail-panel" id="detail-panel">
+  <button class="dp-close" id="dp-close">✕</button>
+  <div id="dp-content"></div>
+</div>
+
+<div class="header">
+  <div class="header-left">
+    <h1>Chat Message Flow</h1>
+    <p>POST /conversations/{id}/messages/stream → SSE</p>
+  </div>
+  <div class="header-right">
+    <button class="icon-btn" id="theme-btn">☀ Light</button>
+  </div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:var(--c-http)"></div>HTTP / API</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--c-mem)"></div>Memory / Storage</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--c-route)"></div>Routing</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--c-tool)"></div>Tools / Data</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--c-llm)"></div>LLM</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--c-post)"></div>Post-processing</div>
+</div>
+
+<div class="flow">
+
+  <!-- 1. HTTP ENTRY -->
+  <div class="stage stage--http">
+    <div class="stage-label">HTTP</div>
+    <div class="stage-content">
+      <div class="node-row">
+        <div class="node node--http">
+          <span class="node-name">POST /conversations/{id}/messages/stream</span>
+          <span class="node-file">api/conversations.py:100</span>
+          <span class="node-desc">StreamingResponse · media_type=text/event-stream</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pipe"><div class="pipe-line"></div></div>
+
+  <!-- 2. TURN ORCHESTRATOR -->
+  <div class="stage stage--http">
+    <div class="stage-label">Orchestrate</div>
+    <div class="stage-content">
+      <div class="node-row">
+        <div class="node node--http">
+          <span class="node-name">stream_turn()</span>
+          <span class="node-file">memory/turn_handler.py:259</span>
+          <span class="node-desc">async generator · coordinates all downstream steps</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pipe"><div class="pipe-line"></div></div>
+
+  <!-- 3. MEMORY LOAD -->
+  <div class="stage stage--mem">
+    <div class="stage-label">Memory</div>
+    <div class="stage-content">
+      <div class="node-row">
+        <div class="node node--mem">
+          <span class="node-name">load_history(limit=10)</span>
+          <span class="node-file">memory/conversation.py</span>
+          <span class="node-desc">Postgres → last 10 messages</span>
+        </div>
+        <div class="node node--mem">
+          <span class="node-name">load_user_memory(max=5)</span>
+          <span class="node-file">memory/reader.py</span>
+          <span class="node-desc">Postgres → preference items</span>
+        </div>
+        <div class="node node--mem" style="opacity:.65">
+          <span class="node-name">retrieve_similar() <span class="badge badge--warn">first turn</span></span>
+          <span class="node-file">memory/episodic.py</span>
+          <span class="node-desc">Qdrant → top-3 past episodes</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pipe"><div class="pipe-line"></div></div>
+
+  <!-- 4. ROUTER -->
+  <div class="stage stage--route">
+    <div class="stage-label">Router</div>
+    <div class="stage-content">
+      <div class="node-row" style="margin-bottom:10px">
+        <div class="node node--route">
+          <span class="node-name">classify_hybrid(query) <span class="badge badge--warn">hybrid</span></span>
+          <span class="node-file">agents/query_router.py:236</span>
+          <span class="node-desc">keyword-first · LLM fallback on uncertain → RouterResult{intent, ticker}</span>
+        </div>
+      </div>
+
+      <!-- hybrid flow diagram -->
+      <div class="hybrid-flow">
+        <div class="hf-step hf-step--kw">
+          <div class="hf-step-label">Step 1 · always</div>
+          <div class="hf-step-name">classify(query)</div>
+          <div class="hf-step-file">query_router.py:172 · &lt;1ms · no LLM</div>
+        </div>
+        <div class="hf-arrow">→</div>
+        <div class="hf-branch">
+          <div class="hf-branch-title">fallback triggers</div>
+          <div class="hf-branch-row">
+            <div class="hf-trigger">intent == <b>conversation</b></div>
+            <div class="hf-or">or</div>
+            <div class="hf-trigger">intent == <b>technical_analysis</b><br><span style="opacity:.7">reason ends with "default"</span><br><span style="opacity:.55;font-size:9.5px">(ticker found, no intent keyword)</span></div>
+          </div>
+          <div class="hf-also">+ query ≥ 3 words</div>
+        </div>
+        <div class="hf-arrow hf-arrow--llm">→ LLM</div>
+        <div class="hf-step hf-step--llm">
+          <div class="hf-step-label">Step 2 · conditional</div>
+          <div class="hf-step-name">llm_classify(query)</div>
+          <div class="hf-step-file">agents/llm_router.py:76 · tool-call</div>
+        </div>
+      </div>
+
+      <div class="inline-note" style="margin-top:10px">
+        <b>Keyword priority (high→low):</b> market_brief › investment_case › screening › news_sentiment › macro_sector › fundamentals › technical_analysis › price_action › conversation<br>
+        <b>Ticker:</b> regex <code>\b[A-Z]{2,5}\b</code> filtered (ROE, EPS, USD… in noise set) · keyword ticker preserved when LLM omits it<br>
+        <b>LLM result:</b> used only when non-conversation intent returned · any exception → silent fallback to keyword result
+      </div>
+    </div>
+  </div>
+
+  <div class="pipe"><div class="pipe-line"></div></div>
+
+  <!-- 5. INTENT DISPATCH -->
+  <div class="stage stage--dispatch">
+    <div class="stage-label">Dispatch</div>
+    <div class="stage-content">
+      <div class="dispatch-header">
+        <div class="node node--route">
+          <span class="node-name">_dispatch_intent(route, user_message, …) <span class="badge badge--trace">Langfuse span</span></span>
+          <span class="node-file">memory/turn_handler.py:198</span>
+        </div>
+        <span class="dispatch-arrow">→ routes to intent →</span>
+      </div>
+      <div class="intent-grid" id="intent-grid"></div>
+    </div>
+  </div>
+
+  <div class="pipe"><div class="pipe-line"></div></div>
+
+  <!-- 6. LLM -->
+  <div class="stage stage--llm">
+    <div class="stage-label">LLM</div>
+    <div class="stage-content">
+      <div class="llm-chain">
+        <div class="node node--llm">
+          <span class="node-name">create_client()</span>
+          <span class="node-file">llm/factory.py</span>
+          <span class="node-desc">reads LLM_PROVIDER from env</span>
+        </div>
+        <span class="llm-arrow">→</span>
+        <div class="provider-tag">DeepSeek API</div>
+        <span class="env-hint">LLM_PROVIDER=deepseek</span>
+        <span class="llm-arrow">→</span>
+        <div class="node node--llm">
+          <span class="node-name">client.generate()</span>
+          <span class="node-file">max_tokens=3000</span>
+          <span class="node-desc">agent intents (blocking)</span>
+        </div>
+        <div class="node node--llm">
+          <span class="node-name">client.stream()</span>
+          <span class="node-file">via thread+queue</span>
+          <span class="node-desc">conversation intent (SSE)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pipe"><div class="pipe-line"></div></div>
+
+  <!-- 7. POST-PROCESSING -->
+  <div class="stage stage--post">
+    <div class="stage-label">Post</div>
+    <div class="stage-content">
+      <div class="node-row">
+        <div class="node node--post">
+          <span class="node-name">save_turn()</span>
+          <span class="node-file">memory/conversation.py</span>
+          <span class="node-desc">Postgres → (user, assistant) row</span>
+        </div>
+        <div class="node node--post">
+          <span class="node-name">extract_preferences()</span>
+          <span class="node-file">memory/extractor.py</span>
+          <span class="node-desc">LLM → preference items, conf ≥ 0.7</span>
+        </div>
+        <div class="node node--post">
+          <span class="node-name">save_memory_item()</span>
+          <span class="node-file">memory/reader.py</span>
+          <span class="node-desc">Postgres → user memory table</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pipe"><div class="pipe-line"></div></div>
+
+  <!-- 8. SSE OUTPUT -->
+  <div class="stage stage--sse">
+    <div class="stage-label">Output</div>
+    <div class="stage-content">
+      <div class="sse-chips">
+        <div class="sse-chip">
+          <span class="sse-evt">event: status</span>
+          <span class="sse-data">{"step": "routing", "agent": "…"}</span>
+          <span class="sse-note">loading_history → routing → collecting_data → streaming</span>
+        </div>
+        <div class="sse-chip">
+          <span class="sse-evt">data</span>
+          <span class="sse-data">{"text": "…chunk…"}</span>
+          <span class="sse-note">one per report line</span>
+        </div>
+        <div class="sse-chip">
+          <span class="sse-evt">: heartbeat</span>
+          <span class="sse-data">(comment line)</span>
+          <span class="sse-note">every 15s while agent runs</span>
+        </div>
+        <div class="sse-chip">
+          <span class="sse-evt">event: done</span>
+          <span class="sse-data">{"saved": true, "length": N, "agent": "…"}</span>
+          <span class="sse-note">after save_turn() completes</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const INTENTS = [
+  {
+    id: 'price_action', label: 'price_action', short: 'Price',
+    color: '#4d88ff',
+    file: 'agents/intents/price_action.py',
+    tools: ['get_realtime_price(ticker)', 'get_historical_ohlcv(ticker, days=60)', 'query_ticker_foreign_net(ticker, today)'],
+    db: 'Postgres (foreign_flow table)',
+    llm: 'client.generate() — synthesizes realtime price, foreign net flow, volume vs MA20. Detects breakout / selloff / active-buy dominance.',
+    route: 'keywords: giá hiện tại, dòng tiền, khối ngoại, active buy, volume'
+  },
+  {
+    id: 'technical_analysis', label: 'technical', short: 'Technical',
+    color: '#4d88ff',
+    file: 'agents/intents/technical.py',
+    tools: ['get_historical_ohlcv(ticker, days=120)', 'compute RSI / MACD / EMA (pandas)', 'support/resistance detection'],
+    db: '—',
+    llm: 'client.generate() — RSI overbought/oversold, MACD crossover, MA20/MA50/MA200 alignment, trend direction.',
+    route: 'keywords: rsi, macd, kỹ thuật, xu hướng, support, resistance, breakout'
+  },
+  {
+    id: 'fundamentals', label: 'fundamentals', short: 'Fundament.',
+    color: '#4d88ff',
+    file: 'agents/intents/fundamentals.py',
+    tools: ['yfinance: yf.Ticker("{ticker}.VN").info', 'Postgres: financial_facts query (P/E, P/B, ROE, EPS)', 'get_realtime_price()'],
+    db: 'Postgres (financial_facts) + Yahoo Finance',
+    llm: 'client.generate() — valuation vs sector peers (banking/steel/tech/RE), balance sheet, revenue / profit growth.',
+    route: 'keywords: p/e, roe, bctc, doanh thu, lợi nhuận, định giá'
+  },
+  {
+    id: 'macro_sector', label: 'macro_sector', short: 'Macro',
+    color: '#f87040',
+    file: 'agents/intents/macro_sector.py',
+    tools: ['commodity price APIs (steel HRC, oil WTI/Brent)', 'USD/VND exchange rate', 'sector-specific data'],
+    db: '—',
+    llm: 'client.generate() — how macro factors (rates, FX, commodity) impact the ticker\'s sector.',
+    route: 'keywords: tỷ giá, dầu, thép, lãi suất, vĩ mô, macro'
+  },
+  {
+    id: 'news_sentiment', label: 'news_sentiment', short: 'News',
+    color: '#f87040',
+    file: 'agents/intents/news_sentiment.py',
+    tools: ['news API / Fireant scrape', 'community mentions (diễn đàn)', 'sentiment scoring'],
+    db: '—',
+    llm: 'client.generate() — news summary, bullish/bearish signals, community sentiment for ticker.',
+    route: 'keywords: tin tức, sentiment, cộng đồng, fireant, cafef'
+  },
+  {
+    id: 'investment_case', label: 'investment_case', short: 'Invest.',
+    color: '#f0a020',
+    file: 'agents/intents/investment_case.py',
+    tools: ['Calls ALL 5 intents sequentially:', 'price_action.run()', 'technical.run()', 'fundamentals.run()', 'macro_sector.run()', 'news_sentiment.run()'],
+    db: 'Postgres (financial_facts) + Yahoo Finance',
+    llm: 'client.generate() — synthesizes all 5 reports. Outputs: Bull Case (3 reasons), Bear Case (3 risks), verdict MUA/BÁN/NẮM GIỮ/TÍCH LŨY.',
+    route: 'keywords: nên mua, khuyến nghị, tổng hợp, investment case, bull case'
+  },
+  {
+    id: 'screening', label: 'screening', short: 'Screener',
+    color: '#30d470',
+    file: 'agents/intents/screening.py',
+    tools: ['SQL templates: _ROE_TOP_SQL, _REVENUE_TOP_SQL, _PROFIT_TOP_SQL', 'rag/qa.py → Postgres (custom queries)', 'financial_facts table, period=2024'],
+    db: 'Postgres (financial_facts, DISTINCT ON ticker)',
+    llm: 'client.generate() — formats screener results, adds context and commentary per ticker.',
+    route: 'keywords: lọc cổ phiếu, tìm cổ phiếu, top mã, cổ phiếu nào, mã nào · EN: which stocks, highest roe, top stocks, best stocks, rank stocks, find stocks'
+  },
+  {
+    id: 'qa_document', label: 'qa_document', short: 'QA Doc',
+    color: '#30d470',
+    file: 'rag/qa.py',
+    tools: ['Qdrant vector search (HPG BCTC chunks)', 'Postgres SQL (financial_facts)', 'chunk retrieval + re-rank'],
+    db: 'Qdrant (vector store) + Postgres',
+    llm: 'client.generate() — answers question from retrieved document chunks with citations.',
+    route: 'fallback from router when query is document-specific'
+  },
+  {
+    id: 'market_brief', label: 'market_brief', short: 'Market',
+    color: '#ae62f0',
+    file: 'agents/market_brief_graph.py',
+    tools: ['build_brief_graph() → LangGraph app', 'VNINDEX / VN30 data', 'top gainers/losers', 'sector breadth'],
+    db: '—',
+    llm: 'LangGraph multi-node: sequential LLM calls through graph nodes → full market report (VNINDEX + sectors + outlook).',
+    route: 'keywords: vnindex, thị trường hôm nay, ttck, thị trường chứng khoán'
+  },
+  {
+    id: 'conversation', label: 'conversation', short: 'Chat',
+    color: '#14cfc4',
+    file: 'memory/turn_handler.py',
+    tools: ['No tools — direct LLM stream', 'History + user memory injected into system prompt', 'Episodic context (first turn)'],
+    db: '—',
+    llm: 'client.stream() via thread+queue → SSE chunks. Memory-aware: preferences + episodic episodes in system prompt.',
+    route: 'fallback: no financial keyword matched AND not ticker-only default · LLM classify_hybrid() fires here → if LLM returns conversation, stream direct LLM'
+  }
+];
+
+// Build intent grid
+const grid = document.getElementById('intent-grid');
+INTENTS.forEach(intent => {
+  const card = document.createElement('div');
+  card.className = 'intent-card';
+  card.style.setProperty('--ic-color', intent.color);
+  card.dataset.id = intent.id;
+  card.innerHTML = `
+    <div class="ic-name"><span class="ic-dot"></span>${intent.short}</div>
+    <div class="ic-sub">${intent.id}</div>
+  `;
+  card.addEventListener('click', () => openDetail(intent, card));
+  grid.appendChild(card);
+});
+
+// Detail panel
+const panel = document.getElementById('detail-panel');
+const dpContent = document.getElementById('dp-content');
+let activeCard = null;
+
+function openDetail(intent, card) {
+  if (activeCard === card && panel.classList.contains('open')) {
+    closeDetail();
+    return;
+  }
+  if (activeCard) activeCard.classList.remove('active');
+  activeCard = card;
+  card.classList.add('active');
+
+  const toolsHtml = intent.tools.map(t => `<li>${t}</li>`).join('');
+  dpContent.innerHTML = `
+    <div class="dp-tag" style="background:color-mix(in srgb,${intent.color} 15%,transparent);color:${intent.color};border:1px solid color-mix(in srgb,${intent.color} 30%,transparent)">
+      ${intent.id}
+    </div>
+    <div class="dp-section">
+      <span class="dp-section-label">File</span>
+      <span class="dp-file">${intent.file}</span>
+    </div>
+    <div class="dp-section">
+      <span class="dp-section-label">Router trigger</span>
+      <span class="dp-route">${intent.route}</span>
+    </div>
+    <div class="dp-section">
+      <span class="dp-section-label">Tools called</span>
+      <ul class="dp-tool-list">${toolsHtml}</ul>
+    </div>
+    <div class="dp-section">
+      <span class="dp-section-label">LLM usage</span>
+      <div class="dp-llm-box">${intent.llm}</div>
+    </div>
+    <div class="dp-section">
+      <span class="dp-section-label">Storage / DB</span>
+      <div class="dp-db-box">${intent.db}</div>
+    </div>
+  `;
+
+  panel.classList.add('open');
+}
+
+function closeDetail() {
+  panel.classList.remove('open');
+  if (activeCard) { activeCard.classList.remove('active'); activeCard = null; }
+}
+
+document.getElementById('dp-close').addEventListener('click', closeDetail);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
+
+// Close panel when clicking outside (but not on intent cards or panel itself)
+document.addEventListener('click', e => {
+  if (!panel.contains(e.target) && !e.target.closest('.intent-card')) {
+    closeDetail();
+  }
+});
+
+// Theme toggle
+const themeBtn = document.getElementById('theme-btn');
+let theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+
+function applyTheme(t) {
+  theme = t;
+  document.documentElement.setAttribute('data-theme', t);
+  themeBtn.textContent = t === 'dark' ? '☀ Light' : '☾ Dark';
+}
+
+themeBtn.addEventListener('click', () => applyTheme(theme === 'dark' ? 'light' : 'dark'));
+</script>

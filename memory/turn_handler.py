@@ -89,7 +89,7 @@ def run_turn(
     response = client.generate(
         messages=lm_messages,
         system=system_prompt,
-        max_tokens=3000,
+        max_tokens=3500,
     )
     assistant_reply = response.text.strip()
 
@@ -294,7 +294,7 @@ async def stream_turn(
             episodes = []
 
     # ── Route query ───────────────────────────────────────────────────────────
-    from agents.query_router import classify as route_classify
+    from agents.query_router import classify_hybrid as route_classify
     route = route_classify(user_message)
 
     yield _sse_status("routing", agent=route.intent, reason=route.reason,

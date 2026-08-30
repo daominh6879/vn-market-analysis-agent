@@ -65,6 +65,12 @@ _SCREENING_KW = frozenset({
     "tích lũy ngành", "cổ phiếu ngành",
     "screen", "screener", "lọc theo",
     "tất cả mã", "toàn bộ mã", "nhiều mã",
+    # English screening patterns (multi-stock queries)
+    "which stocks", "what stocks", "find stocks", "list stocks",
+    "stocks with highest", "stocks with lowest", "stocks have",
+    "companies with highest", "companies with lowest",
+    "highest roe", "highest roa", "highest eps",
+    "top stocks", "best stocks", "rank stocks",
 })
 
 _NEWS_KW = frozenset({
@@ -220,3 +226,55 @@ def classify(query: str) -> RouterResult:
 
     # 11. Fallback
     return RouterResult("conversation", None, "no financial intent detected")
+
+
+# ── Hybrid classifier ─────────────────────────────────────────────────────────
+
+_LLM_FALLBACK_MIN_WORDS = 3
+
+
+def classify_hybrid(query: str, client=None) -> RouterResult:
+    """Keyword-first router with LLM fallback on uncertain 'conversation' results.
+
+    Only fires LLM when:
+      1. Keyword router returns 'conversation'
+      2. Query has >= 3 words (skip pure greetings like "xin chào")
+
+    LLM result is used only when it returns a non-conversation intent.
+    Any LLM failure silently falls back to the keyword result.
+    Pass client= to inject a mock in tests.
+    """
+    result = classify(query)
+
+    # Two uncertain cases warrant LLM:
+    # 1. No financial signal at all → 'conversation'
+    # 2. Ticker found but no intent keyword → 'technical_analysis' via ticker-only default
+    #    (e.g. "Is HPG worth buying?" → ticker HPG default → should be investment_case)
+    _is_ticker_default = (
+        result.intent == "technical_analysis"
+        and result.reason.endswith("default")
+    )
+    if result.intent != "conversation" and not _is_ticker_default:
+        return result
+    if len(query.split()) < _LLM_FALLBACK_MIN_WORDS:
+        return result
+    try:
+        from agents.llm_router import INTENTS as _LLM_INTENTS, llm_classify
+        llm_result = llm_classify(query, client=client)
+        if (
+            llm_result
+            and llm_result.intent != "conversation"
+            and llm_result.intent in _LLM_INTENTS
+        ):
+            # Preserve ticker from keyword result when LLM did not extract one.
+            # Keyword regex is more reliable for ALL-CAPS ticker detection.
+            if llm_result.ticker is None and result.ticker is not None:
+                return RouterResult(
+                    intent=llm_result.intent,
+                    ticker=result.ticker,
+                    reason=llm_result.reason,
+                )
+            return llm_result
+    except Exception:
+        pass
+    return result
