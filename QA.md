@@ -668,3 +668,80 @@ arch_c v2 dùng `query_interpreter.interpret()` — structured output có `years
 
 ---
 
+## Bài 32 — Cache: đúng và sai ở đâu
+
+**Flow — 2-tier cache trong `stream_turn`:**
+
+```
+User message (turn_handler.stream_turn)
+     │
+     ▼
+load_history(conversation_id)
+     │
+     ├─ len(history) > 0? ──────────────────────────────► SKIP cache
+     │                                                     (turn 2+, history ≠ empty)
+     ▼
+route_classify(message) → route.ticker, route.intent
+     │
+     ▼
+make_cache_key(tenant_id, message, ticker, history=[])
+     │
+     ▼  CacheKey { tenant_id · intent · ticker · normalized_question* · prompt_version · model_version }
+        * normalized_question = "" for pure-tool intents (price_action, technical_analysis, ...)
+          normalized_question = question text for RAG intents (fundamentals, qa_document, screening)
+     │
+     ├──► Tier 1 — Exact (Redis)
+     │         key: cache:b32:exact:SHA256(CacheKey)
+     │         Hit ────────────────────────────────────► SSE cache_hit{tier=exact}
+     │         Miss ↓                                    stream cached reply → done
+     │
+     └──► Tier 2 — Vector (Qdrant: cache_vectors)
+               embed(normalized_question) → cosine ≥ 0.92
+               For each result:
+                 payload.ticker     == ck.ticker?    ← HPG/HSG guard
+                 payload.tenant_id  == ck.tenant_id?
+                 payload.expires_at  > now?
+               Hit ─────────────────────────────────► SSE cache_hit{tier=vector}
+               Miss ↓                                  stream cached reply → done
+
+     ▼ (miss both tiers)
+Agent / LLM runs (tools, graph, etc.)
+     │
+     ▼
+cache_set(ck, reply)
+     ├─ Redis SET key reply EX=ttl          (ttl: 120s market hours, 1800s otherwise)
+     └─ Qdrant upsert {vector, payload}
+```
+
+---
+
+**Q: Tại sao không cache theo `conversation_id`?**
+
+**A:** Cùng câu hỏi ở turn 2 của hai conversation khác nhau có history khác nhau → LLM nhận context khác → kết quả khác. Cache cross-conversation bằng `conversation_id` sẽ trả kết quả của conversation A cho conversation B — sai. `CacheKey` không có `conversation_id`; thay vào đó `make_cache_key` trả `None` khi `len(history) > 0`, bỏ qua cache hoàn toàn cho turn 2+.
+
+---
+
+**Q: Tại sao vector cache cần ticker guard, chỉ dùng cosine threshold không đủ?**
+
+**A:** HPG và HSG cùng ngành thép, câu hỏi "doanh thu năm 2024" cho hai mã này có cosine similarity > 0.92 — vượt threshold. Nếu chỉ dùng threshold thuần túy, query HSG có thể nhận reply HPG. Với dữ liệu tài chính, nhầm mã = sai số liệu = mất tin tưởng. Guard: `payload.ticker == ck.ticker` phải khớp trước khi trả về.
+
+---
+
+**Q: Tại sao TTL ngắn hơn trong giờ giao dịch?**
+
+**A:** 9:00–14:45 ngày thường, giá cổ phiếu, dòng tiền, khối lượng thay đổi từng phút. Cache 30 phút trong giờ giao dịch → trả giá cũ 30 phút → người dùng ra quyết định sai. TTL 120s = 2 phút là đủ giảm LLM calls mà không trả dữ liệu quá cũ. Ngoài giờ TT dữ liệu ổn định → 1800s hợp lý.
+
+---
+
+**Q: Thay prompt thì cache cũ có bị ảnh hưởng không? Làm sao invalidate?**
+
+**A:** `prompt_version` là một phần của `CacheKey`. Thay `CACHE_PROMPT_VERSION=v1` → `v2` trong `.env` → SHA-256 hash khác → toàn bộ exact cache cũ tự miss. Vector cache cũng miss vì guard `payload.prompt_version == ck.prompt_version`. Không cần flush Redis hay Qdrant thủ công.
+
+---
+
+**Q: Nếu Redis down, cache có làm crash agent không?**
+
+**A:** Không. `get_exact` và `set_exact` bắt mọi exception và trả `None` / pass. Cache miss là graceful degradation — agent vẫn chạy bình thường, chỉ chậm hơn (không có cache). Tương tự với Qdrant trong tier 2.
+
+---
+

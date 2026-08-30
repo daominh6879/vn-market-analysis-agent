@@ -14,12 +14,11 @@ from agents.query_router import RouterResult
 INTENTS = (
     "price_action",
     "technical_analysis",
-    "fundamentals",
+    "rag_qa",
     "macro_sector",
     "news_sentiment",
     "investment_case",
     "screening",
-    "qa_document",
     "market_brief",
     "conversation",
 )
@@ -31,20 +30,36 @@ Classify the user's message into exactly one intent:
 
   price_action        — current price, foreign flow, volume, active buy/sell pressure
   technical_analysis  — RSI, MACD, moving averages, support/resistance, chart patterns, trend
-  fundamentals        — P/E, P/B, ROE, EPS, revenue, profit, balance sheet, valuation vs peers
+  rag_qa              — P/E, P/B, ROE, EPS, revenue, profit, balance sheet, valuation, or any factual question about a company's financial report content
   macro_sector        — FX rates, oil/steel/commodity prices, interest rates, sector overview
   news_sentiment      — news, community sentiment, analyst commentary, market buzz around a stock
   investment_case     — buy/sell/hold recommendation, bull/bear thesis, comprehensive analysis
   screening           — filter or rank stocks by a criterion across many tickers
-  qa_document         — specific factual question about a company's financial report content
   market_brief        — overall market overview: VNINDEX/VN30 breadth, gainers/losers, session recap
   conversation        — general chat, greeting, or clearly non-financial question
 
 Rules:
 - A ticker alone with no other signal → technical_analysis
+- "phân tích X" / "analyze X" / "phân tích X hôm nay" where X is a company or ticker → technical_analysis
 - "should I buy / worth buying / good investment?" → investment_case
-- "what is [metric]?" about a specific company → fundamentals or qa_document
+- "what is [metric]?" or "revenue/profit/P/E of X?" → rag_qa
 - English or mixed-language queries follow the same rules — look at meaning, not language
+- Time words ("hôm nay", "today", "tuần này") do NOT change intent — classify by the financial action, not the time
+- If the query mentions a Vietnamese company by name (not ticker), resolve it to its ticker symbol.
+  Common mappings (not exhaustive — use your knowledge for others):
+  Hòa Phát / tập đoàn Hòa Phát → HPG
+  Vinamilk / sữa Vinamilk → VNM
+  VPBank / Ngân hàng Thịnh Vượng / Việt Nam Thịnh Vượng → VPB
+  Vietcombank / ngân hàng ngoại thương → VCB
+  Techcombank → TCB
+  FPT / tập đoàn FPT → FPT
+  Masan → MSN
+  Vinhomes / Vingroup → VHM / VIC
+  Thế Giới Di Động / TGDĐ → MWG
+  Hoa Sen → HSG
+  Nam Kim → NKG
+  PetroVietnam Gas → GAS
+  Sabeco / bia Sài Gòn → SAB
 
 Call the classify_intent tool."""
 
@@ -61,14 +76,20 @@ _TOOL = {
             },
             "ticker": {
                 "type": "string",
-                "description": "Stock ticker symbol if present (e.g. HPG, VNM, FPT). Omit if none.",
+                "description": (
+                    "Stock ticker symbol (2-5 uppercase letters). "
+                    "If the query mentions a company by name, resolve it to ticker "
+                    "(e.g. 'Vinamilk' → 'VNM', 'Hòa Phát' → 'HPG', "
+                    "'Ngân hàng Thịnh Vượng' → 'VPB', 'Vietcombank' → 'VCB'). "
+                    "Use empty string if no company mentioned."
+                ),
             },
             "reason": {
                 "type": "string",
                 "description": "One sentence explaining the classification.",
             },
         },
-        "required": ["intent", "reason"],
+        "required": ["intent", "ticker", "reason"],
     },
 }
 
@@ -108,10 +129,20 @@ def llm_classify(query: str, client=None) -> RouterResult | None:
             )
 
         # Graceful text-scan fallback when tool_calls absent
-        text = resp.text.strip().lower()
+        import re as _re
+        text = resp.text.strip()
+        text_lower = text.lower()
         for intent in INTENTS:
-            if intent in text:
-                return RouterResult(intent=intent, ticker=None, reason="llm:text_scan")
+            if intent in text_lower:
+                # Try to extract ticker from LLM response text (e.g. "ticker: VPB" or bare "VPB")
+                from agents.query_router import _VN_NOISE
+                ticker_fallback = None
+                for m in _re.finditer(r"\b([A-Z]{2,5})\b", text):
+                    t = m.group(1)
+                    if t not in _VN_NOISE and t not in ("INTENTS", "SSE"):
+                        ticker_fallback = t
+                        break
+                return RouterResult(intent=intent, ticker=ticker_fallback, reason="llm:text_scan")
 
     except Exception:
         pass

@@ -143,19 +143,19 @@ def test_classify_ticker_alone_defaults_technical():
 
 def test_classify_fundamentals_pe():
     r = classify("P/E của HPG hiện tại so với trung bình ngành thế nào?")
-    assert r.intent == "fundamentals", f"got {r.intent}: {r.reason}"
+    assert r.intent == "rag_qa", f"got {r.intent}: {r.reason}"
     assert r.ticker == "HPG"
 
 
 def test_classify_fundamentals_revenue():
     r = classify("doanh thu HPG năm 2024 là bao nhiêu?")
-    assert r.intent == "fundamentals", f"got {r.intent}: {r.reason}"
+    assert r.intent == "rag_qa", f"got {r.intent}: {r.reason}"
 
 
 def test_classify_fundamentals_roe():
     # ROE is in _VN_NOISE so won't be ticker; but "roe" keyword hits _FUNDAMENTALS_KW
     r = classify("ROE của VCB năm ngoái là bao nhiêu?")
-    assert r.intent == "fundamentals", f"got {r.intent}: {r.reason}"
+    assert r.intent == "rag_qa", f"got {r.intent}: {r.reason}"
 
 
 # ── Nhóm 4: macro_sector ─────────────────────────────────────────────────────
@@ -313,7 +313,7 @@ def test_route_fundamentals_real():
     print(f"Reply: {reply[:300]}")
 
     assert routing is not None
-    assert routing.get("agent") == "fundamentals", f"wrong intent: {routing}"
+    assert routing.get("agent") == "rag_qa", f"wrong intent: {routing}"
     assert done is not None
     assert len(reply) > 20
 

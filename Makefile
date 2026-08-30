@@ -1,4 +1,4 @@
-.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-fetch-ticker news-backfill news-reindex test-sentiment mcp-server mcp-inspect test-tools test-chaos migrate-b28 test-b28 api-b28 test-b30 eval-b30 eval-b30-notes test-b31 api-b31 curl-stream-b31 ui-b31 ui-chainlit ui-react
+.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-fetch-ticker news-backfill news-reindex test-sentiment mcp-server mcp-inspect test-tools test-chaos migrate-b28 test-b28 api-b28 test-b30 eval-b30 eval-b30-notes test-b31 api-b31 curl-stream-b31 ui-b31 ui-chainlit ui-react test-b32 test-b32-unit api-b32
 
 up:
 	docker compose up -d
@@ -241,3 +241,13 @@ ui-chainlit:
 ui-react:
 	@echo "Requires API on :8031 — run 'make api-b31' in another terminal first"
 	cd ui\react && npm run dev
+
+# Bài 32 — Cache
+test-b32:
+	pytest tests/test_bai32_cache.py -v -s
+
+test-b32-unit:
+	pytest tests/test_bai32_cache.py -v -k "not real"
+
+api-b32:
+	python -m uvicorn api.main:app --reload --port 8032

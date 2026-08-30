@@ -20,10 +20,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import threading
 from typing import AsyncIterator
 
 import uuid
+
+log = logging.getLogger(__name__)
 
 from langfuse import observe
 
@@ -70,6 +73,15 @@ def run_turn(
     history = load_history(conversation_id, limit=10)
     user_memory = load_user_memory(user_id, tenant_id, max_items=5)
 
+    # ── Cache check (conversation path only; no routing here) ─────────────────
+    from core.cache import make_cache_key, cache_get, cache_set
+    _ck = make_cache_key(tenant_id, user_message, "", "conversation", history)
+    if _ck is not None:
+        cached_reply, _tier = cache_get(_ck)
+        if cached_reply:
+            save_turn(conversation_id, user_message, cached_reply)
+            return cached_reply
+
     # Inject episodic context only on first turn of a new conversation
     episodes: list[dict] = []
     if is_first_turn:
@@ -95,6 +107,10 @@ def run_turn(
 
     # Persist turn
     save_turn(conversation_id, user_message, assistant_reply)
+
+    # Cache set (only turn 1)
+    if _ck is not None:
+        cache_set(_ck, assistant_reply)
 
     # Extract preferences from this turn only (run AFTER turn completes)
     turn_messages = [
@@ -219,7 +235,26 @@ def _dispatch_intent(
     except Exception:
         pass
 
-    ticker = route.ticker or "HPG"
+    try:
+        from langfuse import get_client
+        get_client().update_current_trace(metadata={
+            "intent": route.intent, "ticker": route.ticker,
+            "request_id": rid, "cache_hit": False, "cache_tier": "miss",
+        })
+    except Exception:
+        pass
+
+    # Intents that require a ticker must have one — refuse clearly rather than defaulting.
+    _TICKER_REQUIRED = {
+        "price_action", "technical_analysis", "rag_qa",
+        "news_sentiment", "investment_case",
+    }
+    ticker = route.ticker
+    if ticker is None and route.intent in _TICKER_REQUIRED:
+        return (
+            "Bạn đang hỏi về mã cổ phiếu nào? "
+            "Vui lòng nêu rõ mã (ví dụ: HPG, VNM, FPT) hoặc tên công ty."
+        )
 
     if route.intent == "price_action":
         from agents.intents.price_action import run
@@ -229,9 +264,9 @@ def _dispatch_intent(
         from agents.intents.technical import run
         return run(ticker, user_message)
 
-    if route.intent == "fundamentals":
-        from agents.intents.fundamentals import run
-        return run(route.ticker, user_message)
+    if route.intent == "rag_qa":
+        from rag.qa import answer as qa_answer
+        return qa_answer(user_message, ticker=ticker)
 
     if route.intent == "macro_sector":
         from agents.intents.macro_sector import run
@@ -248,10 +283,6 @@ def _dispatch_intent(
     if route.intent == "screening":
         from agents.intents.screening import run
         return run(route.ticker, user_message)
-
-    if route.intent == "qa_document":
-        from rag.qa import answer as qa_answer
-        return qa_answer(user_message, ticker=route.ticker)
 
     return ""
 
@@ -302,11 +333,39 @@ async def stream_turn(
 
     assistant_reply = ""
 
+    # ── Cache check (first turn only; intent + ticker from router) ──────────────
+    from core.cache import make_cache_key, cache_get, cache_set
+    _ck = make_cache_key(tenant_id, user_message, route.ticker or "", route.intent, history)
+    if _ck is not None:
+        _cached_reply, _cache_tier = cache_get(_ck)
+        if _cached_reply:
+            log.info("cache.hit conv=%s intent=%s ticker=%s tier=%s",
+                     conversation_id[:8], route.intent, route.ticker, _cache_tier)
+            try:
+                from langfuse import get_client
+                get_client().update_current_trace(metadata={
+                    "intent": route.intent, "ticker": route.ticker,
+                    "cache_hit": True, "cache_tier": _cache_tier,
+                })
+            except Exception:
+                pass
+            yield _sse_status("cache_hit", tier=_cache_tier, ticker=route.ticker)
+            for line in _cached_reply.split("\n"):
+                yield _sse_chunk(line + "\n")
+            try:
+                save_turn(conversation_id, user_message, _cached_reply)
+            except Exception:
+                pass
+            yield _sse_done(len(_cached_reply), f"{route.intent}:cache")
+            return
+        log.debug("cache.miss conv=%s intent=%s ticker=%s",
+                  conversation_id[:8], route.intent, route.ticker)
+
     # ── All intent paths (traced via _dispatch_intent) ───────────────────────
     _AGENT_INTENTS = {
-        "price_action", "technical_analysis", "fundamentals",
+        "price_action", "technical_analysis", "rag_qa",
         "macro_sector", "news_sentiment", "investment_case",
-        "screening", "qa_document",
+        "screening",
     }
     _MARKET_BRIEF_INTENTS = {"market_brief"}
 
@@ -386,6 +445,19 @@ async def stream_turn(
 
     if not assistant_reply:
         return
+
+    # ── Cache set (first turn only, after agent reply) ────────────────────────
+    # Skip caching when reply is a clarification (ticker=None on ticker-required intent).
+    # Clarification text is ephemeral — wrong to serve it to a different query.
+    _TICKER_REQUIRED_SET = {
+        "price_action", "technical_analysis", "rag_qa",
+        "news_sentiment", "investment_case",
+    }
+    _is_clarification = (
+        route.ticker is None and route.intent in _TICKER_REQUIRED_SET
+    )
+    if _ck is not None and not _is_clarification:
+        cache_set(_ck, assistant_reply)
 
     # ── Persist + extract preferences (all paths) ─────────────────────────────
     try:

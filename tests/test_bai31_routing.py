@@ -116,7 +116,7 @@ def test_classify_market_brief_vnindex():
 
 def test_classify_qa_document():
     r = classify("doanh thu HPG năm 2024 là bao nhiêu?")
-    assert r.intent == "fundamentals"  # qa_document split → fundamentals
+    assert r.intent == "rag_qa"
     assert r.ticker == "HPG"
 
 

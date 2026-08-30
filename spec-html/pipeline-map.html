@@ -1,0 +1,968 @@
+<title>ai-engineer Pipeline</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+:root {
+  --bg: #060D1A;
+  --sf: #0A1525;
+  --sf2: #0F1E34;
+  --bd: #182B42;
+  --bd2: #223A54;
+  --tx: #BDD0EA;
+  --tx2: #5E7C9A;
+  --tx3: #314E66;
+
+  --c: #22C55E;  --cd: rgba(34,197,94,.11);
+  --p: #F59E0B;  --pd: rgba(245,158,11,.11);
+  --m: #FB923C;  --md: rgba(251,146,60,.11);
+  --q: #A78BFA;  --qd: rgba(167,139,250,.11);
+  --g: #38BDF8;  --gd: rgba(56,189,248,.11);
+  --r: #F87171;  --rd: rgba(248,113,113,.07);
+  --a: #34D399;  --ad: rgba(52,211,153,.11);
+
+  --sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', 'Cascadia Code', monospace;
+  --disp: 'Syne', 'IBM Plex Sans', sans-serif;
+  --rad: 8px;
+  --rad-s: 5px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #ECF1FA;
+    --sf: #FFFFFF;
+    --sf2: #E4EBF7;
+    --bd: #C3D2E8;
+    --bd2: #A5BADA;
+    --tx: #091628;
+    --tx2: #426080;
+    --tx3: #7A99B8;
+    --cd: rgba(22,163,74,.1);
+    --pd: rgba(217,119,6,.1);
+    --md: rgba(234,88,12,.1);
+    --qd: rgba(124,58,237,.1);
+    --gd: rgba(14,165,233,.1);
+    --rd: rgba(220,38,38,.06);
+    --ad: rgba(16,185,129,.1);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #060D1A; --sf: #0A1525; --sf2: #0F1E34;
+  --bd: #182B42; --bd2: #223A54;
+  --tx: #BDD0EA; --tx2: #5E7C9A; --tx3: #314E66;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--tx);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* ── layout wrapper ── */
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 44px; }
+
+/* ── header ── */
+.hdr {
+  padding: 52px 44px 36px;
+  max-width: 1200px;
+  margin: 0 auto;
+  border-bottom: 1px solid var(--bd);
+}
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--tx2);
+  margin-bottom: 14px;
+}
+.hdr h1 {
+  font-family: var(--disp);
+  font-size: clamp(26px, 3.5vw, 44px);
+  font-weight: 800;
+  color: var(--tx);
+  text-wrap: balance;
+  line-height: 1.1;
+  margin-bottom: 10px;
+}
+.hdr .sub {
+  color: var(--tx2);
+  font-size: 14px;
+  max-width: 64ch;
+}
+
+/* ── overview strip ── */
+.overview {
+  padding: 36px 44px;
+  max-width: 1200px;
+  margin: 0 auto;
+  border-bottom: 1px solid var(--bd);
+}
+.strip-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--tx3);
+  margin-bottom: 18px;
+}
+.flow-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.fp {
+  flex: 1;
+  min-width: 185px;
+  background: var(--sf);
+  border: 1px solid var(--bd);
+  padding: 18px 16px;
+  cursor: default;
+  transition: border-color .15s;
+}
+.fp:first-child { border-radius: var(--rad) 0 0 var(--rad); }
+.fp:last-child  { border-radius: 0 var(--rad) var(--rad) 0; }
+.fp:not(:first-child) { border-left: none; }
+.fp:hover { border-color: var(--bd2); }
+.fa {
+  display: flex;
+  align-items: center;
+  padding: 0 2px;
+  flex-shrink: 0;
+  color: var(--tx3);
+  font-size: 16px;
+  align-self: center;
+  user-select: none;
+}
+.tag-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  margin-bottom: 9px;
+}
+.tc { background: var(--cd); color: var(--c); }
+.tp { background: var(--pd); color: var(--p); }
+.tm { background: var(--md); color: var(--m); }
+.tq { background: var(--qd); color: var(--q); }
+.tg { background: var(--gd); color: var(--g); }
+.ta { background: var(--ad); color: var(--a); }
+.tr { background: var(--rd); color: var(--r); }
+
+.fp h3 {
+  font-family: var(--disp);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tx);
+  margin-bottom: 9px;
+}
+.fp-items { display: flex; flex-direction: column; gap: 5px; }
+.fp-item {
+  font-size: 11.5px;
+  color: var(--tx2);
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  line-height: 1.4;
+}
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+/* ── phase sections ── */
+.phase-sec {
+  padding: 44px 44px;
+  max-width: 1200px;
+  margin: 0 auto;
+  border-bottom: 1px solid var(--bd);
+}
+.sec-hdr {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+.sec-hdr h2 {
+  font-family: var(--disp);
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--tx);
+}
+.sec-desc { font-size: 12.5px; color: var(--tx2); margin-bottom: 22px; line-height: 1.5; }
+
+/* card grid */
+.cgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.cgrid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+@media (max-width: 860px) { .cgrid-3 { grid-template-columns: 1fr; } }
+
+.card {
+  background: var(--sf);
+  border: 1px solid var(--bd);
+  border-radius: var(--rad);
+  padding: 16px 18px;
+  transition: border-color .15s;
+}
+.card:hover { border-color: var(--bd2); }
+
+.ch { display: flex; align-items: center; justify-content: space-between; margin-bottom: 11px; gap: 8px; }
+.ct { font-size: 12.5px; font-weight: 600; color: var(--tx); }
+
+.badge {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--bd);
+  background: var(--sf2);
+  color: var(--tx2);
+  white-space: nowrap;
+}
+
+.dl { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.dl li {
+  font-size: 12px;
+  color: var(--tx2);
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  line-height: 1.45;
+}
+.dl li::before {
+  content: '–';
+  color: var(--tx3);
+  flex-shrink: 0;
+}
+
+.mono { font-family: var(--mono); font-size: 10.5px; }
+
+.chip {
+  display: inline-block;
+  background: var(--sf2);
+  border: 1px solid var(--bd);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--tx2);
+  margin: 1px 0;
+}
+
+/* ── process pipeline strip ── */
+.proc-strip {
+  display: flex;
+  overflow-x: auto;
+  align-items: stretch;
+  padding-bottom: 4px;
+  border-radius: var(--rad);
+  border: 1px solid var(--bd);
+  background: var(--sf);
+  margin-bottom: 14px;
+}
+.step {
+  flex: 1;
+  min-width: 155px;
+  padding: 15px 15px;
+  position: relative;
+  border-right: 1px solid var(--bd);
+}
+.step:last-child { border-right: none; }
+
+.step-n {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--tx3);
+  margin-bottom: 5px;
+}
+.step-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tx);
+  margin-bottom: 7px;
+}
+.step-body { font-size: 11px; color: var(--tx2); line-height: 1.5; }
+
+/* ── store 3-col ── */
+.store-grid { display: grid; grid-template-columns: 200px 1fr 2fr; gap: 14px; }
+@media (max-width: 860px) { .store-grid { grid-template-columns: 1fr; } }
+
+.store-card {
+  background: var(--sf);
+  border: 1px solid var(--bd);
+  border-radius: var(--rad);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.store-hdr {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--bd);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.store-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.store-name {
+  font-family: var(--disp);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--tx);
+}
+.store-tag { font-size: 11px; color: var(--tx2); }
+.store-body { padding: 14px 16px; flex: 1; }
+
+/* collection items */
+.coll-item {
+  background: var(--sf2);
+  border: 1px solid var(--bd);
+  border-radius: var(--rad-s);
+  padding: 9px 11px;
+  margin-bottom: 9px;
+  transition: border-color .15s;
+}
+.coll-item:hover { border-color: var(--bd2); }
+.coll-name { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--tx); margin-bottom: 4px; }
+.coll-desc { font-size: 11px; color: var(--tx2); line-height: 1.45; }
+
+/* postgres table groups */
+.tg-block { margin-bottom: 14px; }
+.tg-label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--tx3);
+  margin-bottom: 6px;
+}
+.tg-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.tbl-chip {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: var(--rad-s);
+  background: var(--sf2);
+  border: 1px solid var(--bd);
+  color: var(--tx2);
+  cursor: default;
+  transition: border-color .15s, color .15s;
+  position: relative;
+}
+.tbl-chip:hover { border-color: var(--bd2); color: var(--tx); }
+
+/* tooltip */
+.tbl-chip .tip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--sf2);
+  border: 1px solid var(--bd2);
+  border-radius: var(--rad-s);
+  padding: 6px 9px;
+  font-family: var(--sans);
+  font-size: 10.5px;
+  color: var(--tx);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0,0,0,.3);
+}
+.tbl-chip:hover .tip { display: block; }
+
+/* ── retrieve section ── */
+.intent-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 9px; }
+.intent-chip {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 4px 8px;
+  border-radius: var(--rad-s);
+  background: var(--ad);
+  color: var(--a);
+  border: 1px solid transparent;
+  line-height: 1.3;
+}
+.node-seq { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.node-box {
+  padding: 5px 10px;
+  border-radius: var(--rad-s);
+  background: var(--sf2);
+  border: 1px solid var(--bd);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--tx2);
+}
+.node-arr { color: var(--tx3); font-size: 12px; }
+
+.mem-row { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.mem-item { display: flex; gap: 8px; align-items: flex-start; }
+.mem-key {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: var(--sf2);
+  border: 1px solid var(--bd);
+  color: var(--tx2);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.mem-val { font-size: 11px; color: var(--tx2); line-height: 1.4; padding-top: 2px; }
+
+/* ── footer / legend ── */
+.ftr {
+  padding: 22px 44px;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: center;
+}
+.leg-item { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--tx2); }
+.leg-dot { width: 8px; height: 8px; border-radius: 50%; }
+.ftr-note { font-family: var(--mono); font-size: 10px; color: var(--tx3); margin-left: auto; }
+</style>
+
+<!-- ═══════════════════════════════════════════════ HEADER -->
+<header class="hdr">
+  <div class="eyebrow">ai-engineer · Vietnamese Financial RAG System</div>
+  <h1>Data Pipeline Architecture</h1>
+  <p class="sub">How raw data is collected, processed, and stored in MinIO · Qdrant · Postgres — and how the agent retrieves it to answer financial questions.</p>
+</header>
+
+<!-- ═══════════════════════════════════════════════ OVERVIEW FLOW -->
+<section class="overview">
+  <div class="strip-label">Pipeline Stages</div>
+  <div class="flow-row">
+    <div class="fp">
+      <div class="tag-pill tc">Collect</div>
+      <h3>3 Source Groups</h3>
+      <div class="fp-items">
+        <div class="fp-item"><span class="dot" style="background:var(--c)"></span><span>PDF / BCTC reports via MinIO</span></div>
+        <div class="fp-item"><span class="dot" style="background:var(--c)"></span><span>News — CafeF, VnExpress, FireAnt</span></div>
+        <div class="fp-item"><span class="dot" style="background:var(--c)"></span><span>Market data — vnstock, VCI, SSI</span></div>
+      </div>
+    </div>
+    <div class="fa">›</div>
+    <div class="fp">
+      <div class="tag-pill tp">Process</div>
+      <h3>5 Steps (PDF only)</h3>
+      <div class="fp-items">
+        <div class="fp-item"><span class="dot" style="background:var(--p)"></span><span>Parse → Markdown (OCR vie+eng)</span></div>
+        <div class="fp-item"><span class="dot" style="background:var(--p)"></span><span>Quality gate + quarantine</span></div>
+        <div class="fp-item"><span class="dot" style="background:var(--p)"></span><span>Chunk + embed bge-m3 1024-dim</span></div>
+      </div>
+    </div>
+    <div class="fa">›</div>
+    <div class="fp">
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px;">
+        <span class="tag-pill tm">MinIO</span>
+        <span class="tag-pill tq">Qdrant</span>
+        <span class="tag-pill tg">Postgres</span>
+      </div>
+      <h3>3 Storage Systems</h3>
+      <div class="fp-items">
+        <div class="fp-item"><span class="dot" style="background:var(--m)"></span><span>PDFs + Parsed Markdown</span></div>
+        <div class="fp-item"><span class="dot" style="background:var(--q)"></span><span>3 vector collections (1024-dim)</span></div>
+        <div class="fp-item"><span class="dot" style="background:var(--g)"></span><span>16 structured tables</span></div>
+      </div>
+    </div>
+    <div class="fa">›</div>
+    <div class="fp">
+      <div class="tag-pill ta">Retrieve &amp; Use</div>
+      <h3>Agent Layer</h3>
+      <div class="fp-items">
+        <div class="fp-item"><span class="dot" style="background:var(--a)"></span><span>Query router — 9 intents</span></div>
+        <div class="fp-item"><span class="dot" style="background:var(--a)"></span><span>22 registered tools</span></div>
+        <div class="fp-item"><span class="dot" style="background:var(--a)"></span><span>LangGraph 4-node agent</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ COLLECT -->
+<section class="phase-sec" id="collect">
+  <div class="sec-hdr">
+    <span class="tag-pill tc" style="margin-bottom:0">Collect</span>
+    <h2>Data Collection</h2>
+  </div>
+  <p class="sec-desc">Three distinct source groups, each with its own ingestion path and schedule. PDF reports trigger Dagster on MinIO upload; news and market data run on cron schedules.</p>
+  <div class="cgrid">
+
+    <!-- PDF -->
+    <div class="card">
+      <div class="ch">
+        <span class="ct">PDF / BCTC Reports</span>
+        <span class="badge">Event-driven</span>
+      </div>
+      <ul class="dl">
+        <li>PDF files uploaded to MinIO buckets <span class="chip">hpg-docs</span> <span class="chip">vcb-docs</span> <span class="chip">fpt-docs</span></li>
+        <li>Dagster sensor <span class="chip">minio_new_pdf_sensor</span> polls every 5 min via ETags → triggers <span class="chip">ingestion_job</span></li>
+        <li>Deleted PDF → <span class="chip">delete_job</span> soft-deletes from Qdrant + Postgres</li>
+        <li>3 parsers: <strong>pymupdf4llm</strong> (primary, Tesseract OCR vie+eng), <strong>pdfminer</strong> (fast), <strong>LlamaParse</strong> (cloud, requires API key)</li>
+        <li>→ Feeds PROCESS pipeline below</li>
+      </ul>
+    </div>
+
+    <!-- News -->
+    <div class="card">
+      <div class="ch">
+        <span class="ct">News Articles</span>
+        <span class="badge">Every 6h</span>
+      </div>
+      <ul class="dl">
+        <li><strong>CafeF RSS</strong> + <strong>VnExpress RSS</strong> — scrape full article body</li>
+        <li><strong>FireAnt API</strong> <span class="mono">(restv2.fireant.vn, type=1)</span> — per-ticker posts for all VN30 tickers</li>
+        <li><strong>CafeF per-ticker</strong> — search endpoint, up to 15 articles/ticker</li>
+        <li>Dedup: <span class="mono">ON CONFLICT (url) DO NOTHING</span></li>
+        <li>Ticker tagging via regex on title + body (no LLM)</li>
+        <li>→ <span class="chip">news_articles</span> table + <span class="chip">news_chunks</span> Qdrant collection</li>
+      </ul>
+    </div>
+
+    <!-- Market -->
+    <div class="card">
+      <div class="ch">
+        <span class="ct">Market &amp; Financial Data</span>
+        <span class="badge">Daily / Monthly</span>
+      </div>
+      <ul class="dl">
+        <li><strong>vnstock financials</strong> — annual BCTC via VCI source → <span class="chip">financial_facts</span> (1st/month 01:00)</li>
+        <li><strong>Stock prices</strong> — daily close via vnstock → <span class="chip">stock_prices</span> (weekdays 18:00)</li>
+        <li><strong>OHLCV</strong> — VN30 + index candles via VciDirectProvider → <span class="chip">ohlcv_daily</span></li>
+        <li><strong>Market indices</strong> — VNINDEX/HNX/UPCOM/VN30/HNX30 via SSI iBoard → <span class="chip">market_index_daily</span></li>
+        <li><strong>Foreign flows</strong> — per-ticker net buy/sell → <span class="chip">foreign_flows</span></li>
+        <li><strong>Corporate events</strong> — dividends, rights, AGM → <span class="chip">corporate_events</span></li>
+        <li><strong>Global quotes</strong> — world indices, commodities, crypto, FX, VN gold → <span class="chip">market_quotes</span></li>
+      </ul>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ PROCESS -->
+<section class="phase-sec" id="process">
+  <div class="sec-hdr">
+    <span class="tag-pill tp" style="margin-bottom:0">Process</span>
+    <h2>Processing Pipeline</h2>
+  </div>
+  <p class="sec-desc">Only PDF/BCTC data runs through the full processing pipeline. News goes directly to embed after scraping. Market data lands directly in Postgres as structured rows.</p>
+
+  <div class="proc-strip">
+    <div class="step">
+      <div class="step-n">01</div>
+      <div class="step-title">Parse</div>
+      <div class="step-body">
+        pymupdf4llm → Markdown<br>
+        OCR: Tesseract <span class="chip">vie+eng</span><br>
+        force_ocr=True<br><br>
+        Parsed .md saved to MinIO<br>
+        <span class="mono">parsed/{key}.md</span>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">02</div>
+      <div class="step-title">Quality Gate</div>
+      <div class="step-body">
+        <span class="mono">core/quality.py</span><br>
+        Checks char ratio,<br>
+        chars per page<br><br>
+        Fail → <span class="chip">quarantine_log</span><br>
+        table + skip indexing
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">03</div>
+      <div class="step-title">Chunk</div>
+      <div class="step-body">
+        <strong>structural</strong> (default)<br>
+        MarkdownTextSplitter →<br>
+        RecursiveSplitter, max 800<br><br>
+        <strong>fixed</strong>: size=512, overlap=64<br>
+        <strong>hierarchical</strong>: parent=1200<br>
+        child=400 (child indexed,<br>
+        parent retrieved)
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">04</div>
+      <div class="step-title">Metadata Prepend</div>
+      <div class="step-body">
+        Header prepended to<br>each chunk before embed:<br><br>
+        <span class="mono">[HPG | 2025 | standalone]</span><br><br>
+        Improves retrieval<br>
+        precision via payload
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-n">05</div>
+      <div class="step-title">Embed</div>
+      <div class="step-body">
+        Model: <strong>bge-m3</strong><br>
+        Dims: <strong>1024</strong>, cosine<br>
+        Via Ollama local<br>
+        <span class="mono">localhost:11434</span><br>
+        Batched: 20 chunks<br><br>
+        → Qdrant <span class="chip">bctc_structural</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Retrieval augmentation -->
+  <div class="cgrid" style="margin-top:14px;">
+    <div class="card">
+      <div class="ch"><span class="ct">Hybrid Retrieval Augmentations</span></div>
+      <ul class="dl">
+        <li><strong>BM25</strong> — loads all Qdrant chunks in memory, builds BM25Okapi index; Vietnamese tokenization via underthesea</li>
+        <li><strong>Multi-query</strong> — LLM reformulates question into N variants, retrieves each, deduplicates</li>
+        <li><strong>Cross-encoder reranker</strong> — reranks top candidates from vector search</li>
+        <li><strong>Fusion</strong> — weighted sum (alpha blend, both scores normalized to [0,1]) or RRF (k=60)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="ch"><span class="ct">SQL Agent Path</span></div>
+      <ul class="dl">
+        <li>LLM router classifies query: <span class="chip">diễn_giải</span> → RAG only; <span class="chip">số_liệu</span> → SQL only; <span class="chip">cả_hai</span> → both; <span class="chip">ngoài_phạm_vi</span> → refusal</li>
+        <li>SQL agent generates query → executes against Postgres: <span class="chip">financial_facts</span> <span class="chip">stock_prices</span> <span class="chip">ohlcv_daily</span></li>
+        <li>Structured numbers come from Postgres; narrative explanations come from Qdrant RAG</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ STORE -->
+<section class="phase-sec" id="store">
+  <div class="sec-hdr">
+    <span class="tag-pill" style="background:var(--sf2);color:var(--tx2);margin-bottom:0;border:1px solid var(--bd)">Store</span>
+    <h2>Storage Systems</h2>
+  </div>
+  <p class="sec-desc">Three complementary stores: MinIO holds raw files, Qdrant holds semantic vectors, Postgres holds structured relational data. Redis is the exact-match cache tier; Qdrant <span class="chip">cache_vectors</span> is the vector similarity tier — both wired into <span class="mono">turn_handler.py</span> as of Bài 32.</p>
+
+  <div class="store-grid">
+
+    <!-- MinIO -->
+    <div class="store-card" style="border:1px solid var(--md);">
+      <div class="store-hdr">
+        <div class="store-icon" style="background:var(--md);">🗄</div>
+        <div>
+          <div class="store-name">MinIO</div>
+          <div class="store-tag">Object storage · port 9000</div>
+        </div>
+      </div>
+      <div class="store-body">
+        <div class="coll-item" style="border-color:var(--md);">
+          <div class="coll-name" style="color:var(--m);">Raw PDF buckets</div>
+          <div class="coll-desc">One bucket per ticker: <span class="chip">hpg-docs</span> <span class="chip">vcb-docs</span> <span class="chip">fpt-docs</span>. Polled by Dagster sensor via ETags every 5 min.</div>
+        </div>
+        <div class="coll-item" style="border-color:var(--md);">
+          <div class="coll-name" style="color:var(--m);">Parsed Markdown</div>
+          <div class="coll-desc">Written by <span class="chip">parsed_doc</span> Dagster asset after pymupdf parsing. Path: <span class="mono">parsed/{key_without_.pdf}.md</span></div>
+        </div>
+        <div style="margin-top:12px;">
+          <div class="tg-label">Used by</div>
+          <ul class="dl">
+            <li>Dagster sensor: polls for new/changed/deleted PDFs</li>
+            <li>Ingestion pipeline: fget_object → tempfile → parse</li>
+            <li>put_object after parsing for markdown</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Qdrant -->
+    <div class="store-card" style="border:1px solid var(--qd);">
+      <div class="store-hdr">
+        <div class="store-icon" style="background:var(--qd);">⚡</div>
+        <div>
+          <div class="store-name">Qdrant</div>
+          <div class="store-tag">Vector DB · port 6333 · cosine</div>
+        </div>
+      </div>
+      <div class="store-body">
+        <div class="coll-item" style="border-color:var(--qd);">
+          <div class="coll-name" style="color:var(--q);">bctc_structural</div>
+          <div class="coll-desc">BCTC PDF chunks, bge-m3 1024-dim. Payload: ticker, sector, year, report_type, source_key, doc_id. Idempotent via SHA-256 doc_id + UUID5 chunk_id. Old chunks purged by source_uri before re-index.</div>
+        </div>
+        <div class="coll-item" style="border-color:var(--qd);">
+          <div class="coll-name" style="color:var(--q);">news_chunks</div>
+          <div class="coll-desc">News article embeddings. Payload: title, source, published_at, tickers, url. Filtered by DatetimeRange + ticker MatchAny. Purged >90 days weekly.</div>
+        </div>
+        <div class="coll-item" style="border-color:var(--qd);">
+          <div class="coll-name" style="color:var(--q);">episodic_memory</div>
+          <div class="coll-desc">Conversation episode summaries per user. Scored with exponential decay: score × exp(−days/30). Hard expiry 90 days. Top-3 retrieved on session start.</div>
+        </div>
+        <div class="coll-item" style="border-color:var(--rd);opacity:.85;">
+          <div class="coll-name" style="color:var(--r);">cache_vectors <span style="font-family:var(--sans);font-size:9.5px;opacity:.7;">· Bài 32</span></div>
+          <div class="coll-desc">Tier-2 vector cache. Each point: embed(normalized_question), payload {ticker, tenant_id, prompt_version, model_version, reply, expires_at}. Ticker guard prevents HPG/HSG cross-hit. Threshold cosine ≥ 0.92.</div>
+        </div>
+        <div style="margin-top:12px;">
+          <div class="tg-label">Tenant isolation</div>
+          <ul class="dl">
+            <li>tenant_id payload field + Qdrant Filter at query time — never post-filter</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Postgres -->
+    <div class="store-card" style="border:1px solid var(--gd);">
+      <div class="store-hdr">
+        <div class="store-icon" style="background:var(--gd);">🐘</div>
+        <div>
+          <div class="store-name">Postgres</div>
+          <div class="store-tag">Relational DB · ragdb · port 5432 · 16 tables</div>
+        </div>
+      </div>
+      <div class="store-body">
+
+        <div class="tg-block">
+          <div class="tg-label">Document tracking</div>
+          <div class="tg-chips">
+            <span class="tbl-chip">documents<span class="tip">Indexed BCTC PDFs — doc_id, status (active/deleted), source_uri, indexed_at. Soft-delete only.</span></span>
+            <span class="tbl-chip">quarantine_log<span class="tip">PDFs that failed quality gate — reason, char_ratio, chars_per_page.</span></span>
+          </div>
+        </div>
+
+        <div class="tg-block">
+          <div class="tg-label">Financial data</div>
+          <div class="tg-chips">
+            <span class="tbl-chip">financial_facts<span class="tip">Structured financial numbers — ticker, period, metric_code, value, unit. From vnstock API + PDF extraction. UNIQUE on (ticker, period, report_type, metric_code, source).</span></span>
+            <span class="tbl-chip">stock_prices<span class="tip">Daily close prices — ticker, trade_date, close_adj, volume. Updated weekdays 18:00.</span></span>
+          </div>
+        </div>
+
+        <div class="tg-block">
+          <div class="tg-label">News</div>
+          <div class="tg-chips">
+            <span class="tbl-chip">news_articles<span class="tip">Raw scraped news — url UNIQUE, title, body, source, published_at, tickers TEXT[]. indexed_at = NULL until embedded in Qdrant.</span></span>
+          </div>
+        </div>
+
+        <div class="tg-block">
+          <div class="tg-label">Market data</div>
+          <div class="tg-chips">
+            <span class="tbl-chip">ohlcv_daily<span class="tip">VN30 + index OHLCV candles. PK (ticker, date). Updated daily via VciDirectProvider.</span></span>
+            <span class="tbl-chip">market_index_daily<span class="tip">VNINDEX/HNX/UPCOM/VN30/HNX30 candles via SSI iBoard. PK (index_code, date).</span></span>
+            <span class="tbl-chip">securities<span class="tip">Master ticker universe — exchange, sector, industry, company_name, index_member TEXT[], is_active.</span></span>
+            <span class="tbl-chip">foreign_flows<span class="tip">Daily foreign net flows — buy_value, sell_value, net_value, buy/sell volumes. PK (ticker, date).</span></span>
+            <span class="tbl-chip">market_quotes<span class="tip">World indices, commodities, crypto, FX, VN gold — symbol, asset_class, date, value, change_pct, extra JSONB. PK (symbol, date).</span></span>
+            <span class="tbl-chip">corporate_events<span class="tip">Dividends, rights issues, AGM — ticker, event_type, ex_date, record_date, ratio, note.</span></span>
+          </div>
+        </div>
+
+        <div class="tg-block">
+          <div class="tg-label">Intelligence</div>
+          <div class="tg-chips">
+            <span class="tbl-chip">broker_views<span class="tip">LLM-extracted broker price targets from news — broker, ticker_or_index, stance, target, support, resistance.</span></span>
+          </div>
+        </div>
+
+        <div class="tg-block">
+          <div class="tg-label">Conversation memory</div>
+          <div class="tg-chips">
+            <span class="tbl-chip">conversations<span class="tip">Chat sessions — conversation_id UUID, user_id, tenant_id.</span></span>
+            <span class="tbl-chip">messages<span class="tip">Per-turn messages — conversation_id FK, role, content, seq BIGSERIAL. Last 10 turns read at session start.</span></span>
+            <span class="tbl-chip">user_memory<span class="tip">LLM-extracted user preferences — key/value, confidence, superseded_by chain.</span></span>
+          </div>
+        </div>
+
+        <div class="tg-block">
+          <div class="tg-label">Agent / LangGraph</div>
+          <div class="tg-chips">
+            <span class="tbl-chip">agent_sessions<span class="tip">Human-in-the-loop approval — session_id, ticker, state JSONB, status, expires_at (5 min TTL), audit_log.</span></span>
+            <span class="tbl-chip">lg_checkpoints<span class="tip">LangGraph checkpoint metadata — thread_id, checkpoint_ns, checkpoint_id (PK), binary blob.</span></span>
+            <span class="tbl-chip">lg_checkpoint_blobs<span class="tip">LangGraph channel value blobs per checkpoint.</span></span>
+            <span class="tbl-chip">lg_checkpoint_writes<span class="tip">LangGraph in-flight writes during agent execution.</span></span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Redis — now active as cache tier 1 (Bài 32) -->
+  <div class="card" style="margin-top:14px;border-color:var(--rd);">
+    <div class="ch">
+      <span class="ct" style="color:var(--r);">Redis · 2-tier Response Cache</span>
+      <span class="badge" style="background:var(--rd);color:var(--r);border:none;">Active · Bài 32</span>
+    </div>
+    <ul class="dl">
+      <li><strong>Tier 1 — Exact</strong>: <span class="mono">SHA-256(CacheKey JSON)</span> → key <span class="chip">cache:b32:exact:{hash}</span>. Hit = guaranteed correct. TTL: 120s market hours (Mon-Fri 09:00–14:45 VN), 1800s otherwise.</li>
+      <li><strong>Tier 2 — Vector</strong>: embed(normalized_question) → Qdrant <span class="chip">cache_vectors</span>, cosine ≥ 0.92. Ticker guard + tenant guard + expires_at check before returning.</li>
+      <li><strong>CacheKey</strong>: <span class="chip">tenant_id</span> <span class="chip">ticker</span> <span class="chip">normalized_question</span> <span class="chip">prompt_version</span> <span class="chip">model_version</span> — no conversation_id, cache is cross-conversation.</li>
+      <li><strong>Skip condition</strong>: <span class="mono">len(history) &gt; 0</span> → turn 2+ never cached; <span class="mono">make_cache_key()</span> returns None.</li>
+      <li>Wired in <span class="chip">memory/turn_handler.py</span> — both <span class="mono">run_turn</span> and <span class="mono">stream_turn</span>. Cache hit emits <span class="chip">SSE event: status step=cache_hit tier=exact|vector</span>.</li>
+      <li>Fail-safe: all Redis/Qdrant errors caught silently → graceful miss, agent runs normally.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ RETRIEVE & USE -->
+<section class="phase-sec" id="retrieve">
+  <div class="sec-hdr">
+    <span class="tag-pill ta" style="margin-bottom:0">Retrieve &amp; Use</span>
+    <h2>Retrieval &amp; Agent Layer</h2>
+  </div>
+  <p class="sec-desc">Query enters a fast keyword router (no LLM, &lt;1ms). Router picks one of 9 intents, dispatches to the right tool(s). LangGraph orchestrates multi-step analysis. Memory system maintains context across sessions.</p>
+
+  <div class="cgrid">
+
+    <!-- Router -->
+    <div class="card">
+      <div class="ch">
+        <span class="ct">Query Router</span>
+        <span class="badge">&lt;1ms · no LLM</span>
+      </div>
+      <div style="font-size:12px;color:var(--tx2);margin-bottom:8px;">Fast keyword classifier. Falls back to LLM router on uncertain cases.</div>
+      <div class="intent-grid">
+        <span class="intent-chip">price_action</span>
+        <span class="intent-chip">technical_analysis</span>
+        <span class="intent-chip">fundamentals</span>
+        <span class="intent-chip">macro_sector</span>
+        <span class="intent-chip">news_sentiment</span>
+        <span class="intent-chip">screening</span>
+        <span class="intent-chip">market_brief</span>
+        <span class="intent-chip">investment_case</span>
+        <span class="intent-chip" style="grid-column:1/-1;text-align:center;">conversation</span>
+      </div>
+    </div>
+
+    <!-- Retrieval methods -->
+    <div class="card">
+      <div class="ch">
+        <span class="ct">Retrieval Methods</span>
+        <span class="badge">22 tools</span>
+      </div>
+      <ul class="dl">
+        <li><strong>BCTC RAG</strong> — embed query → Qdrant <span class="chip">bctc_structural</span>, top-5, payload filters (ticker, sector, year) → LLM synthesize</li>
+        <li><strong>News Search</strong> — embed → Qdrant <span class="chip">news_chunks</span>, DatetimeRange 30d default, optional ticker MatchAny</li>
+        <li><strong>SQL Agent</strong> — LLM generates SQL → executes on <span class="chip">financial_facts</span> <span class="chip">ohlcv_daily</span> etc.</li>
+        <li><strong>Market tools</strong> — direct Postgres queries for OHLCV, indices, foreign flows, events, global quotes</li>
+        <li><strong>Hybrid classifier</strong> — <span class="chip">diễn_giải</span> / <span class="chip">số_liệu</span> / <span class="chip">cả_hai</span> / <span class="chip">ngoài_phạm_vi</span></li>
+      </ul>
+    </div>
+
+    <!-- LangGraph Agent -->
+    <div class="card">
+      <div class="ch">
+        <span class="ct">LangGraph Agent</span>
+        <span class="badge">4-node graph</span>
+      </div>
+      <div class="node-seq">
+        <span class="node-box">collect</span>
+        <span class="node-arr">→</span>
+        <span class="node-box">analyze_technical</span>
+        <span class="node-arr">→</span>
+        <span class="node-box">assess_risk</span>
+        <span class="node-arr">→</span>
+        <span class="node-box">synthesize</span>
+      </div>
+      <ul class="dl" style="margin-top:10px;">
+        <li><strong>collect</strong> — parallel fetch OHLCV (VCI API) + news; cache CSV to <span class="mono">outputs/agent_cache/</span></li>
+        <li><strong>analyze_technical</strong> — read CSV → calculate_indicators</li>
+        <li><strong>assess_risk</strong> — if/else on 14-session return std; low vol → call analyze_market_sentiment</li>
+        <li><strong>synthesize</strong> — LLM → Markdown report (technical, risk, news, sentiment sections)</li>
+        <li>Checkpoints via <span class="chip">PostgresCheckpointer</span> → <span class="chip">lg_checkpoints</span> tables. Human-in-the-loop: pause → <span class="chip">agent_sessions</span> (5-min TTL) → approval API → resume</li>
+      </ul>
+    </div>
+
+    <!-- Memory -->
+    <div class="card">
+      <div class="ch">
+        <span class="ct">Memory System</span>
+        <span class="badge">4 layers</span>
+      </div>
+      <div class="mem-row">
+        <div class="mem-item">
+          <span class="mem-key">conv</span>
+          <span class="mem-val">Last 10 turns from <span class="chip">messages</span> table. Written after each turn.</span>
+        </div>
+        <div class="mem-item">
+          <span class="mem-key">user</span>
+          <span class="mem-val">LLM-extracted preferences via <span class="mono">memory/extractor.py</span> → <span class="chip">user_memory</span> table (key/value, confidence, superseded chain).</span>
+        </div>
+        <div class="mem-item">
+          <span class="mem-key">episodic</span>
+          <span class="mem-val">Session summary embedded → Qdrant <span class="chip">episodic_memory</span>. Top-3 past episodes on session start. Decay: score × exp(−days/30). 90d hard expiry.</span>
+        </div>
+        <div class="mem-item">
+          <span class="mem-key">procedural</span>
+          <span class="mem-val">System prompt customization rules. Applied at LLM call construction.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- LLM providers -->
+    <div class="card">
+      <div class="ch">
+        <span class="ct">LLM Providers</span>
+        <span class="badge">Pluggable via .env</span>
+      </div>
+      <div style="font-size:12px;color:var(--tx2);margin-bottom:8px;">All calls go through <span class="mono">llm/factory.py → create_client()</span>. Switch by setting <span class="mono">LLM_PROVIDER</span>.</div>
+      <ul class="dl">
+        <li><strong>deepseek</strong> — default provider</li>
+        <li><strong>anthropic</strong> — Claude models</li>
+        <li><strong>openai</strong> — GPT models</li>
+        <li><strong>gemini</strong> — Google Gemini</li>
+        <li><strong>ollama</strong> — local models (localhost:11434)</li>
+        <li>Optional: Langfuse tracing wrapper on all calls</li>
+      </ul>
+    </div>
+
+    <!-- Planner -->
+    <div class="card">
+      <div class="ch">
+        <span class="ct">Planner</span>
+        <span class="badge">DAG executor</span>
+      </div>
+      <ul class="dl">
+        <li>LLM generates JSON <span class="chip">Plan</span> — list of <span class="chip">Step</span> objects with executor (tool name) + depends_on DAG</li>
+        <li>Validation: no cycles, all executors in 22-tool registry, ≤10 steps, ≤20k token budget</li>
+        <li>Retries once on fail, then falls back to <span class="chip">default_plan</span></li>
+        <li>Steps execute in topological order honoring depends_on</li>
+      </ul>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════ FOOTER -->
+<footer class="ftr">
+  <div class="leg-item"><span class="leg-dot" style="background:var(--c)"></span>Collect</div>
+  <div class="leg-item"><span class="leg-dot" style="background:var(--p)"></span>Process</div>
+  <div class="leg-item"><span class="leg-dot" style="background:var(--m)"></span>MinIO</div>
+  <div class="leg-item"><span class="leg-dot" style="background:var(--q)"></span>Qdrant</div>
+  <div class="leg-item"><span class="leg-dot" style="background:var(--g)"></span>Postgres</div>
+  <div class="leg-item"><span class="leg-dot" style="background:var(--a)"></span>Retrieve &amp; Use</div>
+  <div class="leg-item"><span class="leg-dot" style="background:var(--r)"></span>Redis (cache · Bài 32)</div>
+  <span class="ftr-note">Hover table chips for schema detail</span>
+</footer>

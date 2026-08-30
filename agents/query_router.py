@@ -202,11 +202,11 @@ def classify(query: str) -> RouterResult:
     if any(kw in lower for kw in _NEWS_KW):
         return RouterResult("news_sentiment", ticker, "news/sentiment keyword")
 
-    # 6. Fundamentals — check BEFORE macro when valuation keywords present.
-    #    "VCB P/E so với ngành ngân hàng?" has both fundamentals ("p/e") AND macro
+    # 6. RAG Q&A (financials + document) — check BEFORE macro when valuation keywords present.
+    #    "VCB P/E so với ngành ngân hàng?" has both rag_qa ("p/e") AND macro
     #    ("ngành ngân hàng"). Valuation keywords are always company-specific → win.
     if any(kw in lower for kw in _FUNDAMENTALS_KW):
-        return RouterResult("fundamentals", ticker, "fundamentals keyword")
+        return RouterResult("rag_qa", ticker, "fundamentals keyword")
 
     # 7. Macro / Sector (only if no valuation keywords)
     if any(kw in lower for kw in _MACRO_KW):
