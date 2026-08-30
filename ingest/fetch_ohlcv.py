@@ -38,19 +38,23 @@ def _latest_date(ticker: str) -> str | None:
         return None
 
 
-def fetch_and_upsert(ticker: str, days: int = 30) -> int:
-    """Fetch missing OHLCV from VCI and upsert into ohlcv_daily. Returns rows upserted."""
-    from datetime import date, timedelta
+def fetch_and_upsert(ticker: str, days: int = 30, backfill: bool = False) -> int:
+    """Fetch missing OHLCV from VCI and upsert into ohlcv_daily. Returns rows upserted.
+
+    backfill=True: always fetch `days` rows regardless of latest date in DB.
+    backfill=False (default): incremental — only fetch since latest date.
+    """
+    from datetime import date
 
     latest = _latest_date(ticker)
     today = date.today().isoformat()
 
-    if latest and latest >= today:
+    if not backfill and latest and latest >= today:
         return 0  # already up to date
 
-    if latest:
+    if not backfill and latest:
         days_needed = (date.today() - date.fromisoformat(latest)).days + 1
-        days = min(days_needed, days)  # don't fetch more than requested max
+        days = min(days_needed, days)  # incremental: only fetch delta
 
     resolved = resolve_ticker(ticker)
     try:

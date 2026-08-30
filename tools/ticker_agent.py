@@ -20,22 +20,22 @@ import json
 from llm.types import Message
 
 _SYSTEM = """\
-Bạn là chuyên gia phân tích cổ phiếu Việt Nam.
-Được cung cấp các tools để lấy dữ liệu về một mã chứng khoán.
-Quy trình: gọi các tools cần thiết, sau đó viết phân tích tổng hợp.
+Bạn là chuyên gia phân tích cổ phiếu Việt Nam. Trả lời ngắn gọn, đi thẳng vào trọng tâm.
+TUYỆT ĐỐI không viết quá trình suy nghĩ, không ghi chú nội bộ, không giải thích bước phân tích.
+Không mở đầu bằng 'Được rồi', 'Tôi sẽ', 'Hãy', hay bất kỳ câu dẫn nào.
 
 Quy tắc gọi tools:
 - Gọi get_price, get_indicators, search_news, ask_bctc trong CÙNG 1 lượt đầu tiên.
-- Nếu ask_bctc trả về "Không có trong tài liệu" hoặc "Chúng ta cần trả lời" → KHÔNG gọi lại, bỏ qua phần BCTC.
-- Sau round đầu: chỉ gọi thêm tool nếu THỰC SỰ cần dữ liệu mới, không repeat.
+- Nếu ask_bctc trả về "Không có trong tài liệu" → KHÔNG gọi lại, bỏ qua phần BCTC.
+- Sau round đầu: chỉ gọi thêm tool nếu THỰC SỰ cần dữ liệu mới.
 
-Khi viết phân tích cuối:
-- Nêu giá hiện tại và so sánh với MA20/MA50
-- Nhận định xu hướng kỹ thuật (RSI, MACD, ADX)
-- Tóm tắt tin tức nổi bật nếu có
-- Nêu điểm mạnh/rủi ro từ BCTC nếu có (bỏ qua nếu không có dữ liệu)
-- Kết luận ngắn gọn (1-2 câu)
-- Không đưa ra khuyến nghị mua/bán
+Khi viết phân tích cuối — NGẮN GỌN, không dài dòng:
+- Giá + so sánh MA20/MA50 (1 câu)
+- Tín hiệu kỹ thuật chính: RSI, MACD, ADX (2-3 câu)
+- Tin tức nổi bật nếu có (1 câu)
+- Điểm mạnh/rủi ro BCTC nếu có (1 câu)
+- Kết luận (1 câu)
+- Không khuyến nghị mua/bán
 """
 
 _TOOLS = [
@@ -153,8 +153,8 @@ def analyze(question: str, client=None, max_rounds: int = 6) -> str:
         )
 
         if not resp.tool_calls:
-            # LLM done — return final text
-            return resp.text.strip()
+            from llm.utils import strip_thinking
+            return strip_thinking(resp.text.strip())
 
         # Append assistant turn
         messages.append(Message(role="assistant", content=resp.text or ""))
@@ -170,4 +170,5 @@ def analyze(question: str, client=None, max_rounds: int = 6) -> str:
     # Max rounds exceeded — ask for final synthesis
     messages.append(Message(role="user", content="Hãy tổng hợp phân tích dựa trên dữ liệu đã thu thập."))
     resp = client.generate(messages=messages, system=_SYSTEM, max_tokens=2048)
-    return resp.text.strip()
+    from llm.utils import strip_thinking
+    return strip_thinking(resp.text.strip())

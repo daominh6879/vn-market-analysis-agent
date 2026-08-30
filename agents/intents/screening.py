@@ -14,7 +14,7 @@ from langfuse import observe
 
 from llm.factory import create_client
 from llm.types import Message
-from agents.intents import strip_preamble, strip_thinking, extract_report
+from agents.intents import strip_preamble, strip_thinking, extract_report, NO_THINKING_INSTR
 
 _LATEST_PERIOD = str(date.today().year)
 
@@ -130,8 +130,8 @@ def _narrate(query: str, rows_text: str) -> str:
         )],
         system=(
             "Bạn là trợ lý phân tích tài chính. Tóm tắt kết quả lọc cổ phiếu từ dữ liệu đã cho. "
-            "Bọc toàn bộ câu trả lời trong <report> và </report>. "
-            "KHÔNG nhắc tên cột DB. Trả lời TRỰC TIẾP."
+            "KHÔNG nhắc tên cột DB. Trả lời TRỰC TIẾP. "
+            + NO_THINKING_INSTR
         ),
         max_tokens=512,
         temperature=0,

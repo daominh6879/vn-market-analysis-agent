@@ -26,7 +26,8 @@ EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "bge-m3")
 TOP_K       = 5
 
 _SYSTEM = (
-    "Bạn là trợ lý tài chính. Dựa vào các đoạn tài liệu dưới đây để trả lời câu hỏi. "
+    "Bạn là trợ lý tài chính. Trả lời ngắn gọn, đi thẳng vào trọng tâm — không dài dòng. "
+    "Dựa vào các đoạn tài liệu dưới đây. "
     "Nếu thông tin không có trong tài liệu, nói rõ 'Không có trong tài liệu'."
 )
 
