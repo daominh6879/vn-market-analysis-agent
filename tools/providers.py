@@ -2,11 +2,13 @@
 tools/providers.py — PriceProvider interface + concrete implementations (bài 21).
 
 Providers:
+  FireantProvider    — Fireant REST API, primary for OHLCV + foreign volumes
   VciDirectProvider  — VCI REST API, không dùng vnstock
   TcbsDirectProvider — TCBS public API, fallback for VN stocks
   FallbackProvider   — wraps two providers, tries primary first
   YFinanceProvider   — yfinance cho mã NYSE/NASDAQ
 
+Provider priority for VN stocks: Fireant → VCI → TCBS
 Không import vnstock ở đây.
 """
 
@@ -91,6 +93,126 @@ class PriceProvider(ABC):
         value = self.fetch_history(ticker, days)
         _history_cache.set(key, value, _TTL_HISTORY)
         return value
+
+
+# ── FireantProvider ───────────────────────────────────────────────────────────
+
+class FireantProvider(PriceProvider):
+    """
+    Fireant REST API — primary source for VN stock OHLCV + foreign volumes.
+
+    Auth: POST {FIREANT_BASE}/authentication/login → accessToken (Bearer, cached).
+    Data: GET  {FIREANT_BASE}/symbols/{symbol}/historical-quotes
+    Response fields used: date, priceOpen, priceHigh, priceLow, priceClose,
+                          dealVolume, buyForeignQuantity, sellForeignQuantity.
+
+    `fetch_history_range()` returns extra columns foreign_buy_vol / foreign_sell_vol
+    so ingest scripts can upsert foreign_flows in the same pass.
+    """
+
+    _token: str | None = None  # class-level token shared across instances
+
+    def __init__(self) -> None:
+        import os
+        self._base = os.getenv("FIREANT_BASE", "").rstrip("/")
+        self._email = os.getenv("FIREANT_EMAIL", "")
+        self._password = os.getenv("FIREANT_PASSWORD", "")
+
+    def _login(self) -> str:
+        import httpx
+        if not self._base or not self._email:
+            raise ValueError("FIREANT_BASE / FIREANT_EMAIL not set in env")
+        resp = httpx.post(
+            f"{self._base}/authentication/login",
+            json={"email": self._email, "password": self._password, "rememberMe": True},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        token = body.get("accessToken") or (body.get("data") or {}).get("accessToken")
+        if not token:
+            raise ValueError(f"Fireant login: no accessToken in response: {body}")
+        FireantProvider._token = token
+        return token
+
+    def _get_token(self) -> str:
+        if FireantProvider._token:
+            return FireantProvider._token
+        return self._login()
+
+    def fetch_history_range(
+        self, ticker: str, start_date: str, end_date: str
+    ) -> "pd.DataFrame":
+        """
+        Fetch OHLCV + foreign volumes for a date range.
+
+        Returns DataFrame with columns:
+            time, open, high, low, close, volume,
+            foreign_buy_vol, foreign_sell_vol
+        Sorted oldest → newest, duplicates removed.
+        """
+        import httpx
+
+        days = (
+            datetime.strptime(end_date, "%Y-%m-%d")
+            - datetime.strptime(start_date, "%Y-%m-%d")
+        ).days
+        limit = int(days * 252 / 365) + 20
+
+        def _request(token: str) -> httpx.Response:
+            return httpx.get(
+                f"{self._base}/symbols/{ticker.upper()}/historical-quotes",
+                params={"startDate": start_date, "endDate": end_date, "offset": 0, "limit": limit},
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=30,
+            )
+
+        token = self._get_token()
+        resp = _request(token)
+        if resp.status_code == 401:
+            FireantProvider._token = None
+            resp = _request(self._login())
+        resp.raise_for_status()
+
+        data = resp.json()
+        if not data:
+            raise ValueError(f"Fireant: no data for '{ticker}' {start_date}..{end_date}")
+
+        rows = [
+            {
+                "time":             str(d["date"])[:10],
+                "open":             float(d.get("priceOpen") or 0),
+                "high":             float(d.get("priceHigh") or 0),
+                "low":              float(d.get("priceLow") or 0),
+                "close":            float(d.get("priceClose") or 0),
+                "volume":           int(d.get("dealVolume") or 0),
+                "foreign_buy_vol":  int(d.get("buyForeignQuantity") or 0),
+                "foreign_sell_vol": int(d.get("sellForeignQuantity") or 0),
+            }
+            for d in data
+        ]
+        df = pd.DataFrame(rows)
+        return df.sort_values("time").drop_duplicates(subset=["time"]).reset_index(drop=True)
+
+    def fetch_price(self, ticker: str) -> float:
+        from datetime import date, timedelta
+        today = date.today()
+        df = self.fetch_history_range(ticker, str(today - timedelta(days=10)), str(today))
+        if df.empty:
+            raise ValueError(f"Fireant: no price for '{ticker}'")
+        return float(df["close"].iloc[-1])
+
+    def fetch_history(self, ticker: str, days: int) -> pd.DataFrame:
+        from datetime import date, timedelta
+        today = date.today()
+        df = self.fetch_history_range(
+            ticker,
+            str(today - timedelta(days=days + 10)),
+            str(today),
+        )
+        if df.empty:
+            raise ValueError(f"Fireant: no history for '{ticker}'")
+        return df.tail(days).reset_index(drop=True)
 
 
 # ── VciDirectProvider ─────────────────────────────────────────────────────────
@@ -550,5 +672,8 @@ def _detect_provider(ticker: str) -> PriceProvider:
     if "." not in resolved and len(resolved) <= 4:
         vn_tickers = _vn_ticker_set()
         if resolved in vn_tickers or not vn_tickers:
-            return FallbackProvider(VciDirectProvider(), TcbsDirectProvider())
+            return FallbackProvider(
+                FireantProvider(),
+                FallbackProvider(VciDirectProvider(), TcbsDirectProvider()),
+            )
     return YFinanceProvider()

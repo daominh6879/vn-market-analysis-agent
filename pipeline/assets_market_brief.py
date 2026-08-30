@@ -48,7 +48,7 @@ def foreign_flows_ingest(
     config: ForeignFlowsConfig,
 ) -> dict:
     from datetime import datetime
-    from ingest.fetch_foreign_flows import fetch_and_upsert
+    from ingest.fetch_foreign_flows import fetch_live_today
 
     if config.date_override:
         target_date = datetime.strptime(config.date_override, "%Y-%m-%d").date()
@@ -56,7 +56,7 @@ def foreign_flows_ingest(
         target_date = date.today()
 
     context.log.info(f"foreign_flows_ingest: {target_date} / {config.market}")
-    n = fetch_and_upsert(target_date, config.market)
+    n = fetch_live_today(target_date)
     context.log.info(f"foreign_flows_ingest done — {n} rows upserted")
     return {"rows_upserted": n, "date": str(target_date), "market": config.market}
 

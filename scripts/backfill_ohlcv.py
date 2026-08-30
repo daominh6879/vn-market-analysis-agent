@@ -104,7 +104,8 @@ def main() -> None:
 
     for i, ticker in enumerate(tickers, 1):
         try:
-            n = fetch_and_upsert(ticker, days=args.days, backfill=True)
+            result = fetch_and_upsert(ticker, days=args.days, backfill=True)
+            n = result["ohlcv"] if isinstance(result, dict) else result
             status = f"{n} rows" if n > 0 else "up-to-date"
             print(f"[{i:3d}/{len(tickers)}] {ticker}: {status}")
             total_rows += n

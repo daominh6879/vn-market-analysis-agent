@@ -1,4 +1,4 @@
-.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-fetch-ticker news-backfill news-reindex test-sentiment mcp-server mcp-inspect test-tools test-chaos migrate-b28 test-b28 api-b28 test-b30 eval-b30 eval-b30-notes test-b31 api-b31 curl-stream-b31 ui-b31 ui-chainlit ui-react test-b32 test-b32-unit api-b32
+.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-fetch-ticker news-backfill news-reindex test-sentiment mcp-server mcp-inspect test-tools test-chaos migrate-b28 test-b28 api-b28 test-b30 eval-b30 eval-b30-notes test-b31 api-b31 curl-stream-b31 ui-b31 ui-chainlit ui-react test-b32 test-b32-unit api-b32 ingest-migrate ingest-daily ingest-ohlcv ingest-foreign ingest-index audit test-fireant
 
 up:
 	docker compose up -d
@@ -255,3 +255,57 @@ test-b32-unit:
 
 api-b32:
 	python -m uvicorn api.main:app --reload --port 8032
+
+# ── Data Ingest (Fireant primary) ─────────────────────────────────────────────
+
+# Initial 1-year backfill — run once per environment
+ingest-migrate:
+	python scripts/daily_ingest.py --migrate
+
+# Daily refresh — run after HoSE close (18:30+)
+ingest-daily:
+	python scripts/daily_ingest.py
+
+# OHLCV only (incremental, all active tickers)
+ingest-ohlcv:
+	python ingest/fetch_ohlcv.py --all-securities
+
+# OHLCV backfill for specific tickers
+# Usage: make ingest-ohlcv-ticker TICKER=HPG,VCB DAYS=365
+ingest-ohlcv-ticker:
+ifndef TICKER
+	$(error Usage: make ingest-ohlcv-ticker TICKER=HPG [DAYS=365])
+endif
+	python ingest/fetch_ohlcv.py --tickers $(TICKER) --days $(or $(DAYS),30)
+
+# Foreign flows — incremental gap fill (Fireant historical)
+ingest-foreign:
+	python ingest/fetch_foreign_flows.py --all-securities
+
+# Foreign flows — live today via VCI board
+ingest-foreign-live:
+	python ingest/fetch_foreign_flows.py --all-securities --live
+
+# Market index daily (VNINDEX/HNX/UPCOM/VN30/HNX30)
+ingest-index:
+	python ingest/fetch_index.py --days $(or $(DAYS),30)
+
+# DB completeness audit (all active tickers)
+audit:
+	python scripts/audit_db.py
+
+# Audit specific tickers
+# Usage: make audit-ticker TICKER=FC1,BCG,SVI
+audit-ticker:
+ifndef TICKER
+	$(error Usage: make audit-ticker TICKER=FC1,BCG)
+endif
+	python scripts/audit_db.py --tickers $(TICKER)
+
+# Tests — Fireant provider + ingest scripts
+test-fireant:
+	pytest tests/test_fireant_ingest.py -v -m "not live"
+
+# Tests — Fireant live API (requires network + valid .env creds)
+test-fireant-live:
+	pytest tests/test_fireant_ingest.py -v -m live -s

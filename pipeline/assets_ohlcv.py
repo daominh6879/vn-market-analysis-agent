@@ -87,9 +87,10 @@ def ohlcv_daily_ingest(context: AssetExecutionContext, config: OhlcvIngestConfig
     for ticker in ticker_list:
         context.log.info(f"Fetching OHLCV: {ticker} ({config.days_back}d)")
         try:
-            n = fetch_and_upsert(ticker, config.days_back)
+            result = fetch_and_upsert(ticker, days=config.days_back)
+            n = result["ohlcv"]
             total_rows += n
-            context.log.info(f"  {ticker}: {n} rows upserted")
+            context.log.info(f"  {ticker}: ohlcv={n} foreign={result['foreign']}")
         except Exception as exc:
             context.log.error(f"  {ticker} FAILED: {exc}")
             failed.append(ticker)
