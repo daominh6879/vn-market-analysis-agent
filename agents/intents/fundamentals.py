@@ -17,7 +17,7 @@ from langfuse import observe
 
 from llm.factory import create_client
 from llm.types import Message
-from agents.intents import strip_preamble, strip_thinking, extract_report
+from agents.intents import strip_preamble, strip_thinking, extract_slot
 
 _BANKING_PEERS  = ["VCB", "BID", "CTG", "MBB", "TCB", "VPB", "ACB", "STB"]
 _STEEL_PEERS    = ["HPG", "HSG", "NKG", "TLH"]
@@ -246,45 +246,102 @@ def _is_sector_comparison(query: str) -> bool:
     ])
 
 
+_SYSTEM = (
+    "Bạn là chuyên gia phân tích định giá chứng khoán Việt Nam. "
+    "TUYỆT ĐỐI KHÔNG tự tính lại thứ hạng — dùng nguyên kết quả đã cho. "
+    "Số đã cho là sự thật, viết dứt khoát — không dùng 'có thể', 'dường như'. "
+    "TUYỆT ĐỐI không viết quá trình suy nghĩ, không ghi chú nội bộ. "
+    "Viết HOÀN TOÀN bằng tiếng Việt. "
+    "Output chỉ gồm 7 phần được đánh dấu, không có text nào khác."
+)
+
+
+def _assemble_fund_report(
+    ticker: str,
+    data_table: str,
+    tang_truong: str,
+    bien_ln: str,
+    hieu_qua: str,
+    suc_khoe: str,
+    dinh_gia: str,
+    moat: str,
+    nhan_dinh: str,
+) -> str:
+    return (
+        f"# Phân tích Cơ bản & Định giá {ticker}\n\n"
+        f"{data_table}\n\n"
+        f"## Tăng trưởng (Doanh thu & LNST YoY)\n{tang_truong}\n\n"
+        f"## Biên lợi nhuận\n{bien_ln}\n\n"
+        f"## Hiệu quả vốn (ROE, ROA)\n{hieu_qua}\n\n"
+        f"## Sức khỏe tài chính (D/E, CFO vs LNST)\n{suc_khoe}\n\n"
+        f"## Định giá (P/E, P/B, EV/EBITDA)\n{dinh_gia}\n\n"
+        f"## Lợi thế cạnh tranh (Moat)\n{moat}\n\n"
+        f"## Nhận định tổng thể\n{nhan_dinh}\n\n"
+        f"[Nguồn: yfinance]"
+    )
+
+
+def _extract_data_table(analysis: str) -> str:
+    """Extract the peer comparison table block from pre-computed analysis."""
+    lines = analysis.splitlines()
+    table_lines: list[str] = []
+    in_table = False
+    for line in lines:
+        if line.startswith("### Bảng dữ liệu thực tế"):
+            in_table = True
+        if in_table:
+            if line.startswith("### Phân tích thực tế"):
+                break
+            table_lines.append(line)
+    return "\n".join(table_lines).strip() if table_lines else ""
+
+
 @observe(name="intent.fundamentals")
 def run(ticker: str | None, query: str) -> str:
     if ticker and _is_sector_comparison(query):
-        peers = _SECTOR_MAP.get(ticker, [ticker])
-        rows = [_fetch_valuation(t) for t in peers]
+        peers    = _SECTOR_MAP.get(ticker, [ticker])
+        rows     = [_fetch_valuation(t) for t in peers]
         analysis = _build_analysis(ticker, rows)
+        data_table = _extract_data_table(analysis)
 
-        prompt = f"""Câu hỏi: {query}
+        user_prompt = f"""Câu hỏi: {query}
 
 {analysis}
 
 QUAN TRỌNG: Sử dụng CHÍNH XÁC các con số và nhận định đã tính sẵn ở trên.
 KHÔNG tự suy luận lại thứ hạng hay so sánh — chỉ diễn giải kết quả.
 
-Viết báo cáo Markdown (không văn bản trước báo cáo):
-# Phân tích Cơ bản & Định giá {ticker}
-## Tăng trưởng (Doanh thu & LNST YoY)
-## Biên lợi nhuận (Gross Margin / Net Margin)
-## Hiệu quả vốn (ROE, ROA — so sánh ngành)
-## Sức khỏe tài chính (D/E, CFO vs LNST)
-## Định giá (P/E, P/B, EV/EBITDA — so sánh ngành + premium/discount)
-## Lợi thế cạnh tranh (Moat — suy luận từ biên lợi nhuận + ROE + vị thế)
-## Nhận định tổng thể
-[Nguồn: yfinance]"""
+Viết đúng 7 phần sau. Bắt đầu thẳng bằng TANG_TRUONG: (không có text nào trước).
+
+TANG_TRUONG: [2-3 câu về tăng trưởng doanh thu và LNST YoY — dùng đúng % đã cho]
+BIEN_LN: [1-2 câu về gross margin và net margin]
+HIEU_QUA: [2-3 câu về ROE và ROA — dùng đúng xếp hạng đã tính]
+SUC_KHOE: [1-2 câu về D/E ratio và CFO/LNST]
+DINH_GIA: [2-3 câu về P/E, P/B, EV/EBITDA — premium/discount so ngành]
+MOAT: [2-3 câu về lợi thế cạnh tranh suy luận từ margin + ROE + vị thế ngành]
+NHAN_DINH: [1-2 câu nhận định tổng thể — dứt khoát]"""
 
         client = create_client()
         resp = client.generate(
-            [Message(role="user", content=prompt)],
-            max_tokens=1500,
+            [Message(role="user", content=user_prompt)],
+            max_tokens=1200,
             temperature=0,
-            system=(
-                "Bạn là chuyên gia phân tích định giá chứng khoán Việt Nam. "
-                "Bọc toàn bộ báo cáo Markdown trong <report> và </report>. "
-                "KHÔNG có text nào ngoài hai thẻ đó. "
-                "TUYỆT ĐỐI KHÔNG tự tính lại thứ hạng — dùng nguyên kết quả đã cho. "
-                "Số đã cho là sự thật, viết dứt khoát — không dùng 'có thể', 'dường như'."
-            ),
+            system=_SYSTEM,
         )
-        return strip_thinking(strip_preamble(extract_report(resp.text.strip())))
+
+        raw = resp.text.strip()
+        tang_truong = strip_thinking(extract_slot(raw, "TANG_TRUONG", "BIEN_LN"))
+        bien_ln     = strip_thinking(extract_slot(raw, "BIEN_LN",     "HIEU_QUA"))
+        hieu_qua    = strip_thinking(extract_slot(raw, "HIEU_QUA",    "SUC_KHOE"))
+        suc_khoe    = strip_thinking(extract_slot(raw, "SUC_KHOE",    "DINH_GIA"))
+        dinh_gia    = strip_thinking(extract_slot(raw, "DINH_GIA",    "MOAT"))
+        moat        = strip_thinking(extract_slot(raw, "MOAT",        "NHAN_DINH"))
+        nhan_dinh   = strip_thinking(extract_slot(raw, "NHAN_DINH",   None))
+
+        if not tang_truong and not dinh_gia:
+            return strip_thinking(strip_preamble(raw))
+
+        return _assemble_fund_report(ticker, data_table, tang_truong, bien_ln, hieu_qua, suc_khoe, dinh_gia, moat, nhan_dinh)
 
     from rag.qa import answer as qa_answer
     return qa_answer(query, ticker=ticker)

@@ -1,13 +1,14 @@
 """
 agents/intents/price_action.py — Nhóm 1: Hành động giá & Dòng tiền.
 
-Collects: realtime price, foreign flow, volume vs MA20.
-LLM synthesizes: breakout/selloff detection, active buy/sell phe áp đảo.
+Market-brief pattern:
+  - Python computes all data (price change, volume vs MA20, foreign flow).
+  - LLM writes only 3 prose slots (GIA_BIEN_DONG, DONG_TIEN, KET_LUAN).
+  - Python assembles final Markdown from fixed structure + LLM slots.
 """
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 
 import pandas as pd
@@ -17,8 +18,17 @@ from langfuse import observe
 from llm.factory import create_client
 from llm.types import Message
 from tools.price import get_realtime_price, get_historical_ohlcv
-from tools.result import ToolResult
-from agents.intents import strip_preamble, strip_thinking, extract_report
+from agents.intents import strip_preamble, strip_thinking, extract_slot
+
+
+_SYSTEM = (
+    "Bạn là chuyên gia phân tích hành động giá chứng khoán Việt Nam. "
+    "KHÔNG tự bịa số liệu — dùng đúng các số đã cung cấp. "
+    "TUYỆT ĐỐI không viết quá trình suy nghĩ, không ghi chú nội bộ, "
+    "không giải thích bước phân tích. "
+    "Viết HOÀN TOÀN bằng tiếng Việt. "
+    "Output chỉ gồm 3 phần được đánh dấu, không có text nào khác."
+)
 
 
 def _get_foreign_flow_summary(ticker: str) -> str:
@@ -59,9 +69,7 @@ def _price_change_summary(df: pd.DataFrame) -> str:
     prev = df["close"].iloc[-2]
     change_pct = (last - prev) / prev * 100 if prev > 0 else 0
     direction = "tăng" if change_pct > 0 else ("giảm" if change_pct < 0 else "không đổi")
-    alert = ""
-    if abs(change_pct) > 3:
-        alert = " ⚠️ Biến động mạnh"
+    alert = " ⚠️ Biến động mạnh" if abs(change_pct) > 3 else ""
     return f"Giá đóng cửa: {last:,.0f} VND ({direction} {abs(change_pct):.2f}%){alert}"
 
 
@@ -70,7 +78,6 @@ def _load_ohlcv(ticker: str) -> pd.DataFrame | None:
     r = get_historical_ohlcv(ticker, days=25)
     if r.status == "ok" and r.data is not None:
         return r.data
-    # cache written by technical.py / graph.py
     cache = Path("outputs/agent_cache") / f"{ticker}_ohlcv.csv"
     if cache.exists():
         try:
@@ -80,50 +87,61 @@ def _load_ohlcv(ticker: str) -> pd.DataFrame | None:
     return None
 
 
+def _assemble_report(ticker: str, gia_bien_dong: str, dong_tien: str, ket_luan: str) -> str:
+    return (
+        f"# Hành động giá {ticker}\n\n"
+        f"## Giá & Biến động\n{gia_bien_dong}\n\n"
+        f"## Dòng tiền & Khối lượng\n{dong_tien}\n\n"
+        f"## Kết luận ngắn\n{ket_luan}\n\n"
+        f"[Nguồn: VCI REST API / DB]"
+    )
+
+
 @observe(name="intent.price_action")
 def run(ticker: str, query: str) -> str:
     price_r = get_realtime_price(ticker)
     df = _load_ohlcv(ticker)
 
-    price_line = price_r.message
-
-    vol_line = "Không có dữ liệu OHLCV."
+    price_line  = price_r.message
+    vol_line    = "Không có dữ liệu OHLCV."
     change_line = "Không có dữ liệu OHLCV."
     if df is not None:
-        vol_line = _volume_vs_ma(df)
+        vol_line    = _volume_vs_ma(df)
         change_line = _price_change_summary(df)
-
     flow_line = _get_foreign_flow_summary(ticker)
 
-    prompt = f"""Câu hỏi: {query}
-
-Dữ liệu thị trường {ticker}:
+    user_prompt = f"""Dữ liệu thị trường {ticker}:
 - {price_line}
 - {change_line}
 - {vol_line}
 - {flow_line}
 
-Logic phân tích:
-- Nếu giá tăng/giảm >3% VÀ khối lượng >150% MA20 → "Phiên có dòng tiền lớn (Breakout/Selloff)"
-- Dòng tiền khối ngoại: nếu ròng dương → tín hiệu tích lũy; âm → phân phối
+Logic:
+- Giá tăng/giảm >3% VÀ khối lượng >150% MA20 → "Phiên có dòng tiền lớn (Breakout/Selloff)"
+- Khối ngoại ròng dương → tín hiệu tích lũy; âm → phân phối
 
-Viết báo cáo Markdown ngắn gọn (không văn bản trước báo cáo):
-# Hành động giá {ticker}
-## Giá & Biến động
-## Dòng tiền & Khối lượng
-## Kết luận ngắn
-[Nguồn: VCI REST API / DB]"""
+Câu hỏi: {query}
 
-    t0 = time.perf_counter()
+Viết đúng 3 phần sau. Bắt đầu thẳng bằng GIA_BIEN_DONG: (không có text nào trước).
+
+GIA_BIEN_DONG: [2-3 câu về giá hiện tại, mức biến động, ý nghĩa]
+DONG_TIEN: [2-3 câu về khối lượng vs MA20 và dòng tiền khối ngoại]
+KET_LUAN: [1-2 câu kết luận: Breakout / Selloff / Tích lũy / Bình thường]"""
+
     client = create_client()
     resp = client.generate(
-        [Message(role="user", content=prompt)],
-        max_tokens=1500,
+        [Message(role="user", content=user_prompt)],
+        max_tokens=800,
         temperature=0,
-        system=(
-            "Bạn là chuyên gia phân tích kỹ thuật chứng khoán Việt Nam. "
-            "Bọc toàn bộ báo cáo Markdown trong <report> và </report>. "
-            "KHÔNG có text nào ngoài hai thẻ đó."
-        ),
+        system=_SYSTEM,
     )
-    return strip_thinking(strip_preamble(extract_report(resp.text.strip())))
+
+    raw = resp.text.strip()
+    gia_bien_dong = strip_thinking(extract_slot(raw, "GIA_BIEN_DONG", "DONG_TIEN"))
+    dong_tien     = strip_thinking(extract_slot(raw, "DONG_TIEN",     "KET_LUAN"))
+    ket_luan      = strip_thinking(extract_slot(raw, "KET_LUAN",      None))
+
+    if not gia_bien_dong and not dong_tien:
+        return strip_thinking(strip_preamble(raw))
+
+    return _assemble_report(ticker, gia_bien_dong, dong_tien, ket_luan)

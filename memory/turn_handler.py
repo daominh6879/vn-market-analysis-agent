@@ -273,6 +273,11 @@ def _dispatch_intent(
         return run(ticker, user_message)
 
     if route.intent == "rag_qa":
+        # Peer-comparison / valuation queries → fundamentals intent (yfinance data + slot pattern)
+        if ticker:
+            from agents.intents.fundamentals import run as fund_run, _is_sector_comparison
+            if _is_sector_comparison(user_message):
+                return fund_run(ticker, user_message)
         from rag.qa import answer as qa_answer
         return qa_answer(user_message, ticker=ticker)
 

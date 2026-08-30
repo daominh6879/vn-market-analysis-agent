@@ -6,6 +6,14 @@ import re
 
 from llm.utils import strip_thinking  # noqa: F401  (re-exported for intent modules)
 
+# Append to every intent system prompt — mirrors market_brief pattern.
+NO_THINKING_INSTR = (
+    "TUYỆT ĐỐI không viết quá trình suy nghĩ, không ghi chú nội bộ, "
+    "không giải thích bước phân tích. "
+    "Không mở đầu bằng 'Được rồi', 'Tôi sẽ', 'Hãy', hay bất kỳ câu dẫn nào. "
+    "Output chỉ gồm báo cáo thuần túy bọc trong <report>...</report>."
+)
+
 
 def extract_report(text: str) -> str:
     """Extract content inside <report>...</report> fence if the LLM used it."""
@@ -13,8 +21,31 @@ def extract_report(text: str) -> str:
     return m.group(1).strip() if m else text
 
 
+def extract_slot(text: str, label: str, next_label: str | None) -> str:
+    """Extract text between 'LABEL:' and the next 'NEXT_LABEL:' (or end).
+
+    Handles bold/spaced variants: **LABEL:** or LABEL : or LABEL:.
+    """
+    pattern = rf"(?:\*{{0,2}}){re.escape(label)}(?:\*{{0,2}})\s*:"
+    m = re.search(pattern, text)
+    if not m:
+        return ""
+    start = m.end()
+    if next_label:
+        nxt = re.search(rf"(?:\*{{0,2}}){re.escape(next_label)}(?:\*{{0,2}})\s*:", text[start:])
+        end = start + nxt.start() if nxt else len(text)
+    else:
+        end = len(text)
+    return text[start:end].strip()
+
+
 def strip_preamble(text: str) -> str:
-    """Remove LLM meta-commentary before the first markdown heading."""
+    """Remove LLM meta-commentary before the first H1 markdown heading."""
+    # Match H1 only (single # followed by space) — not ## thinking headings
+    m = re.search(r"^# [^\n#]", text, re.MULTILINE)
+    if m:
+        return text[m.start():]
+    # Fallback: any heading
     m = re.search(r"^#", text, re.MULTILINE)
     if m:
         return text[m.start():]
