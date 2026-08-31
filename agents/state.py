@@ -35,9 +35,30 @@ class AgentState(TypedDict, total=False):
     history: list            # [{step, action, result/tokens/elapsed}]
     error: str
     step_count: int
-    # Bài 28: conversation context
+    # Routing + grading (guide A5/A6)
+    route: str               # "knowledge" | "data" — set by route_question
+    grades: dict             # {"verdict": "enough" | "insufficient" | "rewrite"}
+    iteration: int           # loop counter for rewrite guard
+    # RAG-Fusion (rag/rag_fusion_graph.py)
+    sub_queries: list[str]   # generated sub-queries
+    fused_chunks: list[str]  # RRF-merged top chunks
+    sources_used: list[str]  # source labels (BCTC, TIN TỨC, WEB, …)
+    # Intent routing (set by classify_node inside graph)
+    intent: str              # "price_action" | "technical_analysis" | "rag_qa" | ...
+    classify_reason: str     # reason string from RouterResult — e.g. "ticker HPG default"
+    # Clarification (set by verify_context node; pending saved to Postgres by verify_context)
+    needs_clarification: bool
+    clarification_message: str
+    pending_context: dict    # PendingContext dict
+    # Conversation context (passed in by stream_turn)
     conversation_id: str
-    messages: list[dict]     # last N turns [{role, content}] — never full history
+    user_id: str
+    tenant_id: str           # for cache key namespacing
+    messages: list[dict]     # last N turns [{role, content}] — for cache turn-1 check
+    # Cache (set by check_cache_node / cache_save_node inside graph)
+    _cache_hit: bool
+    _cache_tier: str
+    _cache_key: object       # CacheKey instance or None
 
 
 def detect_query_type(query: str) -> tuple[str, bool]:
@@ -57,12 +78,20 @@ def detect_query_type(query: str) -> tuple[str, bool]:
     return (words[-1].strip(".,!?") if words else "HPG"), False
 
 
-def make_initial_state(query: str) -> AgentState:
-    ticker, is_market = detect_query_type(query)
+def make_initial_state(
+    query: str,
+    conversation_id: str = "",
+    user_id: str = "",
+    tenant_id: str = "default",
+    messages: list | None = None,
+) -> AgentState:
+    """Minimal initial state — intent/ticker/cache set by graph nodes."""
     return AgentState(
-        ticker=ticker,
         query=query,
-        is_market_query=is_market,
+        conversation_id=conversation_id,
+        user_id=user_id,
+        tenant_id=tenant_id,
+        messages=messages or [],
         step_count=0,
         history=[],
         error="",

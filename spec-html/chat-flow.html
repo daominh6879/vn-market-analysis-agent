@@ -20,6 +20,7 @@
   --c-llm:    #14cfc4;
   --c-post:   #ae62f0;
   --c-sse:    #4d88ff;
+  --c-graph:  #818cf8;
 
   --font: 'Space Grotesk', system-ui, sans-serif;
   --mono: 'JetBrains Mono', 'Cascadia Code', monospace;
@@ -44,6 +45,7 @@
     --c-llm:   #0a8f8c;
     --c-post:  #8020c4;
     --c-sse:   #1c58e0;
+    --c-graph: #4f46e5;
     color-scheme: light;
   }
 }
@@ -64,6 +66,7 @@
   --c-llm:   #0a8f8c;
   --c-post:  #8020c4;
   --c-sse:   #1c58e0;
+  --c-graph: #4f46e5;
   color-scheme: light;
 }
 
@@ -83,6 +86,7 @@
   --c-llm:   #14cfc4;
   --c-post:  #ae62f0;
   --c-sse:   #4d88ff;
+  --c-graph: #818cf8;
   color-scheme: dark;
 }
 
@@ -184,7 +188,7 @@ body {
 .stage--http     { border-left: 3px solid var(--c-http); }
 .stage--mem      { border-left: 3px solid var(--c-mem); }
 .stage--route    { border-left: 3px solid var(--c-route); }
-.stage--dispatch { border-left: 3px solid var(--c-route); }
+.stage--graph    { border-left: 3px solid var(--c-graph); }
 .stage--llm      { border-left: 3px solid var(--c-llm); }
 .stage--post     { border-left: 3px solid var(--c-post); }
 .stage--sse      { border-left: 3px solid var(--c-sse); }
@@ -208,7 +212,7 @@ body {
 .stage--http  .stage-label  { color: var(--c-http); }
 .stage--mem   .stage-label  { color: var(--c-mem); }
 .stage--route .stage-label  { color: var(--c-route); }
-.stage--dispatch .stage-label { color: var(--c-route); }
+.stage--graph .stage-label  { color: var(--c-graph); }
 .stage--llm   .stage-label  { color: var(--c-llm); }
 .stage--post  .stage-label  { color: var(--c-post); }
 .stage--sse   .stage-label  { color: var(--c-sse); }
@@ -226,7 +230,7 @@ body {
   align-items: stretch;
   height: 20px;
   position: relative;
-  margin-left: calc(36px + 24px); /* align with stage content center */
+  margin-left: calc(36px + 24px);
 }
 .pipe-line {
   width: 2px;
@@ -277,6 +281,7 @@ body {
 .node--llm    { --accent: var(--c-llm); }
 .node--post   { --accent: var(--c-post); }
 .node--sse    { --accent: var(--c-sse); }
+.node--graph  { --accent: var(--c-graph); }
 
 /* NODE ROW */
 .node-row {
@@ -301,8 +306,9 @@ body {
 .badge--warn  { background: color-mix(in srgb,var(--c-route) 15%,transparent); color:var(--c-route); border:1px solid color-mix(in srgb,var(--c-route) 30%,transparent); }
 .badge--trace { background: color-mix(in srgb,var(--c-post) 15%,transparent);  color:var(--c-post);  border:1px solid color-mix(in srgb,var(--c-post) 30%,transparent); }
 .badge--para  { background: color-mix(in srgb,var(--c-mem) 15%,transparent);   color:var(--c-mem);   border:1px solid color-mix(in srgb,var(--c-mem) 30%,transparent); }
+.badge--graph { background: color-mix(in srgb,var(--c-graph) 15%,transparent); color:var(--c-graph); border:1px solid color-mix(in srgb,var(--c-graph) 30%,transparent); }
 
-/* ROUTER NOTE */
+/* INLINE NOTE */
 .inline-note {
   font-family: var(--mono);
   font-size: 10.5px;
@@ -316,146 +322,10 @@ body {
   line-height: 1.65;
 }
 .inline-note b { color: var(--text); font-weight: 500; }
+.inline-note--graph { border-left-color: var(--c-graph); }
+.inline-note--mem   { border-left-color: var(--c-mem); }
 
-/* DISPATCH */
-.dispatch-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-.dispatch-arrow {
-  font-size: 11px;
-  color: var(--dim);
-  font-family: var(--mono);
-}
-
-/* INTENT GRID */
-.intent-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 7px;
-}
-@media (max-width: 640px) {
-  .intent-grid { grid-template-columns: repeat(3, 1fr); }
-}
-@media (max-width: 420px) {
-  .intent-grid { grid-template-columns: repeat(2, 1fr); }
-}
-
-.intent-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-top: 3px solid var(--ic-color, var(--border));
-  border-radius: 6px;
-  padding: 9px 10px 8px;
-  cursor: pointer;
-  transition: border-color .15s, transform .1s, box-shadow .15s;
-  position: relative;
-  user-select: none;
-}
-.intent-card:hover {
-  border-color: var(--ic-color, var(--border-hi));
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,.25);
-}
-.intent-card.active {
-  border-color: var(--ic-color);
-  box-shadow: 0 0 0 1px var(--ic-color), 0 4px 12px rgba(0,0,0,.3);
-}
-
-.intent-card .ic-name {
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.intent-card .ic-sub {
-  font-size: 10px;
-  color: var(--dim);
-  margin-top: 3px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.intent-card .ic-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ic-color);
-  display: inline-block;
-  margin-right: 4px;
-  vertical-align: middle;
-  opacity: 0.7;
-}
-
-/* LLM ROW */
-.llm-chain {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.llm-arrow {
-  color: var(--dim);
-  font-size: 13px;
-  flex-shrink: 0;
-}
-.provider-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: 4px;
-  background: color-mix(in srgb,var(--c-llm) 12%,transparent);
-  border: 1px solid color-mix(in srgb,var(--c-llm) 25%,transparent);
-  color: var(--c-llm);
-  font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 500;
-}
-.env-hint {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--dim);
-}
-
-/* SSE CHIPS */
-.sse-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.sse-chip {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-top: 3px solid var(--c-sse);
-  border-radius: 6px;
-  padding: 8px 12px;
-  font-family: var(--mono);
-}
-.sse-chip .sse-evt {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: var(--c-sse);
-  opacity: 0.8;
-}
-.sse-chip .sse-data {
-  font-size: 11px;
-  color: var(--text);
-  margin-top: 1px;
-}
-.sse-chip .sse-note {
-  font-size: 10px;
-  color: var(--dim);
-  margin-top: 2px;
-}
-
-/* HYBRID FLOW DIAGRAM */
+/* HYBRID FLOW DIAGRAM (router section) */
 .hybrid-flow {
   display: flex;
   align-items: center;
@@ -560,16 +430,358 @@ body {
   .hf-arrow { transform: rotate(90deg); }
 }
 
+/* ── GRAPH TOPOLOGY ────────────────────────────────────────── */
+
+.graph-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.graph-topo {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 14px;
+}
+
+.gt-invoke {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--dim);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--c-graph);
+  border-radius: 5px;
+  padding: 7px 12px;
+  line-height: 1.7;
+  margin-bottom: 12px;
+}
+.gt-invoke b { color: var(--text); font-weight: 500; }
+.gt-invoke code { color: var(--c-graph); }
+
+.gt-row {
+  display: flex;
+  justify-content: flex-start;
+  padding-left: 0;
+}
+
+.gt-node {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--c-graph);
+  border-radius: 6px;
+  padding: 8px 13px 7px;
+}
+.gt-node .gt-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.gt-node .gt-file {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--c-graph);
+  margin-top: 1px;
+}
+.gt-node .gt-desc {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+
+.gt-edge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0 5px 16px;
+}
+.gt-edge-vline {
+  width: 2px;
+  height: 18px;
+  background: var(--border);
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+.gt-edge-label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--dim);
+  font-style: italic;
+}
+
+.gt-fork {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.gt-branch {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  flex: 1;
+  min-width: 180px;
+}
+
+.gt-edge-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+.gt-edge-badge--clarify {
+  background: color-mix(in srgb,var(--c-route) 15%,transparent);
+  color: var(--c-route);
+  border: 1px solid color-mix(in srgb,var(--c-route) 30%,transparent);
+}
+.gt-edge-badge--proceed {
+  background: color-mix(in srgb,var(--c-mem) 15%,transparent);
+  color: var(--c-mem);
+  border: 1px solid color-mix(in srgb,var(--c-mem) 30%,transparent);
+}
+
+.gt-terminal {
+  background: color-mix(in srgb,var(--c-route) 7%,transparent);
+  border: 1px dashed color-mix(in srgb,var(--c-route) 28%,transparent);
+  border-radius: 6px;
+  padding: 9px 12px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.65;
+}
+.gt-terminal .gt-t-title {
+  color: var(--c-route);
+  font-weight: 600;
+  margin-bottom: 3px;
+  font-size: 10px;
+}
+.gt-terminal .gt-t-body { color: var(--dim); }
+
+.gt-proceed-chain {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+}
+
+.gt-small-node {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  background: color-mix(in srgb,var(--c-graph) 8%,transparent);
+  border: 1px solid color-mix(in srgb,var(--c-graph) 22%,transparent);
+  border-radius: 5px;
+  padding: 6px 10px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.gt-small-node .gt-sn-name { color: var(--text); font-weight: 500; }
+.gt-small-node .gt-sn-desc { color: var(--dim); font-size: 9.5px; margin-top: 1px; }
+
+.gt-mini-arrow {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--dim);
+  padding-left: 4px;
+}
+
+.gt-paths {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.gt-path {
+  flex: 1;
+  min-width: 140px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.gt-path-header {
+  padding: 5px 10px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.gt-path--intent .gt-path-header  { background: color-mix(in srgb,var(--c-graph) 12%,transparent); color: var(--c-graph); }
+.gt-path--know   .gt-path-header  { background: color-mix(in srgb,var(--c-llm) 10%,transparent);   color: var(--c-llm); }
+.gt-path--data   .gt-path-header  { background: color-mix(in srgb,var(--c-tool) 10%,transparent);  color: var(--c-tool); }
+
+.gt-path-body {
+  background: var(--surface);
+  padding: 8px 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--dim);
+  line-height: 1.7;
+}
+.gt-path-body b { color: var(--text); font-weight: 500; }
+
+/* INTENT GRID */
+.intent-grid-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-graph);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.intent-grid-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb,var(--c-graph) 25%,transparent);
+}
+
+.intent-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 7px;
+}
+@media (max-width: 640px) {
+  .intent-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 420px) {
+  .intent-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.intent-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--ic-color, var(--border));
+  border-radius: 6px;
+  padding: 9px 10px 8px;
+  cursor: pointer;
+  transition: border-color .15s, transform .1s, box-shadow .15s;
+  position: relative;
+  user-select: none;
+}
+.intent-card:hover {
+  border-color: var(--ic-color, var(--border-hi));
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,.25);
+}
+.intent-card.active {
+  border-color: var(--ic-color);
+  box-shadow: 0 0 0 1px var(--ic-color), 0 4px 12px rgba(0,0,0,.3);
+}
+
+.intent-card .ic-name {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.intent-card .ic-sub {
+  font-size: 10px;
+  color: var(--dim);
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.intent-card .ic-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ic-color);
+  display: inline-block;
+  margin-right: 4px;
+  vertical-align: middle;
+  opacity: 0.7;
+}
+.intent-card .ic-tag {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ic-color);
+  opacity: 0.6;
+  margin-top: 3px;
+  font-family: var(--mono);
+}
+
+/* LLM ROW */
+.llm-chain {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.llm-arrow { color: var(--dim); font-size: 13px; flex-shrink: 0; }
+.provider-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  background: color-mix(in srgb,var(--c-llm) 12%,transparent);
+  border: 1px solid color-mix(in srgb,var(--c-llm) 25%,transparent);
+  color: var(--c-llm);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+}
+.env-hint { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+
+/* SSE CHIPS */
+.sse-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sse-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--c-sse);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: var(--mono);
+}
+.sse-chip .sse-evt {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--c-sse);
+  opacity: 0.8;
+}
+.sse-chip .sse-data  { font-size: 11px; color: var(--text); margin-top: 1px; }
+.sse-chip .sse-note  { font-size: 10px; color: var(--dim); margin-top: 2px; }
+
 /* DETAIL PANEL */
 .detail-panel {
   position: fixed;
   top: 0;
   right: 0;
-  width: 310px;
+  width: 320px;
   height: 100vh;
   background: var(--bg-stage);
   border-left: 1px solid var(--border);
-  padding: 20px 18px 20px;
+  padding: 20px 18px;
   overflow-y: auto;
   transform: translateX(100%);
   transition: transform .22s cubic-bezier(.22,1,.36,1);
@@ -680,9 +892,21 @@ body {
   padding: 6px 10px;
   border-radius: 5px;
 }
+.dp-graph-box {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--dim);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--c-graph);
+  padding: 6px 10px;
+  border-radius: 5px;
+  line-height: 1.65;
+}
+.dp-graph-box b { color: var(--text); font-weight: 500; }
 </style>
 
-<!-- DETAIL PANEL (intent detail) -->
+<!-- DETAIL PANEL -->
 <div class="detail-panel" id="detail-panel">
   <button class="dp-close" id="dp-close">✕</button>
   <div id="dp-content"></div>
@@ -704,6 +928,7 @@ body {
   <div class="legend-item"><div class="legend-dot" style="background:var(--c-route)"></div>Routing</div>
   <div class="legend-item"><div class="legend-dot" style="background:var(--c-tool)"></div>Tools / Data</div>
   <div class="legend-item"><div class="legend-dot" style="background:var(--c-llm)"></div>LLM</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--c-graph)"></div>LangGraph</div>
   <div class="legend-item"><div class="legend-dot" style="background:var(--c-post)"></div>Post-processing</div>
 </div>
 
@@ -767,7 +992,38 @@ body {
 
   <div class="pipe"><div class="pipe-line"></div></div>
 
-  <!-- 4. ROUTER -->
+  <!-- 4. PENDING CONTEXT (clarification resume) -->
+  <div class="stage stage--mem">
+    <div class="stage-label">Pending</div>
+    <div class="stage-content">
+      <div class="node-row" style="margin-bottom:10px">
+        <div class="node node--mem" style="opacity:.65">
+          <span class="node-name">get_pending_context(conv_id) <span class="badge badge--warn">cond.</span></span>
+          <span class="node-file">memory/conversation.py</span>
+          <span class="node-desc">Postgres → PendingContext if clarification pending</span>
+        </div>
+        <div class="node node--mem" style="opacity:.65">
+          <span class="node-name">merge_with_pending(pending, query)</span>
+          <span class="node-file">memory/clarification.py</span>
+          <span class="node-desc">inject saved intent + ticker → enriched query</span>
+        </div>
+        <div class="node node--mem" style="opacity:.65">
+          <span class="node-name">clear_pending_context(conv_id)</span>
+          <span class="node-file">memory/conversation.py</span>
+          <span class="node-desc">delete Postgres row after merge</span>
+        </div>
+      </div>
+      <div class="inline-note inline-note--mem">
+        Only active when the <b>previous turn</b> returned a clarification question.
+        Merges the saved <b>PendingContext</b> (intent, ticker, missing_fields) into the current message
+        before routing — so the router sees an already-enriched query with the missing context filled in.
+      </div>
+    </div>
+  </div>
+
+  <div class="pipe"><div class="pipe-line"></div></div>
+
+  <!-- 5. ROUTER -->
   <div class="stage stage--route">
     <div class="stage-label">Router</div>
     <div class="stage-content">
@@ -779,7 +1035,6 @@ body {
         </div>
       </div>
 
-      <!-- hybrid flow diagram -->
       <div class="hybrid-flow">
         <div class="hf-step hf-step--kw">
           <div class="hf-step-label">Step 1 · always</div>
@@ -814,24 +1069,115 @@ body {
 
   <div class="pipe"><div class="pipe-line"></div></div>
 
-  <!-- 5. INTENT DISPATCH -->
-  <div class="stage stage--dispatch">
-    <div class="stage-label">Dispatch</div>
+  <!-- 6. LANGGRAPH DISPATCH -->
+  <div class="stage stage--graph">
+    <div class="stage-label">LangGraph</div>
     <div class="stage-content">
-      <div class="dispatch-header">
-        <div class="node node--route">
-          <span class="node-name">_dispatch_intent(route, user_message, …) <span class="badge badge--trace">Langfuse span</span></span>
+
+      <!-- invocation header -->
+      <div class="graph-header">
+        <div class="node node--graph">
+          <span class="node-name">_dispatch_intent(route, …) <span class="badge badge--trace">Langfuse span</span></span>
           <span class="node-file">memory/turn_handler.py:198</span>
+          <span class="node-desc">calls build_graph().invoke(state) — all intent logic lives inside the graph</span>
         </div>
-        <span class="dispatch-arrow">→ routes to intent →</span>
       </div>
+
+      <!-- graph topology -->
+      <div class="graph-topo">
+
+        <div class="gt-invoke">
+          <b>make_initial_state</b>(query, <b>intent</b>=route.intent, <b>ticker</b>=route.ticker)
+          &nbsp;→&nbsp; <code>build_graph().invoke(state)</code>
+        </div>
+
+        <!-- Entry node -->
+        <div class="gt-row">
+          <div class="gt-node">
+            <span class="gt-name">verify_context</span>
+            <span class="gt-file">agents/graph.py · entry node</span>
+            <span class="gt-desc">detect_ambiguity(route, query) → PendingContext | None</span>
+          </div>
+        </div>
+
+        <!-- Edge label -->
+        <div class="gt-edge-row">
+          <div class="gt-edge-vline"></div>
+          <span class="gt-edge-label">check_clarification conditional edge</span>
+        </div>
+
+        <!-- Fork: clarify / proceed -->
+        <div class="gt-fork">
+
+          <div class="gt-branch">
+            <span class="gt-edge-badge gt-edge-badge--clarify">"clarify"</span>
+            <div class="gt-terminal">
+              <div class="gt-t-title">→ END</div>
+              <div class="gt-t-body">
+                clarification_message returned to user<br>
+                pending_context → set_pending_context() → Postgres<br>
+                <span style="opacity:.7">next user turn: Pending stage merges it</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="gt-branch">
+            <span class="gt-edge-badge gt-edge-badge--proceed">"proceed"</span>
+            <div class="gt-proceed-chain">
+              <div class="gt-small-node">
+                <span class="gt-sn-name">route_question</span>
+                <span class="gt-sn-desc">reset iteration counter</span>
+              </div>
+              <div class="gt-mini-arrow">↓</div>
+              <div class="gt-small-node">
+                <span class="gt-sn-name">pick_branch</span>
+                <span class="gt-sn-desc">intent in _INTENT_NODES → node_X · else keyword / data</span>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /gt-fork -->
+
+        <!-- Three output paths -->
+        <div class="gt-paths">
+          <div class="gt-path gt-path--intent">
+            <div class="gt-path-header">by intent · 8 nodes</div>
+            <div class="gt-path-body">
+              <b>node_X</b>(state) wraps intents/*.run()<br>
+              → writes <b>state["report"]</b><br>
+              → END
+            </div>
+          </div>
+          <div class="gt-path gt-path--know">
+            <div class="gt-path-header">knowledge path</div>
+            <div class="gt-path-body">
+              <b>fusion_search</b><br>
+              → grade_or_critique<br>
+              → synthesize / web_search / loop
+            </div>
+          </div>
+          <div class="gt-path gt-path--data">
+            <div class="gt-path-header">data path</div>
+            <div class="gt-path-body">
+              <b>collect</b><br>
+              → analyze_technical<br>
+              → assess_risk → synthesize
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /graph-topo -->
+
+      <!-- Intent node grid -->
+      <div class="intent-grid-label">Intent nodes — click for details</div>
       <div class="intent-grid" id="intent-grid"></div>
+
     </div>
   </div>
 
   <div class="pipe"><div class="pipe-line"></div></div>
 
-  <!-- 6. LLM -->
+  <!-- 7. LLM -->
   <div class="stage stage--llm">
     <div class="stage-label">LLM</div>
     <div class="stage-content">
@@ -856,12 +1202,17 @@ body {
           <span class="node-desc">conversation intent (SSE)</span>
         </div>
       </div>
+      <div class="inline-note inline-note--graph" style="margin-top:10px">
+        <b>DeepSeek thinking leak guard:</b> all intents strip <code>&lt;think&gt;…&lt;/think&gt;</code> from LLM output via <code>strip_thinking()</code>
+        before slot extraction or report assembly. <code>macro_sector</code> strips before <code>extract_slot()</code>;
+        <code>generate_sub_queries</code> strips before JSON parse.
+      </div>
     </div>
   </div>
 
   <div class="pipe"><div class="pipe-line"></div></div>
 
-  <!-- 7. POST-PROCESSING -->
+  <!-- 8. POST-PROCESSING -->
   <div class="stage stage--post">
     <div class="stage-label">Post</div>
     <div class="stage-content">
@@ -887,7 +1238,7 @@ body {
 
   <div class="pipe"><div class="pipe-line"></div></div>
 
-  <!-- 8. SSE OUTPUT -->
+  <!-- 9. SSE OUTPUT -->
   <div class="stage stage--sse">
     <div class="stage-label">Output</div>
     <div class="stage-content">
@@ -923,92 +1274,101 @@ const INTENTS = [
   {
     id: 'price_action', label: 'price_action', short: 'Price',
     color: '#4d88ff',
+    node: 'node_price_action',
     file: 'agents/intents/price_action.py',
     tools: ['get_realtime_price(ticker)', 'get_historical_ohlcv(ticker, days=60)', 'query_ticker_foreign_net(ticker, today)'],
     db: 'Postgres (foreign_flow table)',
     llm: 'client.generate() — synthesizes realtime price, foreign net flow, volume vs MA20. Detects breakout / selloff / active-buy dominance.',
-    route: 'keywords: giá hiện tại, dòng tiền, khối ngoại, active buy, volume'
+    route: 'keywords: giá hiện tại, dòng tiền, khối ngoại, active buy, volume',
+    graph: 'Graph node: <b>node_price_action</b>(state) → intents/price_action.run(ticker, query) → state["report"]'
   },
   {
     id: 'technical_analysis', label: 'technical', short: 'Technical',
     color: '#4d88ff',
+    node: 'node_technical',
     file: 'agents/intents/technical.py',
     tools: ['get_historical_ohlcv(ticker, days=120)', 'compute RSI / MACD / EMA (pandas)', 'support/resistance detection'],
     db: '—',
     llm: 'client.generate() — RSI overbought/oversold, MACD crossover, MA20/MA50/MA200 alignment, trend direction.',
-    route: 'keywords: rsi, macd, kỹ thuật, xu hướng, support, resistance, breakout'
+    route: 'keywords: rsi, macd, kỹ thuật, xu hướng, support, resistance, breakout · ticker required → verify_context catches missing ticker',
+    graph: 'Graph node: <b>node_technical</b>(state) → intents/technical.run(ticker, query) → state["report"]'
   },
   {
-    id: 'fundamentals', label: 'fundamentals', short: 'Fundament.',
-    color: '#4d88ff',
-    file: 'agents/intents/fundamentals.py',
-    tools: ['yfinance: yf.Ticker("{ticker}.VN").info', 'Postgres: financial_facts query (P/E, P/B, ROE, EPS)', 'get_realtime_price()'],
-    db: 'Postgres (financial_facts) + Yahoo Finance',
-    llm: 'client.generate() — valuation vs sector peers (banking/steel/tech/RE), balance sheet, revenue / profit growth.',
-    route: 'keywords: p/e, roe, bctc, doanh thu, lợi nhuận, định giá'
+    id: 'rag_qa', label: 'rag_qa', short: 'RAG QA',
+    color: '#30d470',
+    node: 'node_rag_qa',
+    file: 'rag/qa.py + agents/intents/fundamentals.py',
+    tools: ['Qdrant vector search (RAG-Fusion: 4 sub-queries → RRF merge)', 'Postgres SQL (financial_facts)', 'chunk retrieval + re-rank', 'fundamentals.run() — sector-comparison sub-path'],
+    db: 'Qdrant (vector store) + Postgres (financial_facts)',
+    llm: 'RAG-Fusion: generate_sub_queries() → 4 sub-queries (retrieval diversity, NOT re-routed) → parallel Qdrant search → RRF fusion → client.generate() with merged context + citations.\nSector comparison: fundamentals.run() called when _is_sector_comparison(query) is True.',
+    route: 'fallback from router when query is document/financial-report-specific · rag_qa intent from LLM classifier',
+    graph: 'Graph node: <b>node_rag_qa</b>(state)\n  → if ticker + _is_sector_comparison(query): fundamentals.run(ticker, query)\n  → else: rag.qa.answer(query, ticker)\n\nRAG-Fusion sub-queries generated inside run_rag_fusion() purely for retrieval diversity — NOT classified or re-dispatched through the graph.'
   },
   {
     id: 'macro_sector', label: 'macro_sector', short: 'Macro',
     color: '#f87040',
+    node: 'node_macro_sector',
     file: 'agents/intents/macro_sector.py',
-    tools: ['commodity price APIs (steel HRC, oil WTI/Brent)', 'USD/VND exchange rate', 'sector-specific data'],
+    tools: ['get_fx_rates() — USD/VND, EUR/VND', 'get_commodities() — Brent, HRC steel, copper', 'get_sector_performance() / query_sector_performance()'],
     db: '—',
-    llm: 'client.generate() — how macro factors (rates, FX, commodity) impact the ticker\'s sector.',
-    route: 'keywords: tỷ giá, dầu, thép, lãi suất, vĩ mô, macro'
+    llm: 'Market-brief pattern: LLM writes exactly 5 prose slots (VI_MO, HANG_HOA, CHU_KY, VI_THE, KET_LUAN). Python fetches data, assembles final Markdown. <think> stripped before extract_slot().',
+    route: 'keywords: tỷ giá, dầu, thép, lãi suất, vĩ mô, macro, crack spread',
+    graph: 'Graph node: <b>node_macro_sector</b>(state) → intents/macro_sector.run(ticker, query) → state["report"]'
   },
   {
     id: 'news_sentiment', label: 'news_sentiment', short: 'News',
     color: '#f87040',
+    node: 'node_news_sentiment',
     file: 'agents/intents/news_sentiment.py',
-    tools: ['news API / Fireant scrape', 'community mentions (diễn đàn)', 'sentiment scoring'],
+    tools: ['Fireant provider (primary) — OHLCV + foreign flows + news', 'community mentions (diễn đàn)', 'sentiment scoring'],
     db: '—',
     llm: 'client.generate() — news summary, bullish/bearish signals, community sentiment for ticker.',
-    route: 'keywords: tin tức, sentiment, cộng đồng, fireant, cafef'
+    route: 'keywords: tin tức, sentiment, cộng đồng, fireant, cafef',
+    graph: 'Graph node: <b>node_news_sentiment</b>(state) → intents/news_sentiment.run(ticker, query) → state["report"]'
   },
   {
     id: 'investment_case', label: 'investment_case', short: 'Invest.',
     color: '#f0a020',
+    node: 'node_investment_case',
     file: 'agents/intents/investment_case.py',
     tools: ['Calls ALL 5 intents sequentially:', 'price_action.run()', 'technical.run()', 'fundamentals.run()', 'macro_sector.run()', 'news_sentiment.run()'],
     db: 'Postgres (financial_facts) + Yahoo Finance',
     llm: 'client.generate() — synthesizes all 5 reports. Outputs: Bull Case (3 reasons), Bear Case (3 risks), verdict MUA/BÁN/NẮM GIỮ/TÍCH LŨY.',
-    route: 'keywords: nên mua, khuyến nghị, tổng hợp, investment case, bull case'
+    route: 'keywords: nên mua, khuyến nghị, tổng hợp, investment case, bull case · ticker required',
+    graph: 'Graph node: <b>node_investment_case</b>(state) → intents/investment_case.run(ticker, query) → state["report"]'
   },
   {
     id: 'screening', label: 'screening', short: 'Screener',
     color: '#30d470',
+    node: 'node_screening',
     file: 'agents/intents/screening.py',
-    tools: ['SQL templates: _ROE_TOP_SQL, _REVENUE_TOP_SQL, _PROFIT_TOP_SQL', 'rag/qa.py → Postgres (custom queries)', 'financial_facts table, period=2024'],
-    db: 'Postgres (financial_facts, DISTINCT ON ticker)',
+    tools: ['_get_latest_period() — DB query MAX(period) from financial_facts (cached)', 'SQL templates: _roe_top_sql(period), _revenue_top_sql(period), _profit_top_sql(period)', 'rag/qa.py → Postgres (custom queries via LLM-generated SQL)'],
+    db: 'Postgres (financial_facts, DISTINCT ON ticker) · period resolved dynamically from DB, not hardcoded',
     llm: 'client.generate() — formats screener results, adds context and commentary per ticker.',
-    route: 'keywords: lọc cổ phiếu, tìm cổ phiếu, top mã, cổ phiếu nào, mã nào · EN: which stocks, highest roe, top stocks, best stocks, rank stocks, find stocks'
-  },
-  {
-    id: 'qa_document', label: 'qa_document', short: 'QA Doc',
-    color: '#30d470',
-    file: 'rag/qa.py',
-    tools: ['Qdrant vector search (HPG BCTC chunks)', 'Postgres SQL (financial_facts)', 'chunk retrieval + re-rank'],
-    db: 'Qdrant (vector store) + Postgres',
-    llm: 'client.generate() — answers question from retrieved document chunks with citations.',
-    route: 'fallback from router when query is document-specific'
+    route: 'keywords: lọc cổ phiếu, tìm cổ phiếu, top mã, cổ phiếu nào, mã nào · EN: which stocks, highest roe, top stocks, best stocks, rank stocks',
+    graph: 'Graph node: <b>node_screening</b>(state) → intents/screening.run(ticker, query)\n\nPeriod resolution: _get_latest_period() queries SELECT MAX(period) FROM financial_facts WHERE period ~ \'^[0-9]{4}$\' at call time (not module init). Safe fallback: today.year - 2.'
   },
   {
     id: 'market_brief', label: 'market_brief', short: 'Market',
     color: '#ae62f0',
-    file: 'agents/market_brief_graph.py',
-    tools: ['build_brief_graph() → LangGraph app', 'VNINDEX / VN30 data', 'top gainers/losers', 'sector breadth'],
+    node: 'node_market_brief',
+    file: 'agents/graph.py (node) + agents/market_brief_graph.py (inner graph)',
+    tools: ['build_brief_graph() → inner LangGraph app', 'VNINDEX / VN30 data', 'top gainers/losers', 'sector breadth', 'commodities / FX'],
     db: '—',
-    llm: 'LangGraph multi-node: sequential LLM calls through graph nodes → full market report (VNINDEX + sectors + outlook).',
-    route: 'keywords: vnindex, thị trường hôm nay, ttck, thị trường chứng khoán'
+    llm: 'Inner LangGraph: sequential LLM calls through market_brief_graph nodes → full market report (VNINDEX + sectors + outlook). Outer graph wraps result as state["report"].',
+    route: 'keywords: vnindex, thị trường hôm nay, ttck, thị trường chứng khoán · no ticker required',
+    graph: 'Graph node: <b>node_market_brief</b>(state)\n  → build_brief_graph().invoke(mb_init(date=today))\n  → state["report"] = final["report_text"]\n\nMarket Brief runs its own separate LangGraph with its own state type (MarketBriefState). The outer graph just wraps the result.'
   },
   {
     id: 'conversation', label: 'conversation', short: 'Chat',
     color: '#14cfc4',
+    node: '(no graph node)',
     file: 'memory/turn_handler.py',
     tools: ['No tools — direct LLM stream', 'History + user memory injected into system prompt', 'Episodic context (first turn)'],
     db: '—',
     llm: 'client.stream() via thread+queue → SSE chunks. Memory-aware: preferences + episodic episodes in system prompt.',
-    route: 'fallback: no financial keyword matched AND not ticker-only default · LLM classify_hybrid() fires here → if LLM returns conversation, stream direct LLM'
+    route: 'fallback: no financial keyword matched · or LLM classify_hybrid() returns conversation intent',
+    graph: 'NOT dispatched through the graph. stream_turn() handles conversation directly before calling _dispatch_intent — LLM stream starts immediately, bypassing build_graph(). No verify_context check needed.'
   }
 ];
 
@@ -1019,9 +1379,11 @@ INTENTS.forEach(intent => {
   card.className = 'intent-card';
   card.style.setProperty('--ic-color', intent.color);
   card.dataset.id = intent.id;
+  const isConversation = intent.id === 'conversation';
   card.innerHTML = `
     <div class="ic-name"><span class="ic-dot"></span>${intent.short}</div>
     <div class="ic-sub">${intent.id}</div>
+    <div class="ic-tag">${isConversation ? 'direct stream' : intent.node}</div>
   `;
   card.addEventListener('click', () => openDetail(intent, card));
   grid.appendChild(card);
@@ -1042,6 +1404,9 @@ function openDetail(intent, card) {
   card.classList.add('active');
 
   const toolsHtml = intent.tools.map(t => `<li>${t}</li>`).join('');
+  const llmText = intent.llm.replace(/\n/g, '<br>');
+  const graphText = intent.graph.replace(/\n/g, '<br>');
+
   dpContent.innerHTML = `
     <div class="dp-tag" style="background:color-mix(in srgb,${intent.color} 15%,transparent);color:${intent.color};border:1px solid color-mix(in srgb,${intent.color} 30%,transparent)">
       ${intent.id}
@@ -1049,6 +1414,10 @@ function openDetail(intent, card) {
     <div class="dp-section">
       <span class="dp-section-label">File</span>
       <span class="dp-file">${intent.file}</span>
+    </div>
+    <div class="dp-section">
+      <span class="dp-section-label">Graph node</span>
+      <div class="dp-graph-box"><b>${intent.node}</b><br>${graphText}</div>
     </div>
     <div class="dp-section">
       <span class="dp-section-label">Router trigger</span>
@@ -1060,7 +1429,7 @@ function openDetail(intent, card) {
     </div>
     <div class="dp-section">
       <span class="dp-section-label">LLM usage</span>
-      <div class="dp-llm-box">${intent.llm}</div>
+      <div class="dp-llm-box">${llmText}</div>
     </div>
     <div class="dp-section">
       <span class="dp-section-label">Storage / DB</span>
@@ -1078,8 +1447,6 @@ function closeDetail() {
 
 document.getElementById('dp-close').addEventListener('click', closeDetail);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
-
-// Close panel when clicking outside (but not on intent cards or panel itself)
 document.addEventListener('click', e => {
   if (!panel.contains(e.target) && !e.target.closest('.intent-card')) {
     closeDetail();

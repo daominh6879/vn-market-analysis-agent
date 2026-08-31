@@ -37,17 +37,24 @@ def generate_sub_queries(query: str, n: int = 4) -> list[str]:
     Guard: all sub-queries must stay on the same company and time period.
     Returns at most n sub-queries (falls back to [query] on parse error).
     """
+    import datetime as _dt
+    today = _dt.date.today().isoformat()   # e.g. "2026-08-31"
+    current_year = _dt.date.today().year   # e.g. 2026
+
     client = create_client()
     prompt = f"""Nhiệm vụ: sinh đúng {n} câu hỏi con từ câu gốc bên dưới.
+Hôm nay: {today}.
 
 Quy tắc bắt buộc:
 1. Phải có đúng {n} câu — không được ít hơn, dù câu gốc có đơn giản đến đâu.
 2. Mỗi câu hỏi về CÙNG công ty và CÙNG kỳ thời gian với câu gốc.
+   - Nếu câu gốc không nêu kỳ cụ thể → dùng kỳ gần nhất có thể (năm {current_year} hoặc {current_year - 1}).
+   - KHÔNG tự thêm kỳ thời gian khác (ví dụ không thêm "năm 2023" nếu câu gốc không nhắc).
 3. Mỗi câu nhấn một góc khác nhau: (a) số liệu cụ thể, (b) so sánh kỳ trước, (c) ngữ cảnh ngành, (d) sự kiện ảnh hưởng.
 4. Chỉ trả về JSON array of strings. Không có text nào khác.
 
-Ví dụ — câu gốc: "Doanh thu HPG năm 2023?"
-Output: ["Doanh thu thuần của HPG năm 2023 là bao nhiêu tỷ đồng?", "So với năm 2022, doanh thu HPG 2023 tăng hay giảm bao nhiêu phần trăm?", "Trong bối cảnh ngành thép Việt Nam, doanh thu HPG 2023 đứng ở vị trí nào?", "Yếu tố nào tác động lớn nhất đến doanh thu HPG năm 2023?"]
+Ví dụ — câu gốc: "Doanh thu HPG gần nhất?"
+Output: ["Doanh thu thuần của HPG trong kỳ báo cáo gần nhất là bao nhiêu tỷ đồng?", "So với kỳ trước, doanh thu HPG tăng hay giảm bao nhiêu phần trăm?", "Trong bối cảnh ngành thép Việt Nam, doanh thu HPG đứng ở vị trí nào?", "Yếu tố nào tác động lớn nhất đến doanh thu HPG gần đây?"]
 
 Câu gốc: {query}
 Output (JSON array, đúng {n} phần tử):"""

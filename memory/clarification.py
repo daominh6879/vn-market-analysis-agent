@@ -84,6 +84,20 @@ def detect_ambiguity(route, query: str) -> Optional[PendingContext]:
     ticker = route.ticker
     lower = query.lower()
 
+    # Case 0: bare ticker — intent known only by default, not by keywords
+    # e.g. user typed "HPG" alone — we have the ticker but not what they want
+    if (
+        intent in _TICKER_REQUIRED
+        and ticker
+        and getattr(route, "reason", "").endswith("default")
+    ):
+        return PendingContext(
+            original_query=query,
+            missing=["intent"],
+            intent=intent,
+            ticker=ticker,
+        )
+
     # Case 1 / 3: ticker required but missing
     if intent in _TICKER_REQUIRED and ticker is None:
         # Heuristic: "company" when query contains noun-like entity words beyond

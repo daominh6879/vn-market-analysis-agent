@@ -7,10 +7,12 @@ import {
   deleteConversation,
   streamMessage,
   buildTraceStep,
+  getPendingSessions,
 } from './api'
 import Login from './components/Login'
 import Sidebar from './components/Sidebar'
 import ChatArea from './components/ChatArea'
+import ApprovalPanel from './components/ApprovalPanel'
 
 const LS_AUTH = 'vn_stock_auth'
 const LS_CONV = 'vn_stock_conv'
@@ -42,11 +44,16 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [streamingMsg, setStreamingMsg] = useState<ChatMessage | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
+  const [view, setView] = useState<'chat' | 'approvals'>('chat')
+  const [pendingCount, setPendingCount] = useState(0)
 
   // Load conversations when auth changes
   useEffect(() => {
     if (!auth) return
     getConversations(auth.user_id, auth.tenant_id).then(setConversations)
+    if (auth.role === 'admin') {
+      getPendingSessions().then(s => setPendingCount(s.length))
+    }
   }, [auth])
 
   // Load history when active conversation changes
@@ -78,7 +85,15 @@ export default function App() {
   function handleNew() {
     setActiveId(null)
     setMessages([])
+    setView('chat')
     localStorage.removeItem(LS_CONV)
+  }
+
+  function handleApprovals() {
+    setView('approvals')
+    if (auth?.role === 'admin') {
+      getPendingSessions().then(s => setPendingCount(s.length))
+    }
   }
 
   async function handleDelete(id: string) {
@@ -195,19 +210,25 @@ export default function App() {
         auth={auth}
         conversations={conversations}
         activeId={activeId}
+        view={view}
+        pendingCount={pendingCount}
         onSelect={handleSelect}
         onNew={handleNew}
         onDelete={handleDelete}
         onLogout={handleLogout}
+        onApprovals={handleApprovals}
       />
       <main className="flex-1 flex flex-col overflow-hidden">
-        <ChatArea
-          auth={auth}
-          messages={messages}
-          streamingMessage={streamingMsg}
-          isStreaming={isStreaming}
-          onSend={handleSend}
-        />
+        {view === 'approvals' && auth.role === 'admin'
+          ? <ApprovalPanel />
+          : <ChatArea
+              auth={auth}
+              messages={messages}
+              streamingMessage={streamingMsg}
+              isStreaming={isStreaming}
+              onSend={handleSend}
+            />
+        }
       </main>
     </div>
   )

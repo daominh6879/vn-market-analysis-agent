@@ -24,3 +24,12 @@ export interface TraceStep {
   step: string
   done: boolean
 }
+
+export interface PendingSession {
+  session_id: string
+  ticker: string
+  status: string
+  created_at: string
+  expires_at: string
+  risk_verdict: string | null
+}

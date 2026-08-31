@@ -4,13 +4,16 @@ memory/turn_handler.py — Orchestrates one conversation turn (Bài 28 + 29 + 31
 run_turn(conversation_id, user_id, tenant_id, user_message, is_first_turn) → str (assistant reply)
 stream_turn(conversation_id, user_id, tenant_id, user_message, is_first_turn) → AsyncIterator[str] (SSE)
 
-Flow:
-  1. load_history(conversation_id)             → inject into LLM messages
-  2. load_user_memory(user_id)                 → inject into system prompt
-  3. [Bài 29] retrieve_similar episodic memory → inject into system prompt (first turn only)
-  4. LLM generates reply
-  5. save_turn(...)                            → persist (user, assistant) to DB
-  6. extract_preferences(turn_messages)        → save items with confidence >= 0.7
+Flow (stream_turn):
+  1. load_history / load_user_memory / retrieve_similar (memory load)
+  2. Fast cache check (keyword classify only — no LLM)
+  3. build_graph().invoke(make_initial_state(query, conversation_id, user_id))
+       Graph handles: pending merge, classify_hybrid, verify_context, all intent dispatch
+  4. Handle result:
+       needs_clarification → emit clarification (pending already saved by verify_context)
+       intent == "conversation" → stream LLM directly
+       else → emit report
+  5. Cache set + save_turn + extract_preferences
 
 finish_conversation(conversation_id, user_id, first_question, summary, conclusion)
   → called by API after last turn to store episode in Qdrant
@@ -24,14 +27,9 @@ import logging
 import threading
 from typing import AsyncIterator
 
-import uuid
-
 log = logging.getLogger(__name__)
 
-from langfuse import observe
-
 from llm.factory import create_client
-from tracing import current_request_id
 from llm.types import Message
 from memory.conversation import load_history, save_turn
 from memory.extractor import extract_preferences
@@ -74,7 +72,7 @@ def run_turn(
     user_memory = load_user_memory(user_id, tenant_id, max_items=5)
 
     # ── Route + cache check ───────────────────────────────────────────────────
-    from agents.query_router import classify_hybrid as _route_classify
+    from agents.classifier import classify_hybrid as _route_classify
     _route = _route_classify(user_message)
 
     from core.cache import make_cache_key, cache_get, cache_set
@@ -210,96 +208,6 @@ async def _stream_via_queue(
     yield f"__collected__:{json.dumps({'text': ''.join(collected)})}"
 
 
-async def _run_blocking_agent(fn, *args, **kwargs) -> str:
-    """Run a blocking sync function in thread pool, return result string.
-    Sends heartbeat-style yields via an asyncio.Event approach — caller
-    separately yields heartbeats while awaiting."""
-    return await asyncio.to_thread(fn, *args, **kwargs)
-
-
-# ── Intent dispatcher (traced as Langfuse parent span) ────────────────────────
-
-@observe(name="agent.turn")
-def _dispatch_intent(
-    route,
-    user_message: str,
-    user_id: str,
-    conversation_id: str,
-) -> str:
-    """Single sync dispatch point for all intent types. Traced as Langfuse parent span.
-    All nested intent.run() and tool @observe calls become children of this span."""
-    # Set request_id so all nested instrument_tool calls share it in traces/latest.jsonl
-    rid = f"{conversation_id[:8]}-{uuid.uuid4().hex[:6]}"
-    current_request_id.set(rid)
-
-    try:
-        from langfuse import get_client
-        get_client().update_current_trace(
-            session_id=conversation_id,
-            user_id=user_id,
-            input=user_message,
-            metadata={"intent": route.intent, "ticker": route.ticker, "request_id": rid},
-        )
-    except Exception:
-        pass
-
-    try:
-        from langfuse import get_client
-        get_client().update_current_trace(metadata={
-            "intent": route.intent, "ticker": route.ticker,
-            "request_id": rid, "cache_hit": False, "cache_tier": "miss",
-        })
-    except Exception:
-        pass
-
-    # Intents that require a ticker must have one — refuse clearly rather than defaulting.
-    _TICKER_REQUIRED = {
-        "price_action", "technical_analysis", "rag_qa",
-        "news_sentiment", "investment_case",
-    }
-    ticker = route.ticker
-    if ticker is None and route.intent in _TICKER_REQUIRED:
-        return (
-            "Bạn đang hỏi về mã cổ phiếu nào? "
-            "Vui lòng nêu rõ mã (ví dụ: HPG, VNM, FPT) hoặc tên công ty."
-        )
-
-    if route.intent == "price_action":
-        from agents.intents.price_action import run
-        return run(ticker, user_message)
-
-    if route.intent == "technical_analysis":
-        from agents.intents.technical import run
-        return run(ticker, user_message)
-
-    if route.intent == "rag_qa":
-        # Peer-comparison / valuation queries → fundamentals intent (yfinance data + slot pattern)
-        if ticker:
-            from agents.intents.fundamentals import run as fund_run, _is_sector_comparison
-            if _is_sector_comparison(user_message):
-                return fund_run(ticker, user_message)
-        from rag.qa import answer as qa_answer
-        return qa_answer(user_message, ticker=ticker)
-
-    if route.intent == "macro_sector":
-        from agents.intents.macro_sector import run
-        return run(route.ticker, user_message)
-
-    if route.intent == "news_sentiment":
-        from agents.intents.news_sentiment import run
-        return run(route.ticker, user_message)
-
-    if route.intent == "investment_case":
-        from agents.intents.investment_case import run
-        return run(ticker, user_message)
-
-    if route.intent == "screening":
-        from agents.intents.screening import run
-        return run(route.ticker, user_message)
-
-    return ""
-
-
 async def stream_turn(
     conversation_id: str,
     user_id: str,
@@ -309,11 +217,9 @@ async def stream_turn(
 ) -> AsyncIterator[str]:
     """Async generator yielding SSE events for one conversation turn.
 
-    Routes query to the right agent before streaming:
-      ticker_analysis → agents/graph.py  (price + technical + news)
-      market_brief    → agents/market_brief_graph.py (full market overview)
-      qa_document     → rag/qa.py (RAG / SQL)
-      conversation    → direct LLM stream (memory-aware)
+    Graph (agents/graph.py) is the single entry point for all agent paths —
+    it handles pending merge, classify_hybrid, verify_context, and all intent dispatch.
+    stream_turn handles: memory load, cache, conversation streaming, persist.
 
     SSE events:
       event: status   → {"step": "...", "agent": "...", ...}
@@ -337,137 +243,73 @@ async def stream_turn(
         except Exception:
             episodes = []
 
-    # ── Pending clarification: merge previous unresolved query ───────────────
-    from memory.conversation import get_pending_context, set_pending_context, clear_pending_context
-    from memory.clarification import (
-        PendingContext, pending_from_dict, pending_to_dict,
-        detect_ambiguity, build_clarification_message, merge_with_pending,
+    # ── Invoke graph (handles: pending merge, classify, cache, verify, all dispatch) ──
+    from agents.state import make_initial_state
+    from agents.graph import build_graph
+
+    yield _sse_status("routing")
+
+    state = make_initial_state(
+        user_message,
+        conversation_id=conversation_id,
+        user_id=user_id,
+        tenant_id=tenant_id,
+        messages=history,
     )
-    _pending_raw = get_pending_context(conversation_id)
-    _pending: PendingContext | None = pending_from_dict(_pending_raw) if _pending_raw else None
+    try:
+        task = asyncio.create_task(
+            asyncio.to_thread(build_graph().invoke, state)
+        )
+        while not task.done():
+            try:
+                await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
+            except asyncio.TimeoutError:
+                yield ": heartbeat\n\n"
+        final = task.result()
+    except asyncio.CancelledError:
+        return
+    except Exception as exc:
+        yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
+        return
 
-    routed_message = user_message
-    if _pending is not None:
-        routed_message = merge_with_pending(_pending, user_message)
-        clear_pending_context(conversation_id)
-        log.info("clarification.resume conv=%s missing=%s merged=%r",
-                 conversation_id[:8], _pending.missing, routed_message[:80])
+    intent = final.get("intent", "conversation")
+    ticker = final.get("ticker") or None
 
-    # ── Route query ───────────────────────────────────────────────────────────
-    from agents.query_router import classify_hybrid as route_classify
-    route = route_classify(routed_message)
+    yield _sse_status("routing", agent=intent, ticker=ticker)
 
-    yield _sse_status("routing", agent=route.intent, reason=route.reason,
-                      ticker=route.ticker)
-
-    # ── Detect ambiguity → clarify and park pending context ──────────────────
-    _ambiguity = detect_ambiguity(route, routed_message)
-    if _ambiguity is not None:
-        clarification = build_clarification_message(_ambiguity)
-        log.info("clarification.needed conv=%s missing=%s", conversation_id[:8], _ambiguity.missing)
+    # Cache hit: graph returned cached report — stream it directly
+    if final.get("_cache_hit"):
+        cached = final.get("report", "")
+        log.info("cache.hit conv=%s intent=%s ticker=%s tier=%s",
+                 conversation_id[:8], intent, ticker, final.get("_cache_tier", ""))
+        yield _sse_status("cache_hit", tier=final.get("_cache_tier", ""), ticker=ticker)
+        for line in cached.split("\n"):
+            yield _sse_chunk(line + "\n")
         try:
-            set_pending_context(conversation_id, pending_to_dict(_ambiguity))
-            save_turn(conversation_id, user_message, clarification)
+            save_turn(conversation_id, user_message, cached)
         except Exception:
             pass
-        yield _sse_status("clarifying", missing=_ambiguity.missing)
-        for line in clarification.split("\n"):
-            yield _sse_chunk(line + "\n")
-        yield _sse_done(len(clarification), "clarification")
+        yield _sse_done(len(cached), f"{intent}:cache")
         return
 
     assistant_reply = ""
 
-    # ── Cache check (first turn only; intent + ticker from router) ──────────────
-    from core.cache import make_cache_key, cache_get, cache_set
-    _ck = make_cache_key(tenant_id, routed_message, route.ticker or "", route.intent, history)
-    if _ck is not None:
-        _cached_reply, _cache_tier = cache_get(_ck)
-        if _cached_reply:
-            log.info("cache.hit conv=%s intent=%s ticker=%s tier=%s",
-                     conversation_id[:8], route.intent, route.ticker, _cache_tier)
-            try:
-                from langfuse import get_client
-                get_client().update_current_trace(metadata={
-                    "intent": route.intent, "ticker": route.ticker,
-                    "cache_hit": True, "cache_tier": _cache_tier,
-                })
-            except Exception:
-                pass
-            yield _sse_status("cache_hit", tier=_cache_tier, ticker=route.ticker)
-            for line in _cached_reply.split("\n"):
-                yield _sse_chunk(line + "\n")
-            try:
-                save_turn(conversation_id, user_message, _cached_reply)
-            except Exception:
-                pass
-            yield _sse_done(len(_cached_reply), f"{route.intent}:cache")
-            return
-        log.debug("cache.miss conv=%s intent=%s ticker=%s",
-                  conversation_id[:8], route.intent, route.ticker)
-
-    # ── All intent paths (traced via _dispatch_intent) ───────────────────────
-    _AGENT_INTENTS = {
-        "price_action", "technical_analysis", "rag_qa",
-        "macro_sector", "news_sentiment", "investment_case",
-        "screening",
-    }
-    _MARKET_BRIEF_INTENTS = {"market_brief"}
-
-    if route.intent in _AGENT_INTENTS:
-        yield _sse_status("collecting_data", ticker=route.ticker, intent=route.intent)
-        try:
-            task = asyncio.create_task(
-                _run_blocking_agent(_dispatch_intent, route, routed_message, user_id, conversation_id)
-            )
-            while not task.done():
-                try:
-                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
-                except asyncio.TimeoutError:
-                    yield ": heartbeat\n\n"
-            report = task.result()
-        except asyncio.CancelledError:
-            return
-        except Exception as exc:
-            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
-            return
-        yield _sse_status("streaming", agent=route.intent)
-        for line in report.split("\n"):
+    # ── Clarification: pending already saved to Postgres by verify_context ───
+    if final.get("needs_clarification"):
+        clarification = final.get("clarification_message", "")
+        log.info("clarification conv=%s intent=%s", conversation_id[:8], intent)
+        yield _sse_status("streaming", agent="clarification")
+        for line in clarification.split("\n"):
             yield _sse_chunk(line + "\n")
-        assistant_reply = report
-
-    # ── market_brief path ─────────────────────────────────────────────────────
-    elif route.intent in _MARKET_BRIEF_INTENTS:
-        yield _sse_status("collecting_market_data")
         try:
-            from datetime import date as date_cls
+            save_turn(conversation_id, user_message, clarification)
+        except Exception:
+            pass
+        yield _sse_done(len(clarification), "clarification")
+        return
 
-            def _run_brief():
-                from agents.market_brief_graph import build_brief_graph, make_initial_state as mb_init
-                app = build_brief_graph()
-                initial = mb_init(date=str(date_cls.today()), output_path="")
-                final = app.invoke(initial)
-                return final.get("report_text") or "[Không có báo cáo thị trường]"
-
-            task = asyncio.create_task(_run_blocking_agent(_run_brief))
-            while not task.done():
-                try:
-                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
-                except asyncio.TimeoutError:
-                    yield ": heartbeat\n\n"
-            report = task.result()
-        except asyncio.CancelledError:
-            return
-        except Exception as exc:
-            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
-            return
-        yield _sse_status("streaming", agent="market_brief")
-        for line in report.split("\n"):
-            yield _sse_chunk(line + "\n")
-        assistant_reply = report
-
-    # ── conversation path (LLM stream) ────────────────────────────────────────
-    else:
+    # ── Conversation: stream LLM directly (graph returned intent="conversation") ──
+    if intent == "conversation":
         system_prompt = _build_system(user_memory, episodes)
         lm_messages = [Message(role=m["role"], content=m["content"]) for m in history]
         lm_messages.append(Message(role="user", content=user_message))
@@ -488,23 +330,18 @@ async def stream_turn(
 
         assistant_reply = "".join(collected)
 
+    # ── Agent report (all other intents) ──────────────────────────────────────
+    else:
+        report = final.get("report") or ""
+        yield _sse_status("streaming", agent=intent)
+        for line in report.split("\n"):
+            yield _sse_chunk(line + "\n")
+        assistant_reply = report
+
     if not assistant_reply:
         return
 
-    # ── Cache set (first turn only, after agent reply) ────────────────────────
-    # Skip caching when reply is a clarification (ticker=None on ticker-required intent).
-    # Clarification text is ephemeral — wrong to serve it to a different query.
-    _TICKER_REQUIRED_SET = {
-        "price_action", "technical_analysis", "rag_qa",
-        "news_sentiment", "investment_case",
-    }
-    _is_clarification = (
-        route.ticker is None and route.intent in _TICKER_REQUIRED_SET
-    )
-    if _ck is not None and not _is_clarification:
-        cache_set(_ck, assistant_reply)
-
-    # ── Persist + extract preferences (all paths) ─────────────────────────────
+    # ── Persist + extract preferences ─────────────────────────────────────────
     try:
         save_turn(conversation_id, user_message, assistant_reply)
 
@@ -523,9 +360,9 @@ async def stream_turn(
                 source_message=pref.source_message,
             )
     except Exception:
-        pass  # persistence failure must not suppress the done event
+        pass
 
-    yield _sse_done(len(assistant_reply), route.intent)
+    yield _sse_done(len(assistant_reply), intent)
 
 
 def finish_conversation(

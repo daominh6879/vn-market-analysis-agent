@@ -1,5 +1,5 @@
-"""
-tests/test_bai32_clarification.py — End-to-end tests for the pending-context
+﻿"""
+tests/test_bai32_clarification.py â€” End-to-end tests for the pending-context
 clarification flow.
 
 Covers:
@@ -7,7 +7,7 @@ Covers:
     [x] detect_ambiguity: missing ticker (ticker-required intent)
     [x] detect_ambiguity: unknown company (multi-word, no ALL-CAPS)
     [x] detect_ambiguity: unclear intent (conversation fallback, financial signal)
-    [x] detect_ambiguity: no ambiguity → returns None
+    [x] detect_ambiguity: no ambiguity â†’ returns None
     [x] build_clarification_message: correct text per missing type
     [x] merge_with_pending: concat original + new query
     [x] pending_to_dict / pending_from_dict round-trip
@@ -17,10 +17,10 @@ Covers:
     [x] pending survives across two separate get calls
 
   End-to-end (real LLM + tools):
-    [x] Missing ticker → bot asks for it → user replies → bot runs agent
-    [x] Unknown company → bot asks for ticker → user replies → bot runs agent
-    [x] Unclear intent (conversation fallback) → bot offers choices → user picks → bot runs
-    [x] No ambiguity → normal flow, no pending stored
+    [x] Missing ticker â†’ bot asks for it â†’ user replies â†’ bot runs agent
+    [x] Unknown company â†’ bot asks for ticker â†’ user replies â†’ bot runs agent
+    [x] Unclear intent (conversation fallback) â†’ bot offers choices â†’ user picks â†’ bot runs
+    [x] No ambiguity â†’ normal flow, no pending stored
 
 Run:
     pytest tests/test_bai32_clarification.py -v -s
@@ -45,10 +45,10 @@ from memory.clarification import (
     pending_to_dict,
     pending_from_dict,
 )
-from agents.query_router import RouterResult
+from agents.classifier import RouterResult
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _new_conv():
     from memory.conversation import create_conversation
@@ -117,32 +117,32 @@ def _done_event(lines):
     return None
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# UNIT TESTS — no network/DB
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# UNIT TESTS â€” no network/DB
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 def test_detect_ambiguity_missing_ticker():
-    """Ticker-required intent, ticker=None, no company words → missing=['ticker']."""
+    """Ticker-required intent, ticker=None, no company words â†’ missing=['ticker']."""
     route = RouterResult(intent="investment_case", ticker=None, reason="test")
-    pending = detect_ambiguity(route, "đánh giá")
+    pending = detect_ambiguity(route, "Ä‘Ã¡nh giÃ¡")
     assert pending is not None
     assert "ticker" in pending.missing
     assert pending.intent == "investment_case"
 
 
 def test_detect_ambiguity_unknown_company():
-    """Ticker-required intent, ticker=None, multi-word non-caps query → missing=['company']."""
+    """Ticker-required intent, ticker=None, multi-word non-caps query â†’ missing=['company']."""
     route = RouterResult(intent="investment_case", ticker=None, reason="test")
-    pending = detect_ambiguity(route, "đánh giá ngắn gọn ngân hàng quân đội")
+    pending = detect_ambiguity(route, "Ä‘Ã¡nh giÃ¡ ngáº¯n gá»n ngÃ¢n hÃ ng quÃ¢n Ä‘á»™i")
     assert pending is not None
     assert "company" in pending.missing
-    assert pending.original_query == "đánh giá ngắn gọn ngân hàng quân đội"
+    assert pending.original_query == "Ä‘Ã¡nh giÃ¡ ngáº¯n gá»n ngÃ¢n hÃ ng quÃ¢n Ä‘á»™i"
 
 
 def test_detect_ambiguity_unclear_intent():
-    """Conversation fallback + financial signal → missing=['intent']."""
+    """Conversation fallback + financial signal â†’ missing=['intent']."""
     route = RouterResult(intent="conversation", ticker=None, reason="no financial intent")
-    pending = detect_ambiguity(route, "tôi muốn hỏi về cổ phiếu ngân hàng")
+    pending = detect_ambiguity(route, "tÃ´i muá»‘n há»i vá» cá»• phiáº¿u ngÃ¢n hÃ ng")
     assert pending is not None
     assert "intent" in pending.missing
     assert pending.intent is None
@@ -151,79 +151,79 @@ def test_detect_ambiguity_unclear_intent():
 def test_detect_ambiguity_none_for_clear_route():
     """No ambiguity when ticker and intent both resolved."""
     route = RouterResult(intent="technical_analysis", ticker="MBB", reason="keyword")
-    pending = detect_ambiguity(route, "phân tích kỹ thuật MBB")
+    pending = detect_ambiguity(route, "phÃ¢n tÃ­ch ká»¹ thuáº­t MBB")
     assert pending is None
 
 
 def test_detect_ambiguity_none_for_pure_conversation():
-    """Short greeting → no ambiguity (not financial-sounding)."""
+    """Short greeting â†’ no ambiguity (not financial-sounding)."""
     route = RouterResult(intent="conversation", ticker=None, reason="no financial intent")
-    pending = detect_ambiguity(route, "xin chào")
+    pending = detect_ambiguity(route, "xin chÃ o")
     assert pending is None
 
 
 def test_build_clarification_ticker():
     pending = PendingContext(
-        original_query="đánh giá",
+        original_query="Ä‘Ã¡nh giÃ¡",
         missing=["ticker"],
         intent="investment_case",
         ticker=None,
     )
     msg = build_clarification_message(pending)
-    assert "mã" in msg.lower() or "ticker" in msg.lower()
-    assert "đánh giá đầu tư" in msg
+    assert "mÃ£" in msg.lower() or "ticker" in msg.lower()
+    assert "Ä‘Ã¡nh giÃ¡ Ä‘áº§u tÆ°" in msg
 
 
 def test_build_clarification_company():
     pending = PendingContext(
-        original_query="đánh giá ngắn gọn ngân hàng x",
+        original_query="Ä‘Ã¡nh giÃ¡ ngáº¯n gá»n ngÃ¢n hÃ ng x",
         missing=["company"],
         intent="investment_case",
         ticker=None,
     )
     msg = build_clarification_message(pending)
-    assert "ticker" in msg.lower() or "mã" in msg.lower()
-    assert "tên công ty" in msg or "không nhận ra" in msg
+    assert "ticker" in msg.lower() or "mÃ£" in msg.lower()
+    assert "tÃªn cÃ´ng ty" in msg or "khÃ´ng nháº­n ra" in msg
 
 
 def test_build_clarification_intent():
     pending = PendingContext(
-        original_query="tôi muốn phân tích cổ phiếu",
+        original_query="tÃ´i muá»‘n phÃ¢n tÃ­ch cá»• phiáº¿u",
         missing=["intent"],
         intent=None,
         ticker=None,
     )
     msg = build_clarification_message(pending)
     # Must offer choices
-    assert "kỹ thuật" in msg or "phân tích" in msg
+    assert "ká»¹ thuáº­t" in msg or "phÃ¢n tÃ­ch" in msg
 
 
 def test_merge_with_pending_concat():
     pending = PendingContext(
-        original_query="đánh giá ngắn gọn",
+        original_query="Ä‘Ã¡nh giÃ¡ ngáº¯n gá»n",
         missing=["ticker"],
         intent="investment_case",
         ticker=None,
     )
     merged = merge_with_pending(pending, "MBB")
-    assert "đánh giá ngắn gọn" in merged
+    assert "Ä‘Ã¡nh giÃ¡ ngáº¯n gá»n" in merged
     assert "MBB" in merged
 
 
 def test_merge_with_pending_empty_new():
     pending = PendingContext(
-        original_query="đánh giá ngắn gọn",
+        original_query="Ä‘Ã¡nh giÃ¡ ngáº¯n gá»n",
         missing=["ticker"],
         intent="investment_case",
         ticker=None,
     )
     merged = merge_with_pending(pending, "")
-    assert merged == "đánh giá ngắn gọn"
+    assert merged == "Ä‘Ã¡nh giÃ¡ ngáº¯n gá»n"
 
 
 def test_pending_dict_roundtrip():
     pending = PendingContext(
-        original_query="phân tích",
+        original_query="phÃ¢n tÃ­ch",
         missing=["ticker", "company"],
         intent="rag_qa",
         ticker="HPG",
@@ -236,19 +236,19 @@ def test_pending_dict_roundtrip():
     assert restored.ticker == pending.ticker
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# DB INTEGRATION — real Postgres, no LLM
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# DB INTEGRATION â€” real Postgres, no LLM
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 def test_pending_context_set_get_clear():
-    """set → get returns dict, clear → get returns None."""
+    """set â†’ get returns dict, clear â†’ get returns None."""
     from memory.conversation import get_pending_context, set_pending_context, clear_pending_context
     cid, _ = _new_conv()
 
     assert get_pending_context(cid) is None
 
     ctx = {"intent": "investment_case", "ticker": None,
-           "original_query": "đánh giá", "missing": ["ticker"]}
+           "original_query": "Ä‘Ã¡nh giÃ¡", "missing": ["ticker"]}
     set_pending_context(cid, ctx)
 
     result = get_pending_context(cid)
@@ -261,7 +261,7 @@ def test_pending_context_set_get_clear():
 
 
 def test_pending_context_survives_two_gets():
-    """get does not consume pending — it stays until explicitly cleared."""
+    """get does not consume pending â€” it stays until explicitly cleared."""
     from memory.conversation import get_pending_context, set_pending_context, clear_pending_context
     cid, _ = _new_conv()
     ctx = {"intent": "rag_qa", "ticker": None, "original_query": "doanh thu", "missing": ["ticker"]}
@@ -273,19 +273,19 @@ def test_pending_context_survives_two_gets():
     clear_pending_context(cid)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# END-TO-END — real LLM + tools + Postgres (slow ~15-60s each)
-# ═══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# END-TO-END â€” real LLM + tools + Postgres (slow ~15-60s each)
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 def test_real_missing_ticker_then_user_provides():
     """
-    Turn 1: 'đánh giá ngắn gọn' → bot asks for ticker, pending stored.
-    Turn 2: 'MBB' → merged query → bot runs investment_case for MBB.
+    Turn 1: 'Ä‘Ã¡nh giÃ¡ ngáº¯n gá»n' â†’ bot asks for ticker, pending stored.
+    Turn 2: 'MBB' â†’ merged query â†’ bot runs investment_case for MBB.
     """
     cid, uid = _new_conv()
 
-    # Turn 1 — ambiguous (no ticker)
-    lines1 = _run_stream(cid, uid, "đánh giá ngắn gọn", is_first_turn=True)
+    # Turn 1 â€” ambiguous (no ticker)
+    lines1 = _run_stream(cid, uid, "Ä‘Ã¡nh giÃ¡ ngáº¯n gá»n", is_first_turn=True)
     reply1 = _reply_text(lines1)
     clarify_event = _parse_event(lines1, "clarifying")
     done1 = _done_event(lines1)
@@ -295,7 +295,7 @@ def test_real_missing_ticker_then_user_provides():
     print(f"Done event: {done1}")
 
     assert clarify_event is not None, "Expected 'clarifying' SSE event on ambiguous turn"
-    assert "mã" in reply1.lower() or "ticker" in reply1.lower(), \
+    assert "mÃ£" in reply1.lower() or "ticker" in reply1.lower(), \
         f"Clarification must ask for ticker, got: {reply1[:200]}"
     assert done1 and done1.get("agent") == "clarification"
 
@@ -305,7 +305,7 @@ def test_real_missing_ticker_then_user_provides():
     assert pending_raw is not None, "pending_context must be stored in DB after clarification"
     assert "ticker" in pending_raw.get("missing", []) or "company" in pending_raw.get("missing", [])
 
-    # Turn 2 — user provides ticker
+    # Turn 2 â€” user provides ticker
     lines2 = _run_stream(cid, uid, "MBB", is_first_turn=False)
     reply2 = _reply_text(lines2)
     clarify2 = _parse_event(lines2, "clarifying")
@@ -325,12 +325,12 @@ def test_real_missing_ticker_then_user_provides():
 
 def test_real_unknown_company_then_user_provides():
     """
-    Turn 1: 'đánh giá ngắn gọn ngân hàng xyz' (unknown company) → bot asks for ticker.
-    Turn 2: 'MBB' → bot runs investment_case for MBB.
+    Turn 1: 'Ä‘Ã¡nh giÃ¡ ngáº¯n gá»n ngÃ¢n hÃ ng xyz' (unknown company) â†’ bot asks for ticker.
+    Turn 2: 'MBB' â†’ bot runs investment_case for MBB.
     """
     cid, uid = _new_conv()
 
-    lines1 = _run_stream(cid, uid, "đánh giá ngắn gọn ngân hàng xyz", is_first_turn=True)
+    lines1 = _run_stream(cid, uid, "Ä‘Ã¡nh giÃ¡ ngáº¯n gá»n ngÃ¢n hÃ ng xyz", is_first_turn=True)
     reply1 = _reply_text(lines1)
     clarify_event = _parse_event(lines1, "clarifying")
 
@@ -348,13 +348,13 @@ def test_real_unknown_company_then_user_provides():
 
 def test_real_unclear_intent_then_user_picks():
     """
-    Turn 1: financially-sounding but intent unclear → bot offers choices.
-    Turn 2: user says 'phân tích kỹ thuật' → bot runs technical_analysis.
+    Turn 1: financially-sounding but intent unclear â†’ bot offers choices.
+    Turn 2: user says 'phÃ¢n tÃ­ch ká»¹ thuáº­t' â†’ bot runs technical_analysis.
     """
     cid, uid = _new_conv()
 
     # Force conversation fallback with financial signal but no clear intent keyword
-    lines1 = _run_stream(cid, uid, "tôi muốn hỏi về cổ phiếu VNM", is_first_turn=True)
+    lines1 = _run_stream(cid, uid, "tÃ´i muá»‘n há»i vá» cá»• phiáº¿u VNM", is_first_turn=True)
     reply1 = _reply_text(lines1)
     clarify_event = _parse_event(lines1, "clarifying")
     done1 = _done_event(lines1)
@@ -365,9 +365,9 @@ def test_real_unclear_intent_then_user_picks():
     # This query resolves VNM ticker via keyword router, so may or may not clarify intent.
     # If router resolves to technical_analysis (ticker default), no clarification expected.
     # If router falls to conversation, clarification expected.
-    # Accept both — what matters is turn 2 produces a real reply.
+    # Accept both â€” what matters is turn 2 produces a real reply.
 
-    lines2 = _run_stream(cid, uid, "phân tích kỹ thuật", is_first_turn=False)
+    lines2 = _run_stream(cid, uid, "phÃ¢n tÃ­ch ká»¹ thuáº­t", is_first_turn=False)
     reply2 = _reply_text(lines2)
     print(f"\nTurn 2 reply ({len(reply2)} chars): {reply2[:300]}")
     assert len(reply2) > 20, "Turn 2 must produce a reply"
@@ -375,12 +375,12 @@ def test_real_unclear_intent_then_user_picks():
 
 def test_real_no_ambiguity_no_pending():
     """
-    Clear query with ticker → no clarification, pending_context stays None.
+    Clear query with ticker â†’ no clarification, pending_context stays None.
     """
     from memory.conversation import get_pending_context
     cid, uid = _new_conv()
 
-    lines = _run_stream(cid, uid, "phân tích kỹ thuật HPG", is_first_turn=True)
+    lines = _run_stream(cid, uid, "phÃ¢n tÃ­ch ká»¹ thuáº­t HPG", is_first_turn=True)
     reply = _reply_text(lines)
     clarify = _parse_event(lines, "clarifying")
 

@@ -6,34 +6,64 @@ interface Props {
   auth: AuthState
   conversations: Conversation[]
   activeId: string | null
+  view: 'chat' | 'approvals'
+  pendingCount: number
   onSelect: (id: string) => void
   onNew: () => void
   onDelete: (id: string) => void
   onLogout: () => void
+  onApprovals: () => void
 }
 
 export default function Sidebar({
   auth,
   conversations,
   activeId,
+  view,
+  pendingCount,
   onSelect,
   onNew,
   onDelete,
   onLogout,
+  onApprovals,
 }: Props) {
   return (
     <aside className="w-64 flex-shrink-0 bg-sidebar flex flex-col h-full border-r border-border">
       {/* New chat */}
-      <div className="p-3">
+      <div className="p-3 flex flex-col gap-2">
         <button
           onClick={onNew}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-text-muted hover:bg-surface hover:text-text text-sm font-medium transition"
+          className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm font-medium transition ${
+            view === 'chat'
+              ? 'bg-surface text-text'
+              : 'text-text-muted hover:bg-surface hover:text-text'
+          }`}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
           Cuộc trò chuyện mới
         </button>
+        {auth.role === 'admin' && (
+          <button
+            onClick={onApprovals}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm font-medium transition ${
+              view === 'approvals'
+                ? 'bg-surface text-text border-accent'
+                : 'text-text-muted hover:bg-surface hover:text-text'
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Phê duyệt
+            {pendingCount > 0 && (
+              <span className="ml-auto bg-accent text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                {pendingCount}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* Conversation list */}

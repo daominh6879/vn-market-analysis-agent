@@ -123,22 +123,57 @@ def _fetch_sjc_xml() -> Optional[dict]:
         return None
 
 
+def _fetch_yfinance_gold_estimate() -> Optional[dict]:
+    """
+    Fallback: derive VN gold price estimate from world gold (GC=F) + USD/VND (yfinance).
+    Returns an estimate labeled clearly as 'world_estimate'.
+    """
+    try:
+        import yfinance as yf
+        gc = yf.Ticker("GC=F").history(period="2d")
+        if gc.empty:
+            return None
+        gold_usd_oz = float(gc["Close"].iloc[-1])
+
+        # USD/VND from yfinance
+        fx = yf.Ticker("USDVND=X").history(period="2d")
+        usd_vnd = float(fx["Close"].iloc[-1]) if not fx.empty else 25_000.0
+
+        from data.global_universe import TROY_OZ_PER_LUONG
+        vnd_per_luong = gold_usd_oz * usd_vnd * TROY_OZ_PER_LUONG / 1_000_000  # triệu đồng
+        vnd_per_luong = round(vnd_per_luong, 1)
+        # SJC premium historically ~5-8 triệu — add 6 triệu as rough estimate
+        PREMIUM_ESTIMATE = 6.0
+        return {
+            "buy_vnd":   round(vnd_per_luong + PREMIUM_ESTIMATE - 0.5, 1),
+            "sell_vnd":  round(vnd_per_luong + PREMIUM_ESTIMATE + 0.5, 1),
+            "timestamp": datetime.now().isoformat(),
+            "source":    "world_estimate (GC=F yfinance)",
+        }
+    except Exception as e:
+        sys.stderr.write(f"[gold_vn_scraper] yfinance fallback failed: {e}\n")
+        return None
+
+
 def fetch_sjc_gold() -> Optional[dict]:
     """
-    Public interface — try giavang.org first, fall back to SJC XML.
+    Public interface — try giavang.org first, SJC XML second, yfinance estimate last.
     Returns:
         {
             "buy_vnd":   float,  # triệu đồng/lượng  e.g. 147.0
             "sell_vnd":  float,  # triệu đồng/lượng  e.g. 150.0
             "timestamp": str,    # ISO datetime
-            "source":    str,    # "giavang.org" | "sjc"
+            "source":    str,    # "giavang.org" | "sjc" | "world_estimate (GC=F yfinance)"
         }
     or None if all sources fail.
     """
     result = _fetch_giavang_org()
     if result is not None:
         return result
-    return _fetch_sjc_xml()
+    result = _fetch_sjc_xml()
+    if result is not None:
+        return result
+    return _fetch_yfinance_gold_estimate()
 
 
 def gold_vnd_per_oz(gold_world_usd: float, usd_vnd: float) -> float:

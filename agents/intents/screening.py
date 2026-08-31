@@ -8,20 +8,47 @@ pre-built SQL templates to bypass LLM hallucination of non-existent views.
 
 from __future__ import annotations
 
-from datetime import date
-
 from langfuse import observe
 
 from llm.factory import create_client
 from llm.types import Message
 from agents.intents import strip_preamble, strip_thinking, extract_report, NO_THINKING_INSTR
 
-_LATEST_PERIOD = str(date.today().year)
+# ── Latest available period ───────────────────────────────────────────────────
+
+_period_cache: str | None = None
+
+
+def _get_latest_period() -> str:
+    """Query DB for the most recent 4-digit year period in financial_facts."""
+    global _period_cache
+    if _period_cache:
+        return _period_cache
+    try:
+        from core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT MAX(period) FROM financial_facts "
+                    "WHERE period ~ '^[0-9]{4}$'"
+                )
+                row = cur.fetchone()
+                if row and row[0]:
+                    _period_cache = str(row[0])
+                    return _period_cache
+    except Exception:
+        pass
+    from datetime import date
+    _period_cache = str(date.today().year - 2)  # safe fallback: 2 years back
+    return _period_cache
+
 
 # ── pre-built SQL templates ────────────────────────────────────────────────────
-# All operate on financial_facts for period=_LATEST_PERIOD, one row per ticker via DISTINCT ON.
+# All operate on financial_facts for the latest available period.
+# Use _get_latest_period() at call time — NOT a module-level f-string constant.
 
-_ROE_TOP_SQL = f"""
+def _roe_top_sql(period: str) -> str:
+    return f"""
 SELECT ticker, roe_pct
 FROM (
     SELECT DISTINCT ON (f1.ticker)
@@ -34,7 +61,7 @@ FROM (
         AND f1.report_type = f2.report_type
     WHERE f1.metric_code IN ('lailo_thuan_sau_thue', 'loi_nhuan_sau_thue')
       AND f2.metric_code = 'von_chu_so_huu'
-      AND f1.period = '{_LATEST_PERIOD}'
+      AND f1.period = '{period}'
       AND f2.value > 0
     ORDER BY f1.ticker, roe_pct DESC NULLS LAST
 ) sub
@@ -42,7 +69,9 @@ ORDER BY roe_pct DESC NULLS LAST
 LIMIT 20;
 """
 
-_REVENUE_TOP_SQL = f"""
+
+def _revenue_top_sql(period: str) -> str:
+    return f"""
 SELECT ticker, revenue_billion_vnd
 FROM (
     SELECT DISTINCT ON (ticker)
@@ -50,14 +79,16 @@ FROM (
         ROUND((value / 1e9)::numeric, 0) AS revenue_billion_vnd
     FROM financial_facts
     WHERE metric_code = 'doanh_thu_thuan'
-      AND period = '{_LATEST_PERIOD}'
+      AND period = '{period}'
     ORDER BY ticker, value DESC NULLS LAST
 ) sub
 ORDER BY revenue_billion_vnd DESC NULLS LAST
 LIMIT 20;
 """
 
-_PROFIT_TOP_SQL = f"""
+
+def _profit_top_sql(period: str) -> str:
+    return f"""
 SELECT ticker, profit_billion_vnd
 FROM (
     SELECT DISTINCT ON (ticker)
@@ -65,15 +96,16 @@ FROM (
         ROUND((value / 1e9)::numeric, 0) AS profit_billion_vnd
     FROM financial_facts
     WHERE metric_code IN ('lailo_thuan_sau_thue', 'loi_nhuan_sau_thue')
-      AND period = '{_LATEST_PERIOD}'
+      AND period = '{period}'
     ORDER BY ticker, value DESC NULLS LAST
 ) sub
 ORDER BY profit_billion_vnd DESC NULLS LAST
 LIMIT 20;
 """
 
-# "đáng chú ý / nổi bật": top stocks by ROE with positive profit
-_NOTABLE_SQL = f"""
+
+def _notable_sql(period: str) -> str:
+    return f"""
 SELECT ticker, roe_pct, profit_bil
 FROM (
     SELECT DISTINCT ON (f1.ticker)
@@ -87,7 +119,7 @@ FROM (
         AND f1.report_type = f2.report_type
     WHERE f1.metric_code IN ('lailo_thuan_sau_thue', 'loi_nhuan_sau_thue')
       AND f2.metric_code = 'von_chu_so_huu'
-      AND f1.period = '{_LATEST_PERIOD}'
+      AND f1.period = '{period}'
       AND f2.value > 0
       AND f1.value > 0
     ORDER BY f1.ticker, roe_pct DESC NULLS LAST
@@ -106,14 +138,15 @@ _NOTABLE_PATTERNS = frozenset({
 def _pick_template(query: str) -> str | None:
     """Return pre-built SQL if query matches a known screening pattern."""
     lower = query.lower()
+    period = _get_latest_period()
     if "roe" in lower:
-        return _ROE_TOP_SQL
+        return _roe_top_sql(period)
     if "doanh thu" in lower and ("cao nhất" in lower or "top" in lower or "lớn nhất" in lower):
-        return _REVENUE_TOP_SQL
+        return _revenue_top_sql(period)
     if "lợi nhuận" in lower and ("cao nhất" in lower or "top" in lower or "lớn nhất" in lower):
-        return _PROFIT_TOP_SQL
+        return _profit_top_sql(period)
     if any(pat in lower for pat in _NOTABLE_PATTERNS):
-        return _NOTABLE_SQL
+        return _notable_sql(period)
     return None
 
 

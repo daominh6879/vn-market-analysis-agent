@@ -8,7 +8,6 @@ POST /sessions/{id}/reject      — reject and mark done
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -18,17 +17,15 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from agents.checkpointer import PostgresCheckpointer, _conn, load_checkpoint
-from agents.graph_interactive import build_interactive_graph
+from agents.graph import build_graph
 from langgraph.types import Command
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
 class ApproveBody(BaseModel):
-    edits: Optional[dict[str, Any]] = None  # optional state overrides
+    edits: Optional[dict[str, Any]] = None
 
-
-# ── helpers ───────────────────────────────────────────────────────────────────
 
 def _update_status(session_id: str, status: str, note: str = "") -> None:
     with _conn() as conn:
@@ -60,11 +57,8 @@ def _get_pending(session_id: str) -> dict:
     return row
 
 
-# ── endpoints ─────────────────────────────────────────────────────────────────
-
 @router.get("/pending")
 def list_pending():
-    """Return sessions waiting for approval."""
     with _conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
@@ -82,27 +76,19 @@ def list_pending():
 
 @router.post("/{session_id}/approve")
 def approve_session(session_id: str, body: ApproveBody = ApproveBody()):
-    """Resume the interrupted graph with approval."""
     row = _get_pending(session_id)
-
     _update_status(session_id, "approved", "approved")
 
     checkpointer = PostgresCheckpointer()
-    app = build_interactive_graph(checkpointer)
-
+    app = build_graph(checkpointer=checkpointer, human_approval=True)
     thread_config = {"configurable": {"thread_id": session_id}}
-
-    # Apply any user edits to state before resuming
     update = body.edits or {}
-
     final = app.invoke(
         Command(resume=True, update=update if update else None),
         config=thread_config,
     )
-
     report = final.get("report") or "[Không có báo cáo]"
     _update_status(session_id, "completed", "completed")
-
     return {
         "session_id": session_id,
         "ticker": final.get("ticker"),
@@ -113,14 +99,10 @@ def approve_session(session_id: str, body: ApproveBody = ApproveBody()):
 
 @router.post("/{session_id}/reject")
 def reject_session(session_id: str):
-    """Reject the proposed action. Graph will not run synthesize."""
     row = _get_pending(session_id)
-
     checkpointer = PostgresCheckpointer()
-    app = build_interactive_graph(checkpointer)
-
+    app = build_graph(checkpointer=checkpointer, human_approval=True)
     thread_config = {"configurable": {"thread_id": session_id}}
     app.invoke(Command(resume=False), config=thread_config)
-
     _update_status(session_id, "rejected", "rejected")
     return {"session_id": session_id, "status": "rejected"}

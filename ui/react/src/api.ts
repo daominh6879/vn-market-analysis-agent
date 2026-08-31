@@ -1,4 +1,4 @@
-import type { Conversation, ChatMessage, TraceStep } from './types'
+import type { Conversation, ChatMessage, TraceStep, PendingSession } from './types'
 
 const BASE = '/api'
 
@@ -165,4 +165,30 @@ export function fmtTitle(title: string | null, id: string): string {
 
 export function buildTraceStep(agent: string, step: string, done: boolean): TraceStep {
   return { agent, step, done }
+}
+
+// --- Sessions (human approval) ---
+
+export async function getPendingSessions(): Promise<PendingSession[]> {
+  const r = await fetch(`${BASE}/sessions/pending`)
+  if (!r.ok) return []
+  const data = await r.json()
+  return data.sessions ?? []
+}
+
+export async function approveSession(
+  session_id: string,
+): Promise<{ session_id: string; ticker: string; risk_verdict: string; report: string }> {
+  const r = await fetch(`${BASE}/sessions/${session_id}/approve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  })
+  if (!r.ok) throw new Error(`Approve failed: ${r.status}`)
+  return r.json()
+}
+
+export async function rejectSession(session_id: string): Promise<void> {
+  const r = await fetch(`${BASE}/sessions/${session_id}/reject`, { method: 'POST' })
+  if (!r.ok) throw new Error(`Reject failed: ${r.status}`)
 }

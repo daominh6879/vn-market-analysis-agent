@@ -24,6 +24,16 @@ _COLLECTION = os.environ.get("RAG_COLLECTION", "bctc_structural")
 _EMBED_MODEL = os.environ.get("EMBED_MODEL", "bge-m3")
 _OLLAMA_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
+# Lazy BM25 cache — same pattern as agents/graph.py
+_bm25_cache: dict[str, object] = {}
+
+
+def _get_bm25(collection: str):
+    if collection not in _bm25_cache:
+        from rag.retrieval_bm25 import BM25Retriever
+        _bm25_cache[collection] = BM25Retriever(collection=collection, use_vn_tokenize=True)
+    return _bm25_cache[collection]
+
 
 def _sql_answer(question: str, client) -> str:
     """Generate + execute SQL, return formatted answer.
@@ -72,74 +82,80 @@ def _sql_answer(question: str, client) -> str:
 
 
 def _rag_answer(question: str, ticker: Optional[str], client) -> str:
-    """Vector search + LLM synthesis from HPG financial documents."""
+    """RAG-Fusion retrieval + LLM synthesis from financial documents.
+
+    Uses multi-query decomposition + RRF fusion (rag/rag_fusion_graph.py).
+    Falls back to plain Qdrant single-query on infrastructure failure.
+    """
     try:
-        import httpx
-        from qdrant_client import QdrantClient
-
-        # Embed question
-        r = httpx.post(
-            f"{_OLLAMA_URL}/api/embeddings",
-            json={"model": _EMBED_MODEL, "prompt": question},
-            timeout=30,
+        from rag.rag_fusion_graph import run_rag_fusion
+        bm25 = _get_bm25(_COLLECTION)
+        result = run_rag_fusion(
+            query=question,
+            collection=_COLLECTION,
+            embed_model=_EMBED_MODEL,
+            bm25_retriever=bm25,
+            ticker=ticker or "HPG",
+            n_sub_queries=4,
         )
-        r.raise_for_status()
-        qvec = r.json()["embedding"]
+        return result.get("report") or result.get("analysis") or "Không tìm thấy thông tin liên quan."
 
-        qdrant = QdrantClient(settings.QDRANT_HOST, port=settings.QDRANT_PORT)
+    except Exception:
+        # Fallback: plain single-query Qdrant search
+        try:
+            import httpx
+            from qdrant_client import QdrantClient
 
-        # Build ticker filter when known (collection has ticker payload field)
-        search_filter = None
-        if ticker:
-            from qdrant_client.models import Filter, FieldCondition, MatchValue
-            search_filter = Filter(
-                must=[FieldCondition(key="ticker", match=MatchValue(value=ticker.upper()))]
+            r = httpx.post(
+                f"{_OLLAMA_URL}/api/embeddings",
+                json={"model": _EMBED_MODEL, "prompt": question},
+                timeout=30,
             )
+            r.raise_for_status()
+            qvec = r.json()["embedding"]
 
-        points = qdrant.query_points(
-            collection_name=_COLLECTION,
-            query=qvec,
-            query_filter=search_filter,
-            limit=5,
-        ).points
+            qdrant = QdrantClient(settings.QDRANT_HOST, port=settings.QDRANT_PORT)
+            search_filter = None
+            if ticker:
+                from qdrant_client.models import Filter, FieldCondition, MatchValue
+                search_filter = Filter(
+                    must=[FieldCondition(key="ticker", match=MatchValue(value=ticker.upper()))]
+                )
+            points = qdrant.query_points(
+                collection_name=_COLLECTION,
+                query=qvec,
+                query_filter=search_filter,
+                limit=5,
+            ).points
 
-        if not points:
-            return "Không tìm thấy thông tin liên quan trong tài liệu HPG."
+            if not points:
+                return "Không tìm thấy thông tin liên quan trong tài liệu."
 
-        chunks = "\n\n---\n\n".join(
-            p.payload.get("text", "") for p in points
-        )
-
-        resp = client.generate(
-            messages=[Message(
-                role="user",
-                content=(
-                    f"Câu hỏi: {question}\n\n"
-                    f"Ngữ cảnh từ tài liệu HPG:\n{chunks}\n\n"
-                    "Trả lời dựa trên ngữ cảnh trên. Nếu không có đủ thông tin, nói rõ."
+            chunks = "\n\n---\n\n".join(p.payload.get("text", "") for p in points)
+            resp = client.generate(
+                messages=[Message(
+                    role="user",
+                    content=f"Câu hỏi: {question}\n\nNgữ cảnh:\n{chunks}\n\nTrả lời dựa trên ngữ cảnh trên.",
+                )],
+                system=(
+                    "Bạn là trợ lý phân tích tài chính. "
+                    "Trả lời bằng tiếng Việt, dựa chỉ vào ngữ cảnh được cung cấp."
                 ),
-            )],
-            system=(
-                "Bạn là trợ lý phân tích tài chính HPG. "
-                "Trả lời bằng tiếng Việt, dựa chỉ vào ngữ cảnh được cung cấp. "
-                "Trích dẫn nguồn khi có thể."
-            ),
-            max_tokens=1024,
-        )
-        return resp.text.strip()
+                max_tokens=1024,
+            )
+            return resp.text.strip()
 
-    except Exception as exc:
-        # Qdrant/Ollama unavailable — LLM-only fallback
-        resp = client.generate(
-            messages=[Message(role="user", content=question)],
-            system=(
-                "Bạn là trợ lý phân tích tài chính HPG. "
-                "Lưu ý: hệ thống tìm kiếm tài liệu hiện không khả dụng. "
-                "Trả lời từ kiến thức chung, thêm ghi chú '⚠️ Không có dữ liệu tài liệu'."
-            ),
-            max_tokens=512,
-        )
-        return resp.text.strip()
+        except Exception:
+            resp = client.generate(
+                messages=[Message(role="user", content=question)],
+                system=(
+                    "Bạn là trợ lý phân tích tài chính. "
+                    "Lưu ý: hệ thống tìm kiếm tài liệu hiện không khả dụng. "
+                    "Trả lời từ kiến thức chung, thêm ghi chú '⚠️ Không có dữ liệu tài liệu'."
+                ),
+                max_tokens=512,
+            )
+            return resp.text.strip()
 
 
 def answer(question: str, ticker: Optional[str] = None, client=None) -> str:

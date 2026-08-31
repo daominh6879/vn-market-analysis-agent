@@ -1,11 +1,11 @@
-"""
-tests/test_bai31_routing.py — End-to-end routing tests hitting real LLM + tools.
+﻿"""
+tests/test_bai31_routing.py â€” End-to-end routing tests hitting real LLM + tools.
 
 Tests each intent route:
-  ticker_analysis → agents/graph.py (price data + technical indicators)
-  market_brief    → agents/market_brief_graph.py (global + VN market)
-  qa_document     → rag/qa.py (SQL / RAG)
-  conversation    → LLM stream direct
+  ticker_analysis â†’ agents/graph.py (price data + technical indicators)
+  market_brief    â†’ agents/market_brief_graph.py (global + VN market)
+  qa_document     â†’ rag/qa.py (SQL / RAG)
+  conversation    â†’ LLM stream direct
 
 Run: pytest tests/test_bai31_routing.py -v -s
      (slow: ticker + market agents take 20-60s each)
@@ -21,12 +21,12 @@ load_dotenv()
 
 import pytest
 
-from agents.query_router import classify, RouterResult
+from agents.classifier import classify, RouterResult
 from memory.conversation import create_conversation, load_history
 from memory.turn_handler import stream_turn
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _run(conversation_id: str, user_id: str, message: str, is_first_turn: bool = False):
     """Run stream_turn, collect all SSE lines."""
@@ -95,59 +95,59 @@ def _new_conv():
     return cid, uid
 
 
-# ── Unit: classify() — no LLM ─────────────────────────────────────────────────
+# â”€â”€ Unit: classify() â€” no LLM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_classify_ticker_analysis():
-    r = classify("phân tích HPG hôm nay")
+    r = classify("phÃ¢n tÃ­ch HPG hÃ´m nay")
     assert r.intent == "technical_analysis"
     assert r.ticker == "HPG"
 
 
 def test_classify_market_brief():
-    r = classify("thị trường chứng khoán hôm nay thế nào?")
+    r = classify("thá»‹ trÆ°á»ng chá»©ng khoÃ¡n hÃ´m nay tháº¿ nÃ o?")
     assert r.intent == "market_brief"
     assert r.ticker is None
 
 
 def test_classify_market_brief_vnindex():
-    r = classify("VNINDEX đang ở đâu?")
+    r = classify("VNINDEX Ä‘ang á»Ÿ Ä‘Ã¢u?")
     assert r.intent == "market_brief"
 
 
 def test_classify_qa_document():
-    r = classify("doanh thu HPG năm 2024 là bao nhiêu?")
+    r = classify("doanh thu HPG nÄƒm 2024 lÃ  bao nhiÃªu?")
     assert r.intent == "rag_qa"
     assert r.ticker == "HPG"
 
 
 def test_classify_qa_document_sql():
-    r = classify("top 5 mã có ROE cao nhất trong DB")
-    assert r.intent == "screening"  # qa_document split → screening
+    r = classify("top 5 mÃ£ cÃ³ ROE cao nháº¥t trong DB")
+    assert r.intent == "screening"  # qa_document split â†’ screening
 
 
 def test_classify_conversation():
-    r = classify("xin chào bạn tên gì")
+    r = classify("xin chÃ o báº¡n tÃªn gÃ¬")
     assert r.intent == "conversation"
 
 
 def test_classify_fpt_analysis():
-    r = classify("chỉ số kỹ thuật của FPT tuần này")
+    r = classify("chá»‰ sá»‘ ká»¹ thuáº­t cá»§a FPT tuáº§n nÃ y")
     assert r.intent == "technical_analysis"
     assert r.ticker == "FPT"
 
 
 def test_classify_vnm():
-    r = classify("phân tích VNM hôm nay")
+    r = classify("phÃ¢n tÃ­ch VNM hÃ´m nay")
     assert r.intent == "technical_analysis"
     assert r.ticker == "VNM"
 
 
-# ── Integration: ticker_analysis hits real price API ─────────────────────────
+# â”€â”€ Integration: ticker_analysis hits real price API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_route_ticker_analysis_real():
-    """HPG analysis query → technical_analysis agent → real price data + technical report."""
+    """HPG analysis query â†’ technical_analysis agent â†’ real price data + technical report."""
     cid, uid = _new_conv()
-    lines = _run(cid, uid, "phân tích kỹ thuật HPG hôm nay", is_first_turn=True)
+    lines = _run(cid, uid, "phÃ¢n tÃ­ch ká»¹ thuáº­t HPG hÃ´m nay", is_first_turn=True)
 
     routing = _parse_routing_event(lines)
     done = _parse_done(lines)
@@ -171,9 +171,9 @@ def test_route_ticker_analysis_real():
 
 
 def test_route_conversation_real():
-    """Casual question → conversation path → direct LLM stream."""
+    """Casual question â†’ conversation path â†’ direct LLM stream."""
     cid, uid = _new_conv()
-    lines = _run(cid, uid, "xin chào, bạn là ai?")
+    lines = _run(cid, uid, "xin chÃ o, báº¡n lÃ  ai?")
 
     routing = _parse_routing_event(lines)
     done = _parse_done(lines)
@@ -190,9 +190,9 @@ def test_route_conversation_real():
 
 
 def test_route_qa_document_real():
-    """Financial doc question → qa_document → SQL or RAG path."""
+    """Financial doc question â†’ qa_document â†’ SQL or RAG path."""
     cid, uid = _new_conv()
-    lines = _run(cid, uid, "doanh thu HPG năm 2024 là bao nhiêu?")
+    lines = _run(cid, uid, "doanh thu HPG nÄƒm 2024 lÃ  bao nhiÃªu?")
 
     routing = _parse_routing_event(lines)
     done = _parse_done(lines)
@@ -207,13 +207,13 @@ def test_route_qa_document_real():
     assert len(reply) > 20
 
 
-# ── Market brief is slow (~60s) — run separately ──────────────────────────────
+# â”€â”€ Market brief is slow (~60s) â€” run separately â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.slow
 def test_route_market_brief_real():
-    """Market query → market_brief agent → VN-Index + global data report."""
+    """Market query â†’ market_brief agent â†’ VN-Index + global data report."""
     cid, uid = _new_conv()
-    lines = _run(cid, uid, "thị trường chứng khoán Việt Nam hôm nay thế nào?",
+    lines = _run(cid, uid, "thá»‹ trÆ°á»ng chá»©ng khoÃ¡n Viá»‡t Nam hÃ´m nay tháº¿ nÃ o?",
                  is_first_turn=True)
 
     routing = _parse_routing_event(lines)
