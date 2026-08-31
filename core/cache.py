@@ -42,9 +42,10 @@ PROMPT_VERSION = os.environ.get("CACHE_PROMPT_VERSION", "v1")
 _VN_TZ = timezone(timedelta(hours=7))
 
 
-# Intents whose result depends on question wording (RAG-based) — include normalized_question in key.
-# Pure-tool intents (same tools, same data for same ticker) — key on (intent, ticker) only.
-_RAG_INTENTS = frozenset({"rag_qa", "screening"})
+# Intents whose result depends on question wording — include normalized_question in key.
+# RAG-based intents and sector intents where LLM output varies by query phrasing.
+# Pure-tool intents (same tools, same output for same ticker) — key on (intent, ticker) only.
+_RAG_INTENTS = frozenset({"rag_qa", "screening", "macro_sector"})
 
 # Pure-tool intents: result is data-driven only, independent of conversation history.
 # Cache these regardless of turn number — history context doesn't affect the output.
@@ -78,6 +79,24 @@ def normalize_question(text: str) -> str:
     return " ".join(cleaned.split())
 
 
+import re as _re
+
+_TICKER_RE = _re.compile(r'\b([A-Z]{2,5})\b')
+
+
+def _extract_all_tickers(question: str) -> str:
+    """Extract all VN ticker mentions from query, sort + join for stable cache key.
+
+    "HPG so với VCB" → "HPG|VCB" (same regardless of word order).
+    Single ticker or none → unchanged.
+    """
+    hits = sorted(set(_TICKER_RE.findall(question.upper())))
+    # Filter out common Vietnamese abbreviations / stop words that look like tickers
+    _STOPWORDS = {"VE", "VA", "LA", "CO", "DE", "VS", "ROE", "ROA", "EPS", "PE", "PB"}
+    hits = [t for t in hits if t not in _STOPWORDS]
+    return "|".join(hits) if len(hits) > 1 else (hits[0] if hits else "")
+
+
 def make_cache_key(
     tenant_id: str,
     question: str,
@@ -94,6 +113,9 @@ def make_cache_key(
 
     RAG intents include normalized_question in key (different questions → different RAG chunks).
     Pure-tool intents use normalized_question="" — same tools run regardless of phrasing.
+
+    Comparison queries ("HPG so với VCB"): ticker key uses all detected tickers sorted,
+    so phrasing differences ("ròng" vs no suffix) still hit the same cache entry.
     """
     # Pure-tool intents are history-independent — cache regardless of turn.
     # RAG/conversation intents: turn 1 only (history changes the answer).
@@ -101,10 +123,12 @@ def make_cache_key(
         return None
     model_version = os.environ.get("DEEPSEEK_MODEL", "unknown")
     nq = normalize_question(question) if intent in _RAG_INTENTS else ""
+    # Stable ticker key: use all tickers found in question (covers cross-ticker comparisons)
+    stable_ticker = _extract_all_tickers(question) or (ticker.upper() if ticker else "")
     return CacheKey(
         tenant_id=tenant_id,
         intent=intent,
-        ticker=ticker.upper() if ticker else "",
+        ticker=stable_ticker,
         normalized_question=nq,
         prompt_version=PROMPT_VERSION,
         model_version=model_version,

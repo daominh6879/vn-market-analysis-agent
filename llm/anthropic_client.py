@@ -26,6 +26,7 @@ class AnthropicClient(LLMClient):
         system: str | None = None,
         tools: list[dict] | None = None,
         temperature: float | None = None,
+        tool_choice: str | None = None,
     ) -> LLMResponse:
         kwargs = self._build_kwargs(messages, model, max_tokens, system, tools)
         if temperature is not None:

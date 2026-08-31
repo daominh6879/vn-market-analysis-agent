@@ -179,29 +179,29 @@ class TestInvestmentCaseRouter:
     """investment_case intent fires before screening/fundamentals."""
 
     def test_buy_query_routes_investment_case(self):
-        from agents.classifier import classify
+        from agents.classifier import classify_hybrid as classify
         r = classify("HPG cÃ³ nÃªn mua khÃ´ng?")
         assert r.intent == "investment_case", f"got {r.intent}"
         assert r.ticker == "HPG"
 
     def test_recommendation_routes_investment_case(self):
-        from agents.classifier import classify
+        from agents.classifier import classify_hybrid as classify
         r = classify("khuyáº¿n nghá»‹ VCB")
         assert r.intent == "investment_case", f"got {r.intent}"
 
     def test_bull_bear_routes_investment_case(self):
-        from agents.classifier import classify
+        from agents.classifier import classify_hybrid as classify
         r = classify("bull case vÃ  bear case cá»§a FPT lÃ  gÃ¬?")
         assert r.intent == "investment_case", f"got {r.intent}"
 
     def test_screening_still_routes_screening(self):
         """investment_case keywords must NOT capture screening queries."""
-        from agents.classifier import classify
+        from agents.classifier import classify_hybrid as classify
         r = classify("lá»c cá»• phiáº¿u cÃ³ ROE > 20%")
         assert r.intent == "screening", f"got {r.intent}"
 
     def test_market_brief_beats_investment_case(self):
         """market_brief priority must be higher than investment_case."""
-        from agents.classifier import classify
+        from agents.classifier import classify_hybrid as classify
         r = classify("VNINDEX cÃ³ nÃªn mua khÃ´ng?")
         assert r.intent == "market_brief", f"got {r.intent}"

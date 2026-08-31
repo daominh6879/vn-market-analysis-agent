@@ -84,11 +84,22 @@ def classify_node(state: AgentState) -> dict:
     except Exception:
         rid = uuid.uuid4().hex[:12]
 
-    from agents.classifier import classify_hybrid
-    result = classify_hybrid(
-        state.get("query", ""),
-        messages=state.get("messages"),
-    )
+    # Pre-classified by conversation_router reroute — skip LLM classification.
+    pre_intent = state.get("intent", "")
+    if pre_intent and pre_intent != "conversation":
+        from dataclasses import dataclass
+        @dataclass
+        class _R:
+            intent: str
+            ticker: str | None
+            reason: str
+        result = _R(pre_intent, state.get("ticker") or None, "pre-classified:reroute")
+    else:
+        from agents.classifier import classify_hybrid
+        result = classify_hybrid(
+            state.get("query", ""),
+            messages=state.get("messages"),
+        )
 
     is_market = result.intent == "market_brief" or (result.ticker or "") in _MARKET_TICKERS
 

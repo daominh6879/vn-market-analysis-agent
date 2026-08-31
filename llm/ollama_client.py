@@ -38,6 +38,7 @@ class OllamaClient(LLMClient):
         system: str | None = None,
         tools: list[dict] | None = None,
         temperature: float | None = None,
+        tool_choice: str | None = None,
     ) -> LLMResponse:
         payload = self._build_payload(messages, model, max_tokens, system, tools, stream=False)
         if temperature is not None:

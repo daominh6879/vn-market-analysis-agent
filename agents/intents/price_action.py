@@ -17,7 +17,7 @@ from langfuse import observe
 
 from llm.factory import create_client
 from llm.types import Message
-from tools.price import get_realtime_price, get_historical_ohlcv
+from tools.price import get_realtime_price, get_historical_ohlcv, get_foreign_flows
 from agents.intents import strip_preamble, strip_thinking, extract_slot
 
 
@@ -33,7 +33,18 @@ _SYSTEM = (
 
 
 def _get_foreign_flow_summary(ticker: str) -> str:
-    """Try DB foreign flow for ticker; fallback to market-level."""
+    """Market-level flow for indices; per-ticker flow for stocks."""
+    t = ticker.strip().upper()
+    # Market indices → use market-level foreign flows
+    if t in frozenset({"VNINDEX", "VN30", "HNX", "HNX30", "UPCOM"}):
+        try:
+            r = get_foreign_flows(days=1)
+            if r.status == "ok":
+                return r.message
+        except Exception:
+            pass
+        return "Không có dữ liệu dòng tiền khối ngoại thị trường."
+    # Stock ticker → per-ticker DB query
     try:
         from datetime import date
         from tools.foreign_flow_db import query_ticker_foreign_net
@@ -74,12 +85,33 @@ def _price_change_summary(df: pd.DataFrame) -> str:
     return f"Giá đóng cửa: {last:,.0f} VND ({direction} {abs(change_pct):.2f}%){alert}"
 
 
+_INDEX_CODES = frozenset({"VNINDEX", "VN30", "HNX", "HNX30", "UPCOM"})
+
+
 def _load_ohlcv(ticker: str) -> pd.DataFrame | None:
-    """Try live API first; fall back to agent cache CSV."""
-    r = get_historical_ohlcv(ticker, days=25)
+    """DB-first for indices (market_index_daily); live API for stocks; CSV cache fallback."""
+    t = ticker.strip().upper()
+
+    # Index path: DB → live API
+    if t in _INDEX_CODES:
+        from tools.index_db import query_index
+        df = query_index(t, days=25)
+        if df is not None and not df.empty:
+            # Rename matched_volume → volume for downstream compatibility
+            if "matched_volume" in df.columns and "volume" not in df.columns:
+                df = df.rename(columns={"matched_volume": "volume"})
+            return df
+        # Fallback: live VCI
+        r = get_historical_ohlcv(t, days=25)
+        if r.status == "ok" and r.data is not None:
+            return r.data
+        return None
+
+    # Stock path: live API → CSV cache
+    r = get_historical_ohlcv(t, days=25)
     if r.status == "ok" and r.data is not None:
         return r.data
-    cache = Path("outputs/agent_cache") / f"{ticker}_ohlcv.csv"
+    cache = Path("outputs/agent_cache") / f"{t}_ohlcv.csv"
     if cache.exists():
         try:
             return pd.read_csv(cache)
@@ -95,6 +127,23 @@ def _assemble_report(ticker: str, gia_bien_dong: str, dong_tien: str, ket_luan: 
         f"## Dòng tiền & Khối lượng\n{dong_tien}\n\n"
         f"## Kết luận ngắn\n{ket_luan}\n\n"
         f"[Nguồn: VCI REST API / DB]"
+    )
+
+
+def gather_data(ticker: str, query: str) -> str:
+    """Fetch price, OHLCV, foreign flow — no LLM call."""
+    price_r = get_realtime_price(ticker)
+    df = _load_ohlcv(ticker)
+    price_line  = price_r.message
+    change_line = _price_change_summary(df) if df is not None else "Không có dữ liệu OHLCV."
+    vol_line    = _volume_vs_ma(df)         if df is not None else "Không có dữ liệu khối lượng."
+    flow_line   = _get_foreign_flow_summary(ticker)
+    return (
+        f"[GIÁ & DÒNG TIỀN {ticker}]\n"
+        f"{price_line}\n"
+        f"{change_line}\n"
+        f"{vol_line}\n"
+        f"{flow_line}"
     )
 
 

@@ -17,6 +17,7 @@ class LLMClient(ABC):
         system: str | None = None,
         tools: list[dict] | None = None,
         temperature: float | None = None,
+        tool_choice: str | None = None,
     ) -> LLMResponse: ...
 
     @abstractmethod

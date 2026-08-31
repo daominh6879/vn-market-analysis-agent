@@ -21,7 +21,7 @@ load_dotenv()
 
 import pytest
 
-from agents.classifier import classify, RouterResult
+from agents.classifier import classify_hybrid as classify, RouterResult
 from memory.conversation import create_conversation, load_history
 from memory.turn_handler import stream_turn
 

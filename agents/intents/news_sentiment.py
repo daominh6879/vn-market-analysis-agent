@@ -79,6 +79,19 @@ def _assemble_report(
     )
 
 
+def gather_data(ticker: str | None, query: str) -> str:
+    """Fetch news and sentiment — no LLM call."""
+    subject = ticker or "thị trường"
+    news_text = _fetch_news_text(ticker, days=3)
+    sentiment_r = analyze_market_sentiment(subject, days=7)
+    sentiment_text = sentiment_r.message if sentiment_r.status == "ok" else "Không có dữ liệu sentiment."
+    return (
+        f"[TIN TỨC & SENTIMENT {subject}]\n"
+        f"Tin tức:\n{news_text}\n\n"
+        f"Sentiment:\n{sentiment_text}"
+    )
+
+
 @observe(name="intent.news_sentiment")
 def run(ticker: str | None, query: str) -> str:
     subject = ticker or "thị trường"

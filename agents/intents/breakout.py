@@ -76,6 +76,34 @@ def _get_news(ticker: str) -> str:
     return ""
 
 
+def gather_data(ticker: str, query: str) -> str:
+    """Scan for breakout signals and return structured signal data — no LLM call."""
+    market_df = _get_market_df()
+    if ticker and ticker.upper() not in ("VNINDEX", "VN30", "VN100", "HOSE", "HNX"):
+        t = ticker.upper()
+        signals = scan_ticker(t, market_df)
+        mode_label = f"mã {t}"
+    else:
+        active = get_active_tickers()
+        if not active:
+            return "[BREAKOUT]\nKhông lấy được danh sách mã từ bảng securities."
+        signals = scan_all(market_df, active)
+        mode_label = f"{len(active)} mã trên sàn"
+    if not signals:
+        return f"[BREAKOUT {mode_label}]\nKhông phát hiện tín hiệu breakout trong phiên gần nhất."
+    by_type: dict[str, list] = {}
+    for s in signals:
+        by_type.setdefault(s.signal_type, []).append(s)
+    stats = " | ".join(f"{t}: {len(v)}" for t, v in by_type.items())
+    top_signals = signals[:15]
+    signals_block = "\n\n".join(_format_signal(s) for s in top_signals)
+    return (
+        f"[BREAKOUT {mode_label}]\n"
+        f"Tổng: {len(signals)} tín hiệu | {stats}\n\n"
+        f"{signals_block}"
+    )
+
+
 @observe(name="intent.breakout_scan")
 def run(ticker: str, query: str) -> str:
     market_df = _get_market_df()

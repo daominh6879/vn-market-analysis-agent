@@ -33,6 +33,7 @@ class OpenAIClient(LLMClient):
         system: str | None = None,
         tools: list[dict] | None = None,
         temperature: float | None = None,
+        tool_choice: str | None = None,
     ) -> LLMResponse:
         msgs = self._build_messages(messages, system)
         kwargs: dict = {
@@ -49,6 +50,8 @@ class OpenAIClient(LLMClient):
                     fn["parameters"] = t["input_schema"]
                 return {"type": "function", "function": fn}
             kwargs["tools"] = [_to_openai(t) for t in tools]
+            if tool_choice:
+                kwargs["tool_choice"] = tool_choice
 
         t0 = time.perf_counter()
         try:

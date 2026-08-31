@@ -72,6 +72,21 @@ def _assemble_report(
     )
 
 
+def gather_data(ticker: str | None, query: str) -> str:
+    """Fetch FX, commodities, sector performance — no LLM call."""
+    fx_r        = get_fx_rates()
+    comm_r      = get_commodities()
+    sector_text = _sector_performance_text()
+    fx_text   = fx_r.message   if fx_r.status   == "ok" else "Không có dữ liệu tỷ giá."
+    comm_text = comm_r.message if comm_r.status  == "ok" else "Không có dữ liệu hàng hóa."
+    return (
+        f"[VĨ MÔ & NGÀNH]\n"
+        f"Tỷ giá: {fx_text}\n\n"
+        f"Hàng hóa: {comm_text}\n\n"
+        f"Ngành: {sector_text}"
+    )
+
+
 @observe(name="intent.macro_sector")
 def run(ticker: str | None, query: str) -> str:
     fx_r        = get_fx_rates()

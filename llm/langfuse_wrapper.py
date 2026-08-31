@@ -24,9 +24,11 @@ class LangfuseClientWrapper(LLMClient):
         system: str | None = None,
         tools: list[dict] | None = None,
         temperature: float | None = None,
+        tool_choice: str | None = None,
     ) -> LLMResponse:
         resp = self._inner.generate(
-            messages, model=model, max_tokens=max_tokens, system=system, tools=tools, temperature=temperature
+            messages, model=model, max_tokens=max_tokens, system=system,
+            tools=tools, temperature=temperature, tool_choice=tool_choice,
         )
         get_client().update_current_generation(
             name="llm.generate",

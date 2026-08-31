@@ -172,6 +172,21 @@ def _narrate(query: str, rows_text: str) -> str:
     return strip_thinking(strip_preamble(extract_report(resp.text.strip())))
 
 
+def gather_data(ticker: str | None, query: str) -> str:
+    """Execute SQL screening and return raw rows — no LLM narration."""
+    sql = _pick_template(query)
+    if sql:
+        try:
+            from rag.sql_agent import run_raw_sql
+            result = run_raw_sql(sql)
+            if result.rows:
+                return f"[SCREENING]\n{result.format_answer()}"
+            return "[SCREENING]\nKhông có dữ liệu trong database cho tiêu chí này."
+        except Exception as exc:
+            return f"[SCREENING]\nLỗi SQL: {exc}"
+    return "[SCREENING]\nKhông có template SQL phù hợp cho câu hỏi này."
+
+
 @observe(name="intent.screening")
 def run(ticker: str | None, query: str) -> str:
     """Execute screening — pre-built SQL template first, fall back to LLM-generated SQL."""

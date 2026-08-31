@@ -158,6 +158,44 @@ def _rag_answer(question: str, ticker: Optional[str], client) -> str:
             return resp.text.strip()
 
 
+def retrieve_only(question: str, ticker: Optional[str] = None) -> str:
+    """Retrieve context (SQL rows + RAG chunks) without LLM synthesis."""
+    route = route_classify(question)
+    if route.label == "ngoài_phạm_vi":
+        return f"Ngoài phạm vi: {route.reason}"
+
+    parts: list[str] = []
+
+    if route.label in ("số_liệu", "cả_hai"):
+        try:
+            from rag.sql_agent import execute_safe
+            from llm.factory import create_client as _create
+            result = execute_safe(question, client=_create())
+            if result.rows:
+                parts.append(f"[DỮ LIỆU SQL]\n{result.format_answer()}")
+        except Exception as exc:
+            parts.append(f"[DỮ LIỆU SQL]\nLỗi: {exc}")
+
+    if route.label in ("diễn_giải", "cả_hai"):
+        try:
+            from rag.rag_fusion_graph import make_multi_retrieve_node, make_rrf_fuse_node
+            from rag.multi_query import generate_sub_queries
+            bm25 = _get_bm25(_COLLECTION)
+            sub_queries = generate_sub_queries(question, n=4)
+            state: dict = {"query": question, "ticker": ticker or "HPG", "sub_queries": sub_queries}
+            retrieve_fn = make_multi_retrieve_node(_COLLECTION, _EMBED_MODEL, bm25)
+            state = {**state, **retrieve_fn(state)}
+            fuse_fn = make_rrf_fuse_node(top_k=5)
+            state = {**state, **fuse_fn(state)}
+            chunks = state.get("fused_chunks", [])
+            if chunks:
+                parts.append("[TÀI LIỆU RAG]\n" + "\n\n---\n\n".join(chunks[:5]))
+        except Exception as exc:
+            parts.append(f"[TÀI LIỆU RAG]\nLỗi: {exc}")
+
+    return "\n\n".join(parts) if parts else "Không tìm thấy dữ liệu liên quan."
+
+
 def answer(question: str, ticker: Optional[str] = None, client=None) -> str:
     """Route question and return answer string."""
     if client is None:

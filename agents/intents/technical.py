@@ -131,6 +131,43 @@ def _assemble_report(
     )
 
 
+def gather_data(ticker: str, query: str) -> str:
+    """Fetch OHLCV, indicators, S/R, OBV, Fibonacci, candle — no LLM call."""
+    status, df = _get_ohlcv(ticker)
+    if status != "ok" or df is None:
+        return f"[KỸ THUẬT {ticker}]\nKhông có dữ liệu OHLCV."
+    ind_r = calculate_indicators(df)
+    sr_text = "Không xác định."
+    try:
+        from tools.levels import find_support_resistance
+        sr_r = find_support_resistance(df)
+        sr_text = sr_r.message
+    except Exception as exc:
+        sr_text = f"Không tính được S/R: {exc}"
+    obv_text = _compute_obv(df)
+    fib_text = _fibonacci_levels(df)
+    candle_text = "Không xác định."
+    try:
+        from tools.ohlcv_db import detect_candle_pattern
+        cp_r = detect_candle_pattern(df)
+        candle_text = cp_r.message
+    except Exception:
+        try:
+            from tools.price import detect_candle_pattern as _cp
+            cp_r = _cp(df)
+            candle_text = cp_r.message
+        except Exception as exc:
+            candle_text = f"Không nhận diện được nến: {exc}"
+    return (
+        f"[KỸ THUẬT {ticker}]\n"
+        f"Chỉ báo (RSI, MACD, EMA/SMA):\n{ind_r.message}\n\n"
+        f"Hỗ trợ / Kháng cự:\n{sr_text}\n\n"
+        f"Dòng tiền: {obv_text}\n"
+        f"{fib_text}\n\n"
+        f"Mô hình nến: {candle_text}"
+    )
+
+
 @observe(name="intent.technical_analysis")
 def run(ticker: str, query: str) -> str:
     status, df = _get_ohlcv(ticker)
