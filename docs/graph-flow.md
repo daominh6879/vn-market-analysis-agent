@@ -41,23 +41,24 @@ LLM cannot justify calling it for any query referencing a stock, sector, or fina
 
 ```mermaid
 flowchart TD
-    IN([state: intent+ticker pre-set]) --> classify_node
+    IN([User query\nintent may be pre-set by llm_route]) --> classify_node
 
     classify_node["classify_node\n• intent pre-set → pass through (no LLM)\n• intent absent → llm_classify()"]
 
-    classify_node --> check_cache_node
+    classify_node -->|intent == conversation| END0([END — stream_turn handles streaming])
+    classify_node -->|intent != conversation| check_cache_node
 
-    check_cache_node["check_cache_node\nRedis (exact) + Qdrant (vector)\nkey = intent+ticker [+normalized_question for RAG intents]"]
+    check_cache_node["check_cache_node\nRedis only — single tier\nkey = (tenant_id, intent, ticker, prompt_version, model_version)\nNO question text in key"]
     check_cache_node -->|hit| END2([END — _cache_hit=True, report=cached])
     check_cache_node -->|miss| clarify_node
 
     clarify_node["clarify_node\n① detect_ambiguity — ticker/intent missing?\n② yes → interrupt() — wait for user answer\n③ merge answer → re-classify\n④ no ambiguity → pass through"]
     clarify_node --> decompose_node
 
-    decompose_node["decompose_node\nLLM decomposes query\ninto N structured sub-queries"]
+    decompose_node["decompose_node\nLLM tool-call decomposition\n→ N sub_tasks [{intent, tickers, question}]\nintent + tickers pre-set in each task"]
     decompose_node --> run_subqueries_node
 
-    run_subqueries_node["run_subqueries_node\nFor each sub-query:\n  1. classify_hybrid → intent+ticker\n  2. gather_data() — NO LLM\nCollect sub_results list"]
+    run_subqueries_node["run_subqueries_node\nFor each sub_task (intent pre-classified):\n  gather_data(ticker, question) — NO LLM\n  fan-out per ticker for price/technical intents\nCollect sub_results list"]
     run_subqueries_node -->|human_approval=False| synthesize_final
     run_subqueries_node -->|human_approval=True| request_approval
 
@@ -68,16 +69,36 @@ flowchart TD
     synthesize_final["synthesize_final\nSingle LLM call over all sub_results\nMarkdown report (STRICT_NEUTRAL aware)"]
     synthesize_final --> cache_save_node
 
-    cache_save_node["cache_save_node\nPersist report to cache"]
+    cache_save_node["cache_save_node\nPersist report to Redis"]
     cache_save_node --> END4([END — report in state])
 ```
 
-## RAG intents (cache key includes normalized_question)
+## Cache design (single-tier Redis)
 
-`_RAG_INTENTS = {"rag_qa", "screening", "macro_sector"}`
+Key model: `(tenant_id, intent, ticker, prompt_version, model_version)` — **no question text**.
 
-Different sector queries (banking vs construction) get distinct cache keys because
-`normalized_question` is appended to the key — prevents cross-sector contamination.
+Same intent+ticker always returns the same cached answer, cross-conversation.
+
+`original_query` is passed to `make_cache_key` only for stable multi-ticker extraction
+(e.g. "HPG so với VCB" → `ticker="HPG|VCB"`), not stored in key.
+
+### Per-intent TTL
+
+| Intent | Market hours | Off-hours |
+|---|---|---|
+| `price_action` | 60 s | 300 s |
+| `technical_analysis` | 300 s | 1800 s |
+| `news_sentiment` | 600 s | 3600 s |
+| `macro_sector` | 600 s | 3600 s |
+| `market_brief` | 120 s | 1800 s |
+| `investment_case` | 1800 s | 86400 s |
+| `rag_qa` | 3600 s | 86400 s |
+| `screening` | 300 s | 3600 s |
+| `breakout_scan` | 120 s | 3600 s |
+
+Market hours: Mon–Fri 09:00–14:45 VN time (UTC+7).
+
+`conversation` intent → never cached.
 
 ## gather_data dispatch (run_subqueries_node)
 
@@ -93,12 +114,18 @@ Different sector queries (banking vs construction) get distinct cache keys becau
 | `breakout_scan` | `intents/breakout.gather_data` |
 | `market_brief` | static placeholder |
 
+Fan-out applies for `price_action`, `technical_analysis`, `investment_case`, `breakout_scan`:
+when a sub-task has multiple tickers, each ticker is fetched independently and results merged.
+
 ## LLM call count per turn
 
 | Path | LLM calls |
 |---|---|
 | Direct reply (social) | 1 (`llm_route`) |
-| Agent path | 1 (`llm_route`) + 1 (clarify detect) + 1 (decompose) + N (classify per sub-query) + 1 (synthesize) = **4+N** |
+| Agent path (no clarify) | 1 (`llm_route`) + 1 (`decompose_node`) + 1 (`synthesize_final`) = **3** |
+| Agent path (with clarify) | 1 (`llm_route`) + 1 (clarify re-classify) + 1 (`decompose_node`) + 1 (`synthesize_final`) = **4** |
+
+No per-sub-query classification — intent and tickers are pre-set by `decompose_node` tool calls.
 
 ## Key architecture decisions
 
@@ -109,5 +136,7 @@ Different sector queries (banking vs construction) get distinct cache keys becau
 | No-tool-call fallback → `type=text` | LLM chose not to call a tool → it's a social/conversational turn. Return its free text. |
 | Exception fallback → `type=agent, market_brief` | Safe default: user gets some response. Better than empty. |
 | Assistant history truncated to 120 chars in `llm_route` | Full reports in history let LLM answer new ticker queries from stale data. 120 chars = header only (confirms topic, not data). |
-| `macro_sector` in `_RAG_INTENTS` | Sector queries need `normalized_question` in key to prevent banking/construction cache cross-contamination. |
+| Intent-level cache key (no question text) | Same intent+ticker = same data shape = same answer. Avoids cache misses from paraphrase. `original_query` feeds ticker extraction only. |
+| No per-sub-query `classify_hybrid` | `decompose_node` uses tool calling — LLM returns structured `{intent, tickers, question}` directly. Saves N LLM calls per turn. |
 | `classify_node` skips LLM when intent pre-set | Avoid redundant classification after `llm_route` already decided. |
+| `conversation` intent exits graph immediately | No cache check, no decompose, no gather for pure chat turns. |
