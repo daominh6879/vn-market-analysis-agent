@@ -1,15 +1,10 @@
-﻿"""
-tests/test_bai32_cache.py â€” Cache integration tests for BÃ i 32.
+"""
+tests/test_bai32_cache.py — Cache tests for Bài 32 (intent-level cache).
 
-Tests hit real Redis + real LLM + real tools.
+Tests hit real Redis + real LLM + real tools where noted.
 
 Run:
     pytest tests/test_bai32_cache.py -v -s
-
-Checklist (Xong khi):
-  [x] HPG vs HSG: query HSG after HPG cached â†’ no cross-hit
-  [x] Prompt version change â†’ cache miss
-  [x] Turn 2 â†’ no cache hit even if same question as turn 1
 """
 
 from __future__ import annotations
@@ -31,12 +26,14 @@ from core.cache import (
     make_cache_key,
     normalize_question,
     PROMPT_VERSION,
+    ttl_seconds,
+    _INTENT_TTL,
 )
 
 
-# â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _flush_test_keys(pattern: str = "cache:b32:exact:*") -> None:
+def _flush_test_keys(pattern: str = "cache:b32:*") -> None:
     r = redis_lib.from_url(settings.REDIS_URL, decode_responses=True)
     keys = r.keys(pattern)
     if keys:
@@ -96,17 +93,14 @@ def _reply_text(lines):
     return "".join(chunks)
 
 
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-# UNIT TESTS â€” no LLM/network
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# ══ UNIT TESTS — no LLM/network ══════════════════════════════════════════════
 
 def test_normalize_question():
-    q = "HPG cÃ³ nÃªn mua khÃ´ng?"
+    q = "HPG có nên mua không?"
     n = normalize_question(q)
     assert n == n.lower()
     assert "?" not in n
-    # Vietnamese diacritics stripped
-    assert "e" in n  # "ne" from "khÃ´ng"
+    assert "e" in n
 
 
 def test_cache_key_no_conversation_id():
@@ -114,58 +108,68 @@ def test_cache_key_no_conversation_id():
         tenant_id="t1",
         intent="technical_analysis",
         ticker="HPG",
-        normalized_question="",
         prompt_version="v1",
         model_version="deepseek-v4-flash",
     )
     data = ck.model_dump()
     assert "conversation_id" not in data
     assert "intent" in data
+    assert "normalized_question" not in data, "intent-level cache must not include question"
 
 
-def test_make_cache_key_turn1_pure_tool():
-    """Pure-tool intent: normalized_question must be empty."""
-    ck = make_cache_key("t1", "HPG cÃ³ nÃªn mua khÃ´ng?", "HPG", "investment_case", history=[])
-    assert ck is not None
-    assert ck.ticker == "HPG"
-    assert ck.intent == "investment_case"
-    assert ck.normalized_question == "", "pure-tool intent must not include question in key"
-
-
-def test_make_cache_key_turn1_rag():
-    """RAG intent: normalized_question must be set."""
-    ck = make_cache_key("t1", "Doanh thu HPG 2024?", "HPG", "rag_qa", history=[])
-    assert ck is not None
-    assert ck.normalized_question != "", "RAG intent must include question in key"
-
-
-def test_make_cache_key_turn2_returns_none():
-    """RAG/conversation intents: turn 2+ must NOT be cached (history changes answer)."""
-    history = [{"role": "user", "content": "xin chÃ o"}, {"role": "assistant", "content": "ChÃ o báº¡n"}]
-    ck = make_cache_key("t1", "HPG cÃ³ nÃªn mua khÃ´ng?", "HPG", "investment_case", history=history)
-    assert ck is None, "investment_case turn 2+ must not be cached"
-    ck2 = make_cache_key("t1", "doanh thu HPG?", "HPG", "rag_qa", history=history)
-    assert ck2 is None, "rag_qa turn 2+ must not be cached"
-
-
-def test_make_cache_key_pure_tool_turn2_cached():
-    """Pure-tool intents: turn 2+ CAN be cached â€” result is data-driven, history-independent."""
-    history = [{"role": "user", "content": "xin chÃ o"}, {"role": "assistant", "content": "ChÃ o báº¡n"}]
-    for intent in ("technical_analysis", "price_action", "news_sentiment", "macro_sector"):
+def test_make_cache_key_returns_key_for_any_turn():
+    """All intents cacheable regardless of turn — history ignored."""
+    history = [{"role": "user", "content": "xin chào"}, {"role": "assistant", "content": "Chào bạn"}]
+    for intent in ("technical_analysis", "price_action", "news_sentiment",
+                   "macro_sector", "rag_qa", "investment_case", "screening"):
         ck = make_cache_key("t1", "phan tich MBB", "MBB", intent, history=history)
-        assert ck is not None, f"{intent} turn 2+ should be cacheable"
+        assert ck is not None, f"{intent} must be cacheable any turn"
+
+
+def test_make_cache_key_skips_conversation():
+    """conversation intent must never be cached."""
+    ck = make_cache_key("t1", "xin chào", "", "conversation", history=[])
+    assert ck is None, "conversation must not be cached"
+
+
+def test_make_cache_key_ticker_extraction():
+    """Multi-ticker queries get stable sorted key."""
+    ck = make_cache_key("t1", "so sánh HPG với VCB", "", "investment_case", history=[])
+    assert ck is not None
+    assert ck.ticker == "HPG|VCB"
+
+
+def test_intent_ttl_ordering():
+    """Fast-moving intents have shorter TTL than slow-moving ones."""
+    price_in, _ = _INTENT_TTL["price_action"]
+    rag_in, _ = _INTENT_TTL["rag_qa"]
+    assert price_in < rag_in, "price_action must have shorter market-hours TTL than rag_qa"
+
+    _, price_off = _INTENT_TTL["price_action"]
+    _, rag_off = _INTENT_TTL["rag_qa"]
+    assert price_off < rag_off, "price_action must have shorter off-hours TTL than rag_qa"
+
+
+def test_ttl_seconds_returns_intent_ttl():
+    """ttl_seconds respects intent parameter."""
+    # Use off-hours values only (test environment may not be in VN market hours)
+    _, price_off = _INTENT_TTL["price_action"]
+    _, rag_off = _INTENT_TTL["rag_qa"]
+    # We can't guarantee market hours in CI, just verify the function accepts intent arg
+    t = ttl_seconds("price_action")
+    assert isinstance(t, int) and t > 0
 
 
 def test_same_ticker_different_intent_no_cross_hit():
-    """technical_analysis HPG must not hit fundamentals HPG cache."""
+    """technical_analysis HPG must not hit rag_qa HPG cache."""
     from core.cache import set_exact, get_exact
     ck_tech = CacheKey(
         tenant_id="default", intent="technical_analysis", ticker="HPG",
-        normalized_question="", prompt_version="v1", model_version="deepseek-v4-flash",
+        prompt_version="v1", model_version="deepseek-v4-flash",
     )
     ck_fund = CacheKey(
         tenant_id="default", intent="rag_qa", ticker="HPG",
-        normalized_question="hpg doanh thu 2024", prompt_version="v1", model_version="deepseek-v4-flash",
+        prompt_version="v1", model_version="deepseek-v4-flash",
     )
     set_exact(ck_tech, "technical reply")
     result = get_exact(ck_fund)
@@ -173,42 +177,39 @@ def test_same_ticker_different_intent_no_cross_hit():
 
 
 def test_vinamilk_vnm_same_cache_hit():
-    """After router resolves both to ticker=VNM + same intent, they share one cache entry."""
+    """After router resolves both to ticker=VNM, they share one cache entry."""
     from core.cache import set_exact, get_exact
     ck_vnm = CacheKey(
         tenant_id="default", intent="technical_analysis", ticker="VNM",
-        normalized_question="", prompt_version="v1", model_version="deepseek-v4-flash",
+        prompt_version="v1", model_version="deepseek-v4-flash",
     )
-    # "phÃ¢n tÃ­ch vinamilk" â†’ router resolves ticker=VNM, intent=technical_analysis
-    # â†’ same CacheKey as "phÃ¢n tÃ­ch VNM" â†’ same hash
     set_exact(ck_vnm, "VNM technical reply")
     result = get_exact(ck_vnm)
-    assert result == "VNM technical reply", "VNM and vinamilk share same cache after router normalization"
+    assert result == "VNM technical reply"
 
 
 def test_exact_cache_roundtrip():
-    """Set + get exact tier â€” Redis must be up."""
+    """set_exact + get_exact roundtrip — Redis must be up."""
     import os; os.environ.setdefault("DEEPSEEK_MODEL", "deepseek-v4-flash")
     ck = CacheKey(
         tenant_id="test-tenant", intent="rag_qa", ticker="HPG",
-        normalized_question="hpg doanh thu q2 2024",
         prompt_version="v1", model_version="deepseek-v4-flash",
     )
     from core.cache import set_exact, get_exact
-    set_exact(ck, "Doanh thu HPG Q2 2024: 35,000 tá»·")
+    set_exact(ck, "Doanh thu HPG Q2 2024: 35,000 tỷ")
     result = get_exact(ck)
-    assert result == "Doanh thu HPG Q2 2024: 35,000 tá»·"
+    assert result == "Doanh thu HPG Q2 2024: 35,000 tỷ"
 
 
 def test_prompt_version_invalidates_exact():
-    """Different prompt_version â†’ different hash â†’ miss."""
+    """Different prompt_version → different hash → miss."""
     ck_v1 = CacheKey(
         tenant_id="test-tenant", intent="technical_analysis", ticker="HPG",
-        normalized_question="", prompt_version="v1", model_version="deepseek-v4-flash",
+        prompt_version="v1", model_version="deepseek-v4-flash",
     )
     ck_v2 = CacheKey(
         tenant_id="test-tenant", intent="technical_analysis", ticker="HPG",
-        normalized_question="", prompt_version="v2", model_version="deepseek-v4-flash",
+        prompt_version="v2", model_version="deepseek-v4-flash",
     )
     from core.cache import set_exact, get_exact
     set_exact(ck_v1, "reply v1")
@@ -220,11 +221,11 @@ def test_hpg_hsg_no_cross_hit():
     """HPG cache key must not match HSG cache key."""
     ck_hpg = CacheKey(
         tenant_id="default", intent="technical_analysis", ticker="HPG",
-        normalized_question="", prompt_version="v1", model_version="deepseek-v4-flash",
+        prompt_version="v1", model_version="deepseek-v4-flash",
     )
     ck_hsg = CacheKey(
         tenant_id="default", intent="technical_analysis", ticker="HSG",
-        normalized_question="", prompt_version="v1", model_version="deepseek-v4-flash",
+        prompt_version="v1", model_version="deepseek-v4-flash",
     )
     from core.cache import set_exact, get_exact
     set_exact(ck_hpg, "HPG reply")
@@ -232,23 +233,19 @@ def test_hpg_hsg_no_cross_hit():
     assert result is None, "HSG must not get HPG cached reply"
 
 
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-# INTEGRATION TESTS â€” hit real LLM + tools + Redis (slow ~15-60s)
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# ══ INTEGRATION TESTS — hit real LLM + tools + Redis (slow ~15-60s) ═══════════
 
 def test_cache_hit_second_request_real():
-    """Same question twice â†’ second hit returns 'cache_hit' SSE event."""
+    """Same question twice → second hit returns 'cache_hit' SSE event."""
     _flush_test_keys()
     cid1, uid1 = _new_conv()
-    question = "dÃ²ng tiá»n vÃ  khá»‘i lÆ°á»£ng giao dá»‹ch HPG hÃ´m nay"
+    question = "dòng tiền và khối lượng giao dịch HPG hôm nay"
 
-    # First call â€” populates cache
     lines1 = _run_stream(cid1, uid1, question, is_first_turn=True)
     reply1 = _reply_text(lines1)
     assert len(reply1) > 50, f"First reply too short: {len(reply1)}"
     print(f"\nFirst reply ({len(reply1)} chars): {reply1[:200]}")
 
-    # Second call â€” different conversation, same question
     cid2, uid2 = _new_conv()
     lines2 = _run_stream(cid2, uid2, question, is_first_turn=True)
     reply2 = _reply_text(lines2)
@@ -258,55 +255,55 @@ def test_cache_hit_second_request_real():
     print(f"Second reply ({len(reply2)} chars): {reply2[:200]}")
 
     assert cache_event is not None, "Expected cache_hit SSE event on second call"
-    assert cache_event.get("tier") in ("exact", "vector"), f"Unexpected tier: {cache_event}"
+    assert cache_event.get("tier") == "exact", f"Unexpected tier: {cache_event}"
     assert len(reply2) > 50
 
 
-def test_turn2_no_cache_real():
-    """Same question in turn 2 â†’ no cache hit, full agent run."""
+def test_turn2_hits_cache_real():
+    """Same intent+ticker in turn 2 → CAN hit cache (intent-level, history-independent)."""
     _flush_test_keys()
-    question = "phÃ¢n tÃ­ch ká»¹ thuáº­t HPG: RSI vÃ  MACD"
+    question = "phân tích kỹ thuật HPG: RSI và MACD"
     cid, uid = _new_conv()
 
-    # Turn 1 â€” populates cache
     lines1 = _run_stream(cid, uid, question, is_first_turn=True)
-    assert _reply_text(lines1), "Turn 1 must have reply"
+    reply1 = _reply_text(lines1)
+    assert len(reply1) > 50, "Turn 1 must have reply"
+    print(f"\nTurn 1 reply ({len(reply1)} chars): {reply1[:200]}")
 
-    # Turn 2 â€” same question, same conversation â†’ NO cache hit (history not empty)
     lines2 = _run_stream(cid, uid, question, is_first_turn=False)
     cache_event = _parse_event(lines2, "cache_hit")
     reply2 = _reply_text(lines2)
 
-    print(f"\nTurn 2 cache event: {cache_event}")
+    print(f"Turn 2 cache event: {cache_event}")
     print(f"Turn 2 reply ({len(reply2)} chars): {reply2[:200]}")
 
-    assert cache_event is None, "Turn 2 must NOT hit cache"
-    assert len(reply2) > 50, "Turn 2 must still produce a full reply"
+    # Intent-level cache: turn 2 with same ticker+intent should hit cache
+    assert cache_event is not None, "Turn 2 with same intent+ticker must hit cache"
+    assert cache_event.get("tier") == "exact"
+    assert len(reply2) > 50
 
 
 def test_ngan_hang_thinh_vuong_resolves_vpb():
-    """classify_hybrid must resolve 'NgÃ¢n hÃ ng Thá»‹nh VÆ°á»£ng' â†’ ticker=VPB."""
+    """classify_hybrid must resolve 'Ngân hàng Thịnh Vượng' → ticker=VPB."""
     from agents.classifier import classify_hybrid
-    result = classify_hybrid("phÃ¢n tÃ­ch cá»• phiáº¿u NgÃ¢n hÃ ng Thá»‹nh VÆ°á»£ng")
+    result = classify_hybrid("phân tích cổ phiếu Ngân hàng Thịnh Vượng")
     print(f"\nRouter result: intent={result.intent} ticker={result.ticker} reason={result.reason}")
     assert result.ticker == "VPB", f"Expected VPB, got {result.ticker}"
 
 
 def test_company_name_same_cache_as_ticker_real():
-    """'phÃ¢n tÃ­ch NgÃ¢n hÃ ng Thá»‹nh VÆ°á»£ng' and 'phÃ¢n tÃ­ch VPB' share one cache entry."""
+    """'phân tích Ngân hàng Thịnh Vượng' and 'phân tích VPB' share one cache entry."""
     _flush_test_keys()
 
-    # First: full company name â€” populates cache with ticker=VPB
     cid1, uid1 = _new_conv()
-    lines1 = _run_stream(cid1, uid1, "phÃ¢n tÃ­ch NgÃ¢n hÃ ng Thá»‹nh VÆ°á»£ng hÃ´m nay",
+    lines1 = _run_stream(cid1, uid1, "phân tích Ngân hàng Thịnh Vượng hôm nay",
                          is_first_turn=True)
     reply1 = _reply_text(lines1)
     print(f"\nCompany-name reply ({len(reply1)} chars): {reply1[:200]}")
     assert len(reply1) > 50, "First reply too short"
 
-    # Second: ticker symbol â€” must hit cache (same CacheKey via router)
     cid2, uid2 = _new_conv()
-    lines2 = _run_stream(cid2, uid2, "phÃ¢n tÃ­ch VPB hÃ´m nay", is_first_turn=True)
+    lines2 = _run_stream(cid2, uid2, "phân tích VPB hôm nay", is_first_turn=True)
     cache_event = _parse_event(lines2, "cache_hit")
     reply2 = _reply_text(lines2)
 
@@ -314,26 +311,24 @@ def test_company_name_same_cache_as_ticker_real():
     print(f"VPB reply ({len(reply2)} chars): {reply2[:200]}")
 
     assert cache_event is not None, (
-        "Expected cache_hit: 'NgÃ¢n hÃ ng Thá»‹nh VÆ°á»£ng' and 'VPB' must share same entry"
+        "Expected cache_hit: 'Ngân hàng Thịnh Vượng' and 'VPB' must share same entry"
     )
-    assert cache_event.get("tier") in ("exact", "vector"), f"Unexpected tier: {cache_event}"
+    assert cache_event.get("tier") == "exact"
 
 
 def test_hpg_hsg_no_cross_cache_real():
-    """Cache HPG reply, then ask about HSG â†’ must NOT return HPG reply."""
+    """Cache HPG reply, then ask about HSG → must NOT return HPG reply."""
     _flush_test_keys()
     cid1, uid1 = _new_conv()
 
-    hpg_q = "doanh thu HPG nÄƒm 2024 lÃ  bao nhiÃªu?"
-    hsg_q = "doanh thu HSG nÄƒm 2024 lÃ  bao nhiÃªu?"
+    hpg_q = "doanh thu HPG năm 2024 là bao nhiêu?"
+    hsg_q = "doanh thu HSG năm 2024 là bao nhiêu?"
 
-    # Cache HPG
     lines1 = _run_stream(cid1, uid1, hpg_q, is_first_turn=True)
     hpg_reply = _reply_text(lines1)
-    assert "HPG" in hpg_reply.upper() or len(hpg_reply) > 20, "HPG reply should mention HPG"
+    assert "HPG" in hpg_reply.upper() or len(hpg_reply) > 20
     print(f"\nHPG reply: {hpg_reply[:200]}")
 
-    # Ask about HSG â€” different conversation
     cid2, uid2 = _new_conv()
     lines2 = _run_stream(cid2, uid2, hsg_q, is_first_turn=True)
     cache_event = _parse_event(lines2, "cache_hit")
@@ -342,11 +337,108 @@ def test_hpg_hsg_no_cross_cache_real():
     print(f"Cache event for HSG query: {cache_event}")
     print(f"HSG reply: {hsg_reply[:200]}")
 
-    # If there's a cache hit, it must NOT be the HPG reply
     if cache_event is not None:
         assert hsg_reply != hpg_reply, "HSG must not receive HPG cached reply"
-    # Reply must mention HSG, not be the HPG answer
     assert len(hsg_reply) > 20
-    # Should not contain HPG-specific content if HSG data is different
-    # (relaxed: just verify it's a real reply, ticker guard verified via unit test)
     print("HSG ticker guard: OK (no cross-cache)")
+
+
+def test_prompt_version_change_invalidates_cache_real():
+    """After PROMPT_VERSION change, old cache entries must be misses."""
+    import os
+    from core import cache as cache_mod
+
+    _flush_test_keys()
+    original = cache_mod.PROMPT_VERSION
+
+    question = "giá HPG hiện tại"
+    cid1, uid1 = _new_conv()
+    lines1 = _run_stream(cid1, uid1, question, is_first_turn=True)
+    reply1 = _reply_text(lines1)
+    assert len(reply1) > 50
+
+    # Bump prompt version — old entries should not hit
+    cache_mod.PROMPT_VERSION = original + "_test_bump"
+    try:
+        cid2, uid2 = _new_conv()
+        lines2 = _run_stream(cid2, uid2, question, is_first_turn=True)
+        cache_event = _parse_event(lines2, "cache_hit")
+        assert cache_event is None, (
+            "Bumped PROMPT_VERSION must cause cache miss"
+        )
+    finally:
+        cache_mod.PROMPT_VERSION = original
+
+
+# ══ E2E: intent-level cache contract ══════════════════════════════════════════
+
+def test_different_phrasing_same_intent_ticker_hits_cache():
+    """Core intent-level guarantee: different wording, same intent+ticker → cache hit.
+
+    q1: "HPG hôm nay thế nào?"  → router: price_action / HPG → stored
+    q2: "Cập nhật giá HPG"      → router: price_action / HPG → must HIT q1 entry
+
+    If this fails, the router is classifying the two queries differently
+    (different intent or different ticker), not a cache bug.
+    """
+    _flush_test_keys()
+
+    q1 = "HPG hôm nay thế nào?"
+    q2 = "Cập nhật giá và khối lượng HPG"
+
+    cid1, uid1 = _new_conv()
+    lines1 = _run_stream(cid1, uid1, q1, is_first_turn=True)
+    reply1 = _reply_text(lines1)
+    print(f"\nq1 reply ({len(reply1)} chars): {reply1[:200]}")
+    assert len(reply1) > 50, "q1 reply too short — pipeline failed"
+
+    cid2, uid2 = _new_conv()
+    lines2 = _run_stream(cid2, uid2, q2, is_first_turn=True)
+    cache_event = _parse_event(lines2, "cache_hit")
+    reply2 = _reply_text(lines2)
+
+    print(f"Cache event: {cache_event}")
+    print(f"q2 reply ({len(reply2)} chars): {reply2[:200]}")
+
+    assert cache_event is not None, (
+        "Different phrasing, same intent+ticker must hit cache. "
+        "Check router log: both queries must resolve to same intent+ticker."
+    )
+    assert cache_event.get("tier") == "exact"
+    assert reply2 == reply1, "Cached reply must be identical to stored reply"
+
+
+def test_e2e_full_cycle_all_major_intents():
+    """Smoke E2E: each major intent caches on first call, hits on second.
+
+    One call per intent — verifies the cache_save_node runs for every intent path.
+    Slow (~3-5 min for all intents). Run with -k to select a subset.
+    """
+    _flush_test_keys()
+
+    cases = [
+        ("phân tích kỹ thuật HPG RSI MACD", "technical_analysis", "HPG"),
+        ("tin tức và sentiment VCB tuần này", "news_sentiment", "VCB"),
+        ("tổng quan thị trường hôm nay", "market_brief", ""),
+    ]
+
+    for question, expected_intent, expected_ticker in cases:
+        label = f"{expected_intent}/{expected_ticker or 'no-ticker'}"
+
+        # First call — populate cache
+        cid1, uid1 = _new_conv()
+        lines1 = _run_stream(cid1, uid1, question, is_first_turn=True)
+        reply1 = _reply_text(lines1)
+        print(f"\n[{label}] first reply ({len(reply1)} chars): {reply1[:120]}")
+        assert len(reply1) > 50, f"[{label}] first reply too short"
+
+        # Second call — must hit cache
+        cid2, uid2 = _new_conv()
+        lines2 = _run_stream(cid2, uid2, question, is_first_turn=True)
+        cache_event = _parse_event(lines2, "cache_hit")
+        reply2 = _reply_text(lines2)
+
+        print(f"[{label}] cache_event={cache_event}")
+        assert cache_event is not None, f"[{label}] second call must hit cache"
+        assert cache_event.get("tier") == "exact", f"[{label}] wrong tier: {cache_event}"
+        assert reply2 == reply1, f"[{label}] cached reply must match original"

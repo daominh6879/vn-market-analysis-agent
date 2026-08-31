@@ -1,16 +1,19 @@
 """
-core/cache.py — 2-tier response cache for chat agent (Bài 32).
+core/cache.py — Intent-level response cache (Bài 32).
 
-Tier 1 (exact): SHA-256(CacheKey JSON) → Redis  key: cache:b32:exact:{hash}
-Tier 2 (vector): embed(normalized_question) → Qdrant 'cache_vectors'
-                 Ticker guard: payload.ticker must match before returning.
-                 Prevents HPG/HSG cross-cache contamination.
+Single tier: SHA-256(CacheKey JSON) → Redis  key: cache:b32:{hash}
+
+Key = (tenant_id, intent, ticker, prompt_version, model_version).
+No question text — same intent+ticker always returns the same cached answer.
+
+TTL is per-intent, with separate market-hours and off-hours values:
+  - Fast-moving data (price_action, breakout_scan): short TTL during market hours
+  - Slow-moving data (rag_qa, investment_case): long TTL, cached overnight
 
 Rules:
-- Only cache turn 1 (history empty). Turn 2+ → skip, always miss.
-- No conversation_id in key — cache is cross-conversation.
-- normalize: lowercase + NFKD diacritic strip + drop non-alphanumeric.
-- TTL: 120s during market hours (Mon-Fri 09:00–14:45 VN), 1800s otherwise.
+- conversation intent → never cached (no agent result to cache)
+- All other intents → cached regardless of turn or conversation history
+- No conversation_id in key — cache is cross-conversation
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ import hashlib
 import json
 import logging
 import os
-import time
+import re as _re
 import unicodedata
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -33,55 +36,48 @@ from core.config import settings
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-_COLLECTION = "cache_vectors"
-_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "bge-m3")
-_VECTOR_THRESHOLD = float(os.environ.get("CACHE_VECTOR_THRESHOLD", "0.92"))
-_REDIS_PREFIX = "cache:b32:exact"
+_REDIS_PREFIX = "cache:b32"
 PROMPT_VERSION = os.environ.get("CACHE_PROMPT_VERSION", "v1")
 
 _VN_TZ = timezone(timedelta(hours=7))
 
-
-# Intents whose result depends on question wording — include normalized_question in key.
-# RAG-based intents and sector intents where LLM output varies by query phrasing.
-# Pure-tool intents (same tools, same output for same ticker) — key on (intent, ticker) only.
-_RAG_INTENTS = frozenset({"rag_qa", "screening", "macro_sector"})
-
-# Pure-tool intents: result is data-driven only, independent of conversation history.
-# Cache these regardless of turn number — history context doesn't affect the output.
-# RAG intents and conversation stay turn-1-only (history may affect the answer).
-_HISTORY_INDEPENDENT = frozenset({
-    "price_action",
-    "technical_analysis",
-    "news_sentiment",
-    "macro_sector",
-    "market_brief",
-    "investment_case",  # tool-driven (financial statements), not RAG — history-independent
-})
+# Per-intent TTL: (market_hours_seconds, off_hours_seconds)
+# Market hours: Mon-Fri 09:00-14:45 VN time
+_INTENT_TTL: dict[str, tuple[int, int]] = {
+    "price_action":       (60,    300),    # price ticks fast
+    "technical_analysis": (300,   1800),   # indicators per-session
+    "news_sentiment":     (600,   3600),   # news refreshes hourly
+    "macro_sector":       (600,   3600),   # sector data slow-moving
+    "market_brief":       (120,   1800),   # session overview
+    "investment_case":    (1800,  86400),  # analysis stable intraday
+    "rag_qa":             (3600,  86400),  # financial reports rarely change
+    "screening":          (300,   3600),   # screen per-session
+    "breakout_scan":      (120,   3600),   # breakout patterns time-sensitive
+}
+_DEFAULT_TTL = (300, 1800)
 
 # ── Key model ─────────────────────────────────────────────────────────────────
 
 class CacheKey(BaseModel):
     tenant_id: str
-    intent: str          # from router — determines which tools/path run
-    ticker: str          # uppercase; "" for ticker-less intents (screening, macro_sector)
-    normalized_question: str  # "" for pure-tool intents; full question for RAG intents
+    intent: str
+    ticker: str          # uppercase; "" for ticker-less intents
     prompt_version: str
     model_version: str
-    # NO conversation_id — cache is cross-conversation
+    # NO conversation_id, NO question text — cache is cross-conversation, intent-level
 
 
 def normalize_question(text: str) -> str:
-    """Lowercase, strip Vietnamese diacritics, drop non-alphanumeric (keep spaces)."""
+    """Lowercase, strip Vietnamese diacritics, drop non-alphanumeric (keep spaces).
+    Kept for compatibility — not used in cache key."""
     nfkd = unicodedata.normalize("NFKD", text.lower())
     ascii_only = "".join(c for c in nfkd if not unicodedata.combining(c))
     cleaned = "".join(c if c.isalnum() or c == " " else " " for c in ascii_only)
     return " ".join(cleaned.split())
 
 
-import re as _re
-
 _TICKER_RE = _re.compile(r'\b([A-Z]{2,5})\b')
+_TICKER_STOPWORDS = frozenset({"VE", "VA", "LA", "CO", "DE", "VS", "ROE", "ROA", "EPS", "PE", "PB"})
 
 
 def _extract_all_tickers(question: str) -> str:
@@ -90,10 +86,8 @@ def _extract_all_tickers(question: str) -> str:
     "HPG so với VCB" → "HPG|VCB" (same regardless of word order).
     Single ticker or none → unchanged.
     """
-    hits = sorted(set(_TICKER_RE.findall(question.upper())))
-    # Filter out common Vietnamese abbreviations / stop words that look like tickers
-    _STOPWORDS = {"VE", "VA", "LA", "CO", "DE", "VS", "ROE", "ROA", "EPS", "PE", "PB"}
-    hits = [t for t in hits if t not in _STOPWORDS]
+    hits = sorted(t for t in set(_TICKER_RE.findall(question.upper()))
+                  if t not in _TICKER_STOPWORDS)
     return "|".join(hits) if len(hits) > 1 else (hits[0] if hits else "")
 
 
@@ -102,34 +96,21 @@ def make_cache_key(
     question: str,
     ticker: str,
     intent: str,
-    history: list,
+    history: list | None = None,
 ) -> Optional[CacheKey]:
     """Return CacheKey, or None if this turn should not be cached.
 
-    Pure-tool intents (_HISTORY_INDEPENDENT): cache any turn — result is data-driven,
-    conversation history doesn't change the output.
-
-    RAG intents (rag_qa, screening) and conversation: turn 1 only — history may affect answer.
-
-    RAG intents include normalized_question in key (different questions → different RAG chunks).
-    Pure-tool intents use normalized_question="" — same tools run regardless of phrasing.
-
-    Comparison queries ("HPG so với VCB"): ticker key uses all detected tickers sorted,
-    so phrasing differences ("ròng" vs no suffix) still hit the same cache entry.
+    conversation intent → always skip (direct reply, no agent result).
+    All other intents → cache at intent+ticker level regardless of turn.
     """
-    # Pure-tool intents are history-independent — cache regardless of turn.
-    # RAG/conversation intents: turn 1 only (history changes the answer).
-    if history and intent not in _HISTORY_INDEPENDENT:
+    if not intent or intent == "conversation":
         return None
     model_version = os.environ.get("DEEPSEEK_MODEL", "unknown")
-    nq = normalize_question(question) if intent in _RAG_INTENTS else ""
-    # Stable ticker key: use all tickers found in question (covers cross-ticker comparisons)
     stable_ticker = _extract_all_tickers(question) or (ticker.upper() if ticker else "")
     return CacheKey(
         tenant_id=tenant_id,
         intent=intent,
         ticker=stable_ticker,
-        normalized_question=nq,
         prompt_version=PROMPT_VERSION,
         model_version=model_version,
     )
@@ -142,15 +123,15 @@ def _key_hash(ck: CacheKey) -> str:
 
 # ── TTL ───────────────────────────────────────────────────────────────────────
 
-def ttl_seconds() -> int:
-    """120s during VN market hours (Mon-Fri 09:00-14:45), 1800s otherwise."""
+def ttl_seconds(intent: str = "") -> int:
+    """Return TTL for this intent based on whether VN market is open."""
+    in_market, off_market = _INTENT_TTL.get(intent, _DEFAULT_TTL)
     now = datetime.now(_VN_TZ)
     if now.weekday() < 5:
-        t = now.time()
-        from datetime import time as time_cls
-        if time_cls(9, 0) <= t <= time_cls(14, 45):
-            return 120
-    return 1800
+        from datetime import time as _time
+        if _time(9, 0) <= now.time() <= _time(14, 45):
+            return in_market
+    return off_market
 
 
 # ── Redis client (lazy) ───────────────────────────────────────────────────────
@@ -165,201 +146,41 @@ def _get_redis() -> redis_lib.Redis:
     return _redis
 
 
-# ── Tier 1: exact (Redis) ─────────────────────────────────────────────────────
+# ── Cache operations ──────────────────────────────────────────────────────────
 
 def get_exact(ck: CacheKey) -> Optional[str]:
     h = _key_hash(ck)
     try:
-        r = _get_redis()
-        val = r.get(f"{_REDIS_PREFIX}:{h}")
+        val = _get_redis().get(f"{_REDIS_PREFIX}:{h}")
         if val is not None:
-            log.debug("cache.exact.hit intent=%s ticker=%s hash=%s", ck.intent, ck.ticker, h[:12])
+            log.debug("cache.hit intent=%s ticker=%s hash=%s", ck.intent, ck.ticker, h[:12])
         else:
-            log.debug("cache.exact.miss intent=%s ticker=%s hash=%s", ck.intent, ck.ticker, h[:12])
+            log.debug("cache.miss intent=%s ticker=%s hash=%s", ck.intent, ck.ticker, h[:12])
         return val
     except Exception as exc:
-        log.warning("cache.exact.error intent=%s ticker=%s err=%s", ck.intent, ck.ticker, exc)
+        log.warning("cache.get_error intent=%s ticker=%s err=%s", ck.intent, ck.ticker, exc)
         return None
 
 
 def set_exact(ck: CacheKey, reply: str) -> None:
     h = _key_hash(ck)
-    ttl = ttl_seconds()
+    ttl = ttl_seconds(ck.intent)
     try:
-        r = _get_redis()
-        r.set(f"{_REDIS_PREFIX}:{h}", reply, ex=ttl)
-        log.debug("cache.exact.set intent=%s ticker=%s hash=%s ttl=%ds", ck.intent, ck.ticker, h[:12], ttl)
+        _get_redis().set(f"{_REDIS_PREFIX}:{h}", reply, ex=ttl)
+        log.debug("cache.set intent=%s ticker=%s hash=%s ttl=%ds", ck.intent, ck.ticker, h[:12], ttl)
     except Exception as exc:
-        log.warning("cache.exact.set_error intent=%s ticker=%s err=%s", ck.intent, ck.ticker, exc)
-
-
-# ── Tier 2: vector (Qdrant) ───────────────────────────────────────────────────
-
-def _qdrant():
-    from qdrant_client import QdrantClient
-    return QdrantClient(settings.QDRANT_HOST, port=settings.QDRANT_PORT)
-
-
-def _embed(text: str) -> list[float]:
-    import httpx
-    ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-    for path, payload in (
-        ("/api/embed",      {"model": _EMBED_MODEL, "input": text}),
-        ("/api/embeddings", {"model": _EMBED_MODEL, "prompt": text}),
-    ):
-        r = httpx.post(f"{ollama_url}{path}", json=payload, timeout=30)
-        if r.status_code == 404:
-            continue
-        r.raise_for_status()
-        data = r.json()
-        vec = data.get("embedding") or (data.get("embeddings") or [[]])[0]
-        if vec:
-            return vec
-    raise RuntimeError("Ollama embed failed")
-
-
-def _ensure_collection(dim: int) -> None:
-    from qdrant_client import QdrantClient
-    from qdrant_client.models import VectorParams, Distance
-    client = _qdrant()
-    existing = {c.name for c in client.get_collections().collections}
-    if _COLLECTION not in existing:
-        client.create_collection(
-            collection_name=_COLLECTION,
-            vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
-        )
-
-
-def get_vector(ck: CacheKey) -> Optional[str]:
-    # Vector tier only meaningful when there's a question to embed
-    if not ck.normalized_question:
-        log.debug("cache.vector.skip intent=%s ticker=%s reason=no_question", ck.intent, ck.ticker)
-        return None
-    try:
-        vec = _embed(ck.normalized_question)
-        client = _qdrant()
-        results = client.search(
-            collection_name=_COLLECTION,
-            query_vector=vec,
-            limit=5,
-            score_threshold=_VECTOR_THRESHOLD,
-            with_payload=True,
-        )
-        now = time.time()
-        for r in results:
-            p = r.payload or {}
-            score = round(r.score, 4)
-            # Ticker guard — must match exactly
-            if p.get("ticker", "") != ck.ticker:
-                log.debug("cache.vector.guard_fail reason=ticker expected=%s got=%s score=%.4f",
-                          ck.ticker, p.get("ticker"), score)
-                continue
-            # Intent guard — rag_qa and screening can share same ticker+question text
-            if p.get("intent", "") != ck.intent:
-                log.debug("cache.vector.guard_fail reason=intent expected=%s got=%s score=%.4f",
-                          ck.intent, p.get("intent"), score)
-                continue
-            # Tenant guard
-            if p.get("tenant_id", "") != ck.tenant_id:
-                log.debug("cache.vector.guard_fail reason=tenant score=%.4f", score)
-                continue
-            # Prompt/model version guard
-            if p.get("prompt_version", "") != ck.prompt_version:
-                log.debug("cache.vector.guard_fail reason=prompt_version score=%.4f", score)
-                continue
-            if p.get("model_version", "") != ck.model_version:
-                log.debug("cache.vector.guard_fail reason=model_version score=%.4f", score)
-                continue
-            # TTL check
-            if p.get("expires_at", 0) < now:
-                log.debug("cache.vector.guard_fail reason=expired score=%.4f", score)
-                continue
-            log.debug("cache.vector.hit intent=%s ticker=%s score=%.4f", ck.intent, ck.ticker, score)
-            return p.get("reply", "")
-        log.debug("cache.vector.miss intent=%s ticker=%s candidates=%d", ck.intent, ck.ticker, len(results))
-    except Exception as exc:
-        log.warning("cache.vector.error intent=%s ticker=%s err=%s", ck.intent, ck.ticker, exc)
-    return None
-
-
-def set_vector(ck: CacheKey, reply: str) -> None:
-    if not ck.normalized_question:
-        return  # pure-tool intents: no question to embed, skip vector tier
-    try:
-        import uuid as uuid_lib
-        from qdrant_client.models import PointStruct
-        vec = _embed(ck.normalized_question)
-        _ensure_collection(len(vec))
-        client = _qdrant()
-        h = _key_hash(ck)
-        point_id = str(uuid_lib.uuid5(uuid_lib.NAMESPACE_DNS, h))
-        ttl = ttl_seconds()
-        expires_at = time.time() + ttl
-        client.upsert(
-            collection_name=_COLLECTION,
-            points=[PointStruct(
-                id=point_id,
-                vector=vec,
-                payload={
-                    "intent": ck.intent,
-                    "ticker": ck.ticker,
-                    "tenant_id": ck.tenant_id,
-                    "prompt_version": ck.prompt_version,
-                    "model_version": ck.model_version,
-                    "reply": reply,
-                    "expires_at": expires_at,
-                },
-            )],
-        )
-        log.debug("cache.vector.set intent=%s ticker=%s ttl=%ds", ck.intent, ck.ticker, ttl)
-    except Exception as exc:
-        log.warning("cache.vector.set_error intent=%s ticker=%s err=%s", ck.intent, ck.ticker, exc)
-
-
-# ── Maintenance ───────────────────────────────────────────────────────────────
-
-def purge_expired_vectors(batch_size: int = 500) -> int:
-    """Delete expired points from Qdrant cache collection. Returns count deleted.
-
-    Qdrant has no native TTL — expired points accumulate and must be purged manually.
-    Call periodically (e.g. via a Dagster sensor or cron).
-    """
-    try:
-        from qdrant_client.models import Filter, FieldCondition, Range
-        client = _qdrant()
-        existing = {c.name for c in client.get_collections().collections}
-        if _COLLECTION not in existing:
-            return 0
-        now = time.time()
-        client.delete(
-            collection_name=_COLLECTION,
-            points_selector=Filter(
-                must=[FieldCondition(key="expires_at", range=Range(lte=now))]
-            ),
-        )
-        log.info("cache.vector.purge completed ts=%.0f", now)
-        return 0  # Qdrant delete doesn't return count
-    except Exception as exc:
-        log.warning("cache.vector.purge_error err=%s", exc)
-        return 0
+        log.warning("cache.set_error intent=%s ticker=%s err=%s", ck.intent, ck.ticker, exc)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def cache_get(ck: CacheKey) -> tuple[Optional[str], str]:
-    """Returns (reply, tier) where tier in {'exact', 'vector', 'miss'}."""
+    """Returns (reply, tier) where tier in {'exact', 'miss'}."""
     hit = get_exact(ck)
     if hit is not None:
         return hit, "exact"
-    hit = get_vector(ck)
-    if hit is not None:
-        return hit, "vector"
     return None, "miss"
 
 
 def cache_set(ck: CacheKey, reply: str) -> None:
-    """Write exact tier synchronously; vector tier in background thread (Ollama embed is slow)."""
-    import threading
     set_exact(ck, reply)
-    if ck.normalized_question:
-        threading.Thread(target=set_vector, args=(ck, reply), daemon=True).start()
