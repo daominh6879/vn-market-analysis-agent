@@ -64,15 +64,27 @@ class OpenAIClient(LLMClient):
         choice = resp.choices[0]
         msg = choice.message
         text = msg.content or ""
-        # DeepSeek reasoning models: content may be empty; answer lives in reasoning_content
-        if not text.strip():
+        # DeepSeek reasoning models: content may be empty; answer lives in reasoning_content.
+        # Only fall back to reasoning_content if content is truly absent (not just after stripping).
+        if not text:
             text = getattr(msg, "reasoning_content", None) or ""
+
+        import re as _re
+        # Some models (deepseek-v4-flash) put the structured answer INSIDE <think> with nothing
+        # after </think>. Detect this: strip think blocks; if result is empty, keep think content.
+        think_inner = ""
+        think_match = _re.search(r"<think>(.*?)</think>", text, flags=_re.DOTALL)
+        if think_match:
+            think_inner = think_match.group(1).strip()
+        text_after_think = _re.sub(r"<think>.*?</think>", "", text, flags=_re.DOTALL).strip()
+        if not text_after_think and think_inner:
+            text = think_inner  # answer was inside <think>
+        else:
+            text = text_after_think
+
         if self._strip_thinking:
             from llm.utils import strip_thinking as _strip
             text = _strip(text)
-        else:
-            import re as _re
-            text = _re.sub(r"<think>.*?</think>", "", text, flags=_re.DOTALL).strip()
 
         tool_calls: list[ToolCall] = []
         import json

@@ -448,13 +448,25 @@ def detect_candle_pattern(df: pd.DataFrame) -> ToolResult:
                 and c < o
             ):
                 pattern = "Hanging Man — râu dưới dài trên đỉnh, cảnh báo đảo chiều giảm"
+            elif (
+                upper_shadow >= max(body * 2, candle_range * 0.5)
+                and lower_shadow < upper_shadow * 0.3
+            ):
+                direction = "tăng" if c >= o else "giảm"
+                pattern = f"Shooting Star — râu trên dài, nến {direction}, cảnh báo từ chối vùng cao"
             elif body_ratio > 0.85 and upper_shadow < body * 0.1 and lower_shadow < body * 0.1:
                 color = "xanh" if c >= o else "đỏ"
                 pattern = f"Marubozu {color} — thân lớn, không râu, xu hướng mạnh"
             elif body_ratio < 0.1:
                 pattern = "Doji — thân nến rất nhỏ, do dự"
+            elif 0.1 <= body_ratio <= 0.4:
+                color = "tăng" if c >= o else "giảm"
+                pattern = f"Spinning Top {color} — thân nhỏ, hai râu, lực cân bằng"
             else:
-                pattern = "Không xác định"
+                # Normal candle — describe direction and relative body size
+                color = "tăng" if c >= o else "giảm"
+                size = "lớn" if body_ratio > 0.65 else "vừa"
+                pattern = f"Nến {color} thân {size} — chưa có mẫu đặc biệt"
 
         msg = f"Mẫu nến (phiên cuối): {pattern}"
         return ToolResult(status="ok", data=pattern, message=msg)

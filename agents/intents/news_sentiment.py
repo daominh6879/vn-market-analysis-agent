@@ -24,7 +24,8 @@ _SYSTEM = (
     "TUYỆT ĐỐI không viết quá trình suy nghĩ, không ghi chú nội bộ, "
     "không giải thích bước phân tích. "
     "Viết HOÀN TOÀN bằng tiếng Việt. "
-    "Output chỉ gồm 4 phần được đánh dấu, không có text nào khác."
+    "Output chỉ gồm 4 phần được đánh dấu, không có text nào khác. "
+    "BẮT BUỘC bọc toàn bộ output trong thẻ <report>...</report>. Output chỉ gồm: <report>[nội dung]</report>, không có text nào khác."
 )
 
 
@@ -102,12 +103,14 @@ Từ khóa tích cực: "trúng thầu", "cổ tức", "mua lại cổ phiếu",
 Cảnh báo insider: "cổ đông lớn đăng ký bán", "ban lãnh đạo thoái vốn"
 Dấu hiệu đỉnh: 90% bình luận cực kỳ bullish + margin căng → "Phân phối đỉnh"
 
-Viết đúng 4 phần sau. Bắt đầu thẳng bằng TIN_TUC: (không có text nào trước).
+Bọc TOÀN BỘ output trong <report>...</report>.
 
+<report>
 TIN_TUC: [2-3 câu về tin tức doanh nghiệp: cổ tức, tăng vốn, ESOP, insider trading — tác động tích cực/tiêu cực]
 DONG_TIEN_TC: [1-2 câu về dòng tiền khối ngoại / tự doanh gần nhất]
 QUAN_TRI: [1-2 câu về rủi ro quản trị, pháp lý, ESG nếu có — ghi "Không phát hiện rủi ro" nếu không có]
-SENTIMENT: [2-3 câu về điểm sentiment tổng thể và cảnh báo nếu có]"""
+SENTIMENT: [2-3 câu về điểm sentiment tổng thể và cảnh báo nếu có]
+</report>"""
 
     client = create_client()
     resp = client.generate(
@@ -117,13 +120,14 @@ SENTIMENT: [2-3 câu về điểm sentiment tổng thể và cảnh báo nếu c
         system=_SYSTEM,
     )
 
-    raw = resp.text.strip()
+    from agents.intents import extract_report
+    raw = extract_report(resp.text.strip())
     tin_tuc      = strip_thinking(extract_slot(raw, "TIN_TUC",      "DONG_TIEN_TC"))
     dong_tien_tc = strip_thinking(extract_slot(raw, "DONG_TIEN_TC", "QUAN_TRI"))
     quan_tri     = strip_thinking(extract_slot(raw, "QUAN_TRI",     "SENTIMENT"))
     sentiment    = strip_thinking(extract_slot(raw, "SENTIMENT",    None))
 
     if not tin_tuc and not sentiment:
-        return strip_thinking(strip_preamble(raw))
+        return f"Không thể lấy tin tức & sentiment cho **{ticker or subject}** — vui lòng thử lại."
 
     return _assemble_report(subject, tin_tuc, dong_tien_tc, quan_tri, sentiment)

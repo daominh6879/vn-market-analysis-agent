@@ -252,7 +252,8 @@ _SYSTEM = (
     "Số đã cho là sự thật, viết dứt khoát — không dùng 'có thể', 'dường như'. "
     "TUYỆT ĐỐI không viết quá trình suy nghĩ, không ghi chú nội bộ. "
     "Viết HOÀN TOÀN bằng tiếng Việt. "
-    "Output chỉ gồm 7 phần được đánh dấu, không có text nào khác."
+    "Output chỉ gồm 7 phần được đánh dấu, không có text nào khác. "
+    "BẮT BUỘC bọc toàn bộ output trong thẻ <report>...</report>. Output chỉ gồm: <report>[nội dung]</report>, không có text nào khác."
 )
 
 
@@ -311,15 +312,17 @@ def run(ticker: str | None, query: str) -> str:
 QUAN TRỌNG: Sử dụng CHÍNH XÁC các con số và nhận định đã tính sẵn ở trên.
 KHÔNG tự suy luận lại thứ hạng hay so sánh — chỉ diễn giải kết quả.
 
-Viết đúng 7 phần sau. Bắt đầu thẳng bằng TANG_TRUONG: (không có text nào trước).
+Bọc TOÀN BỘ output trong <report>...</report>.
 
+<report>
 TANG_TRUONG: [2-3 câu về tăng trưởng doanh thu và LNST YoY — dùng đúng % đã cho]
 BIEN_LN: [1-2 câu về gross margin và net margin]
 HIEU_QUA: [2-3 câu về ROE và ROA — dùng đúng xếp hạng đã tính]
 SUC_KHOE: [1-2 câu về D/E ratio và CFO/LNST]
 DINH_GIA: [2-3 câu về P/E, P/B, EV/EBITDA — premium/discount so ngành]
 MOAT: [2-3 câu về lợi thế cạnh tranh suy luận từ margin + ROE + vị thế ngành]
-NHAN_DINH: [1-2 câu nhận định tổng thể — dứt khoát]"""
+NHAN_DINH: [1-2 câu nhận định tổng thể — dứt khoát]
+</report>"""
 
         client = create_client()
         resp = client.generate(
@@ -329,7 +332,8 @@ NHAN_DINH: [1-2 câu nhận định tổng thể — dứt khoát]"""
             system=_SYSTEM,
         )
 
-        raw = resp.text.strip()
+        from agents.intents import extract_report
+        raw = extract_report(resp.text.strip())
         tang_truong = strip_thinking(extract_slot(raw, "TANG_TRUONG", "BIEN_LN"))
         bien_ln     = strip_thinking(extract_slot(raw, "BIEN_LN",     "HIEU_QUA"))
         hieu_qua    = strip_thinking(extract_slot(raw, "HIEU_QUA",    "SUC_KHOE"))
@@ -339,7 +343,7 @@ NHAN_DINH: [1-2 câu nhận định tổng thể — dứt khoát]"""
         nhan_dinh   = strip_thinking(extract_slot(raw, "NHAN_DINH",   None))
 
         if not tang_truong and not dinh_gia:
-            return strip_thinking(strip_preamble(raw))
+            return f"Không thể tra cứu tài chính **{ticker}** — vui lòng thử lại."
 
         return _assemble_fund_report(ticker, data_table, tang_truong, bien_ln, hieu_qua, suc_khoe, dinh_gia, moat, nhan_dinh)
 

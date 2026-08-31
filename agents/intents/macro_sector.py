@@ -23,7 +23,8 @@ _SYSTEM = (
     "TUYỆT ĐỐI không viết quá trình suy nghĩ, không ghi chú nội bộ, "
     "không giải thích bước phân tích. "
     "Viết HOÀN TOÀN bằng tiếng Việt. "
-    "Output chỉ gồm 5 phần được đánh dấu, không có text nào khác."
+    "Output chỉ gồm 5 phần được đánh dấu, không có text nào khác. "
+    "BẮT BUỘC bọc toàn bộ output trong thẻ <report>...</report>. Output chỉ gồm: <report>[nội dung]</report>, không có text nào khác."
 )
 
 
@@ -103,13 +104,15 @@ Logic:
 - Dầu Brent tăng → chi phí logistics tăng; hưởng lợi PVD, PVS
 - Lãi suất tăng → bất lợi BĐS, bảo hiểm; ngân hàng hưởng lợi NIM
 
-Viết đúng 5 phần sau. Bắt đầu thẳng bằng VI_MO: (không có text nào trước).
+Bọc TOÀN BỘ output trong <report>...</report>.
 
+<report>
 VI_MO: [2-3 câu về lãi suất, lạm phát, tỷ giá và tác động lên thị trường]
 HANG_HOA: [2-3 câu về dầu, kim loại, crack spread và tác động ngành]
 CHU_KY: [1-2 câu về giai đoạn chu kỳ ngành hiện tại và catalyst kích hoạt]
 VI_THE: [1-2 câu về {ticker if ticker else "doanh nghiệp"} là Leader hay Laggard trong ngành]
-KET_LUAN: [1-2 câu: bối cảnh vĩ mô có ủng hộ cổ phiếu không?]"""
+KET_LUAN: [1-2 câu: bối cảnh vĩ mô có ủng hộ cổ phiếu không?]
+</report>"""
 
     client = create_client()
     resp = client.generate(
@@ -119,14 +122,15 @@ KET_LUAN: [1-2 câu: bối cảnh vĩ mô có ủng hộ cổ phiếu không?]""
         system=_SYSTEM,
     )
 
-    raw = resp.text.strip()
-    vi_mo    = strip_thinking(extract_slot(raw, "VI_MO",    "HANG_HOA"))
+    from agents.intents import extract_report
+    raw = extract_report(resp.text.strip())
+    vi_mo    = extract_slot(raw, "VI_MO",    "HANG_HOA")
     hang_hoa = strip_thinking(extract_slot(raw, "HANG_HOA", "CHU_KY"))
     chu_ky   = strip_thinking(extract_slot(raw, "CHU_KY",   "VI_THE"))
     vi_the   = strip_thinking(extract_slot(raw, "VI_THE",   "KET_LUAN"))
     ket_luan = strip_thinking(extract_slot(raw, "KET_LUAN", None))
 
     if not vi_mo and not hang_hoa:
-        return strip_thinking(strip_preamble(raw))
+        return "Không thể tổng hợp vĩ mô & ngành — vui lòng thử lại."
 
     return _assemble_report(ticker, fx_text, comm_text, sector_text, vi_mo, hang_hoa, chu_ky, vi_the, ket_luan)

@@ -22,14 +22,17 @@ def extract_report(text: str) -> str:
 
 
 def extract_slot(text: str, label: str, next_label: str | None) -> str:
-    """Extract text between 'LABEL:' and the next 'NEXT_LABEL:' (or end).
+    """Extract text between last 'LABEL:' and the next 'NEXT_LABEL:' (or end).
 
+    Uses the LAST occurrence so that reasoning preamble (which also mentions labels)
+    is skipped in favour of the actual answer written at the end.
     Handles bold/spaced variants: **LABEL:** or LABEL : or LABEL:.
     """
     pattern = rf"(?:\*{{0,2}}){re.escape(label)}(?:\*{{0,2}})\s*:"
-    m = re.search(pattern, text)
-    if not m:
+    matches = list(re.finditer(pattern, text))
+    if not matches:
         return ""
+    m = matches[-1]  # last = actual answer, not reasoning mention
     start = m.end()
     if next_label:
         nxt = re.search(rf"(?:\*{{0,2}}){re.escape(next_label)}(?:\*{{0,2}})\s*:", text[start:])

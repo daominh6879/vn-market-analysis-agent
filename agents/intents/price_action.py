@@ -27,7 +27,8 @@ _SYSTEM = (
     "TUYỆT ĐỐI không viết quá trình suy nghĩ, không ghi chú nội bộ, "
     "không giải thích bước phân tích. "
     "Viết HOÀN TOÀN bằng tiếng Việt. "
-    "Output chỉ gồm 3 phần được đánh dấu, không có text nào khác."
+    "Output chỉ gồm 3 phần được đánh dấu, không có text nào khác. "
+    "BẮT BUỘC bọc toàn bộ output trong thẻ <report>...</report>. Output chỉ gồm: <report>[nội dung]</report>, không có text nào khác."
 )
 
 
@@ -122,11 +123,13 @@ Logic:
 
 Câu hỏi: {query}
 
-Viết đúng 3 phần sau. Bắt đầu thẳng bằng GIA_BIEN_DONG: (không có text nào trước).
+Bọc TOÀN BỘ output trong <report>...</report>.
 
+<report>
 GIA_BIEN_DONG: [2-3 câu về giá hiện tại, mức biến động, ý nghĩa]
 DONG_TIEN: [2-3 câu về khối lượng vs MA20 và dòng tiền khối ngoại]
-KET_LUAN: [1-2 câu kết luận: Breakout / Selloff / Tích lũy / Bình thường]"""
+KET_LUAN: [1-2 câu kết luận: Breakout / Selloff / Tích lũy / Bình thường]
+</report>"""
 
     client = create_client()
     resp = client.generate(
@@ -136,12 +139,13 @@ KET_LUAN: [1-2 câu kết luận: Breakout / Selloff / Tích lũy / Bình thư�
         system=_SYSTEM,
     )
 
-    raw = resp.text.strip()
+    from agents.intents import extract_report
+    raw = extract_report(resp.text.strip())
     gia_bien_dong = strip_thinking(extract_slot(raw, "GIA_BIEN_DONG", "DONG_TIEN"))
     dong_tien     = strip_thinking(extract_slot(raw, "DONG_TIEN",     "KET_LUAN"))
     ket_luan      = strip_thinking(extract_slot(raw, "KET_LUAN",      None))
 
     if not gia_bien_dong and not dong_tien:
-        return strip_thinking(strip_preamble(raw))
+        return f"Không thể phân tích giá & dòng tiền **{ticker}** — vui lòng thử lại."
 
     return _assemble_report(ticker, gia_bien_dong, dong_tien, ket_luan)

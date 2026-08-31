@@ -9,6 +9,8 @@ Market-brief pattern:
 
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 
 from langfuse import observe
@@ -26,7 +28,8 @@ _SYSTEM = (
     "Viết HOÀN TOÀN bằng tiếng Việt — không dùng tiếng Anh trừ tên chỉ báo kỹ thuật (RSI, MACD, EMA, SMA, ADX, OBV). "
     "Kế hoạch Giao dịch BẮT BUỘC có Entry / SL / TP1 / TP2 / R:R — "
     "R:R phải ≥ 1:2, nếu không đạt thì ghi 'Setup chưa đủ hấp dẫn'. "
-    "Output chỉ gồm 4 phần được đánh dấu, không có text nào khác."
+    "BẮT BUỘC bọc toàn bộ output trong thẻ <report>...</report>. "
+    "Output chỉ gồm: <report>[4 phần đánh dấu]</report>, không có text nào khác."
 )
 
 
@@ -82,14 +85,17 @@ def _fibonacci_levels(df: pd.DataFrame) -> str:
 
 
 def _extract_slot(text: str, label: str, next_label: str | None) -> str:
-    """Extract text between 'LABEL:' and the next 'NEXT_LABEL:' (or end)."""
+    """Extract text between last 'LABEL:' and the next 'NEXT_LABEL:' (or end).
+
+    Uses rfind so reasoning preamble (which also mentions labels) is skipped.
+    """
     marker = f"{label}:"
-    start = text.find(marker)
+    start = text.rfind(marker)
     if start == -1:
         return ""
     start += len(marker)
     if next_label:
-        end = text.find(f"{next_label}:")
+        end = text.find(f"{next_label}:", start)
         end = end if end != -1 else len(text)
     else:
         end = len(text)
@@ -179,8 +185,9 @@ Mô hình nến: {candle_text}
 
 Câu hỏi: {query}
 
-Viết đúng 4 phần sau. Bắt đầu thẳng bằng TREND: (không có text nào trước).
+Viết đúng 4 phần sau. Bọc TOÀN BỘ output trong <report>...</report>.
 
+<report>
 TREND: [2-3 câu: ngắn hạn từ EMA20, trung hạn từ SMA50, dài hạn từ SMA200 — nếu thiếu SMA50/SMA200 thì ghi "chưa đủ dữ liệu trung/dài hạn"]
 MOMENTUM: [2-3 câu về RSI và MACD — nếu MACD không đủ dữ liệu thì ghi rõ; dùng ADX để đánh giá độ mạnh xu hướng]
 FLOW: [1-2 câu về OBV và khối lượng so với MA20 — nếu OBV chưa đủ phiên thì ghi rõ]
@@ -196,7 +203,8 @@ Quy tắc bắt buộc:
 | **Stop Loss** | [hỗ trợ gần nhất HOẶC entry - 3~5%, chọn mức gần hơn] |
 | **Take Profit 1** | [kháng cự gần nhất phía trên, hoặc N/A] |
 | **Take Profit 2** | [kháng cự tiếp theo, hoặc N/A] |
-| **R:R** | [(TP1-Entry)/(Entry-SL) nếu ≥ 1:2, ngược lại: "Setup chưa đủ hấp dẫn"] |"""
+| **R:R** | [(TP1-Entry)/(Entry-SL) nếu ≥ 1:2, ngược lại: "Setup chưa đủ hấp dẫn"] |
+</report>"""
 
     client = create_client()
     resp = client.generate(
@@ -206,7 +214,10 @@ Quy tắc bắt buộc:
         system=_SYSTEM,
     )
 
-    raw = resp.text.strip()
+    # strip_thinking protects <report> blocks (step 0), so resp.text always has
+    # clean <report>...</report> if the model followed instructions.
+    from agents.intents import extract_report
+    raw = extract_report(resp.text.strip())
 
     # ── Extract slots ─────────────────────────────────────────────────────────
     trend    = _strip_prose(_extract_slot(raw, "TREND",    "MOMENTUM"))
@@ -214,10 +225,8 @@ Quy tắc bắt buộc:
     flow     = _strip_prose(_extract_slot(raw, "FLOW",     "TRADE"))
     trade    = _extract_slot(raw, "TRADE", None)  # table — no prose stripping
 
-    # Fallback: if labels absent, return stripped raw output
+    # LLM did not follow label format — never surface raw reasoning to user
     if not trend and not momentum:
-        from llm.utils import strip_thinking
-        from agents.intents import strip_preamble
-        return strip_thinking(strip_preamble(raw))
+        return f"Không thể phân tích kỹ thuật **{ticker}** — vui lòng thử lại."
 
     return _assemble_report(ticker, trend, momentum, flow, trade, sr_text, fib_text, candle_text)

@@ -23,7 +23,8 @@ _SYSTEM = (
     "KHÔNG được nói 'thiếu dữ liệu' — dùng tất cả thông tin có sẵn để kết luận. "
     "TUYỆT ĐỐI không viết quá trình suy nghĩ, không ghi chú nội bộ. "
     "Viết HOÀN TOÀN bằng tiếng Việt. "
-    "Output chỉ gồm 5 phần được đánh dấu, không có text nào khác."
+    "Output chỉ gồm 5 phần được đánh dấu, không có text nào khác. "
+    "BẮT BUỘC bọc toàn bộ output trong thẻ <report>...</report>. Output chỉ gồm: <report>[nội dung]</report>, không có text nào khác."
 )
 
 
@@ -82,8 +83,9 @@ def run(ticker: str, query: str) -> str:
 
 ---
 
-Viết đúng 5 phần sau. Bắt đầu thẳng bằng BULL: (không có text nào trước).
+Bọc TOÀN BỘ output trong <report>...</report>.
 
+<report>
 BULL:
 1. [lý do cốt lõi 1 — dẫn số liệu cụ thể]
 2. [lý do cốt lõi 2 — dẫn số liệu cụ thể]
@@ -101,7 +103,8 @@ KHUNG_TG:
 THEO_DOI:
 - [catalyst/risk 1]
 - [catalyst/risk 2]
-- [catalyst/risk 3]"""
+- [catalyst/risk 3]
+</report>"""
 
     client = create_client()
     resp = client.generate(
@@ -111,7 +114,8 @@ THEO_DOI:
         system=_SYSTEM,
     )
 
-    raw = resp.text.strip()
+    from agents.intents import extract_report
+    raw = extract_report(resp.text.strip())
     bull        = strip_thinking(extract_slot(raw, "BULL",        "BEAR"))
     bear        = strip_thinking(extract_slot(raw, "BEAR",        "KHUYEN_NGHI"))
     khuyen_nghi = strip_thinking(extract_slot(raw, "KHUYEN_NGHI", "KHUNG_TG"))
@@ -119,6 +123,6 @@ THEO_DOI:
     theo_doi    = strip_thinking(extract_slot(raw, "THEO_DOI",    None))
 
     if not bull and not bear:
-        return strip_thinking(strip_preamble(raw))
+        return f"Không thể đánh giá đầu tư **{ticker}** — vui lòng thử lại."
 
     return _assemble_report(ticker, bull, bear, khuyen_nghi, khung_tg, theo_doi)
