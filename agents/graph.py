@@ -507,6 +507,159 @@ _INTENT_NODE_MAP = {
     "breakout_scan":      "node_breakout_scan",
 }
 
+# ── New pipeline nodes ────────────────────────────────────────────────────────
+
+def decompose_node(state: AgentState) -> dict:
+    """Decompose original query into structured sub-tasks via tool calling."""
+    from rag.multi_query import decompose_query
+    sub_tasks = decompose_query(
+        state.get("query", ""),
+        n=4,
+        ticker=state.get("ticker", ""),
+    )
+    print(f"[decompose] {len(sub_tasks)} sub-tasks:")
+    for i, t in enumerate(sub_tasks, 1):
+        print(f"  {i}. [{t['intent']}] tickers={t['tickers']} | {t['question'][:80]}")
+    return {"sub_tasks": sub_tasks, "iteration": 0}
+
+
+_GATHER_MAP: dict[str, object] = {}  # populated lazily below
+
+
+def _get_gather_map() -> dict:
+    if not _GATHER_MAP:
+        from agents.intents import (
+            price_action, technical, news_sentiment,
+            macro_sector, investment_case, screening, breakout,
+        )
+        from rag import qa as _qa
+        _GATHER_MAP.update({
+            "price_action":       lambda t, q: price_action.gather_data(t, q),
+            "technical_analysis": lambda t, q: technical.gather_data(t, q),
+            "news_sentiment":     lambda t, q: news_sentiment.gather_data(t, q),
+            "macro_sector":       lambda t, q: macro_sector.gather_data(t, q),
+            "investment_case":    lambda t, q: investment_case.gather_data(t, q),
+            "screening":          lambda t, q: screening.gather_data(t, q),
+            "rag_qa":             lambda t, q: _qa.retrieve_only(q, ticker=t),
+            "breakout_scan":      lambda t, q: breakout.gather_data(t, q),
+            "market_brief":       lambda t, q: "[market_brief: xem riêng]",
+            "conversation":       lambda t, q: "",
+        })
+    return _GATHER_MAP
+
+
+_MULTI_TICKER_RE = __import__("re").compile(r'\b([A-Z]{2,4})\b')
+_TICKER_STOPWORDS = frozenset({
+    "VE", "VA", "LA", "CO", "DE", "VS", "ROE", "ROA", "EPS",
+    "PE", "PB", "MA", "OR", "SO", "KY", "SO", "VA", "VA",
+})
+
+
+def _extract_multi_tickers(text: str, primary: str) -> list[str]:
+    """Return all VN tickers mentioned in text, primary first, deduped."""
+    hits = list(dict.fromkeys(
+        t for t in _MULTI_TICKER_RE.findall(text.upper())
+        if t not in _TICKER_STOPWORDS and len(t) >= 2
+    ))
+    if not hits:
+        return [primary] if primary else []
+    # Ensure primary is first
+    if primary and primary not in hits:
+        hits.insert(0, primary)
+    return hits
+
+
+_FANOUT_INTENTS = frozenset({"price_action", "technical_analysis", "investment_case", "breakout_scan"})
+
+
+def run_subqueries_node(state: AgentState) -> dict:
+    """Gather data for each structured sub-task — no LLM, no re-classification.
+
+    Reads sub_tasks [{intent, tickers, question}] set by decompose_node.
+    Fan-out: price/technical intents fetch each ticker independently and merge.
+    """
+    gather = _get_gather_map()
+    sub_tasks = state.get("sub_tasks") or []
+    fallback_ticker = state.get("ticker", "")
+    sub_results: list[str] = []
+
+    for task in sub_tasks:
+        intent = task.get("intent", "macro_sector")
+        tickers = task.get("tickers") or ([fallback_ticker] if fallback_ticker else [])
+        question = task.get("question", state.get("query", ""))
+        fn = gather.get(intent, lambda t, q: "")
+
+        if intent in _FANOUT_INTENTS and len(tickers) > 1:
+            parts: list[str] = []
+            for t in tickers:
+                try:
+                    d = fn(t, question)
+                    if d:
+                        parts.append(d)
+                except Exception as exc:
+                    parts.append(f"[{t} — lỗi: {exc}]")
+            data = "\n\n".join(parts) if parts else ""
+        else:
+            primary = tickers[0] if tickers else fallback_ticker
+            try:
+                data = fn(primary, question)
+            except Exception as exc:
+                data = f"[{intent.upper()} — lỗi: {exc}]"
+
+        if data:
+            tickers_label = "+".join(tickers) if tickers else "N/A"
+            sub_results.append(f"[{intent.upper()} — {tickers_label}]\n{question}\n{data}")
+
+    return {"sub_results": sub_results}
+
+
+def synthesize_final(state: AgentState) -> dict:
+    """Single LLM call over all gathered sub-results. Respects STRICT_NEUTRAL env flag."""
+    import os
+    from llm.factory import create_client
+    from llm.types import Message
+
+    sub_results = state.get("sub_results") or []
+    query = state.get("query", "")
+    context = "\n\n---\n\n".join(sub_results)
+
+    strict = os.environ.get("STRICT_NEUTRAL", "false").lower() == "true"
+    if strict:
+        user_prompt = (
+            f"Tổng hợp phân tích DỮ KIỆN từ ngữ cảnh. Trình bày trung lập.\n"
+            f"TUYỆT ĐỐI không đưa khuyến nghị mua/bán/nắm giữ.\n"
+            f"Ngữ cảnh: {context}\nCâu hỏi: {query}"
+        )
+    else:
+        user_prompt = (
+            f"Tổng hợp phân tích từ ngữ cảnh và trả lời câu hỏi.\n"
+            f"Ngữ cảnh: {context}\nCâu hỏi: {query}"
+        )
+
+    t0 = time.perf_counter()
+    client = create_client()
+    resp = client.generate(
+        [Message(role="user", content=user_prompt)],
+        max_tokens=4000,
+        system=(
+            "Bạn là chuyên gia phân tích tài chính Việt Nam. "
+            "Trả lời bằng Markdown, trích dẫn số liệu cụ thể từ ngữ cảnh."
+        ),
+    )
+    elapsed = time.perf_counter() - t0
+
+    return {
+        "report": resp.text.strip(),
+        "summary": resp.text.strip()[:120],
+        "step_count": state.get("step_count", 0) + 1,
+        "history": state.get("history", []) + [{
+            "step": "synthesize_final",
+            "input_tokens": resp.input_tokens,
+            "output_tokens": resp.output_tokens,
+            "elapsed_seconds": round(elapsed, 2),
+        }],
+    }
+
 # ── Graph builder ─────────────────────────────────────────────────────────────
 
 def _request_approval(state: AgentState) -> dict:
@@ -546,29 +699,13 @@ def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGra
     """
     g = StateGraph(AgentState)
 
-    g.add_node("classify_node", classify_node)
-    g.add_node("check_cache_node", check_cache_node)
-    g.add_node("clarify_node", clarify_node)
-    g.add_node("route_question", route_question)
-
-    g.add_node("node_price_action", node_price_action)
-    g.add_node("node_technical", node_technical)
-    g.add_node("node_news_sentiment", node_news_sentiment)
-    g.add_node("node_macro_sector", node_macro_sector)
-    g.add_node("node_investment_case", node_investment_case)
-    g.add_node("node_screening", node_screening)
-    g.add_node("node_rag_qa", node_rag_qa)
-    g.add_node("node_market_brief", node_market_brief)
-    g.add_node("node_breakout_scan", node_breakout_scan)
-
-    g.add_node("fusion_search", fusion_search)
-    g.add_node("grade_or_critique", grade_or_critique)
-    g.add_node("run_web_search", run_web_search)
-    g.add_node("collect", collect)
-    g.add_node("analyze_technical", analyze_technical)
-    g.add_node("assess_risk", assess_risk)
-    g.add_node("synthesize", synthesize)
-    g.add_node("cache_save_node", cache_save_node)
+    g.add_node("classify_node",       classify_node)
+    g.add_node("check_cache_node",    check_cache_node)
+    g.add_node("clarify_node",        clarify_node)
+    g.add_node("decompose_node",      decompose_node)
+    g.add_node("run_subqueries_node", run_subqueries_node)
+    g.add_node("synthesize_final",    synthesize_final)
+    g.add_node("cache_save_node",     cache_save_node)
 
     if human_approval:
         g.add_node("request_approval", _request_approval)
@@ -578,37 +715,17 @@ def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGra
         {"skip": END, "verify": "check_cache_node"})
     g.add_conditional_edges("check_cache_node", check_cache_hit,
         {"hit": END, "miss": "clarify_node"})
-    g.add_edge("clarify_node", "route_question")
-    g.add_conditional_edges("route_question", pick_branch, {
-        **_INTENT_NODE_MAP,
-        "knowledge": "fusion_search",
-        "data":      "collect",
-    })
+    g.add_edge("clarify_node",        "decompose_node")
+    g.add_edge("decompose_node",      "run_subqueries_node")
 
     if human_approval:
-        for n in _INTENT_NODE_NAMES:
-            g.add_edge(n, "request_approval")
-        g.add_edge("fusion_search", "grade_or_critique")
-        g.add_conditional_edges("grade_or_critique", _decide_next_approval,
-            {"request_approval": "request_approval", "web_search": "run_web_search", "fusion_search": "fusion_search"})
-        g.add_edge("run_web_search", "request_approval")
-        g.add_edge("collect", "analyze_technical")
-        g.add_edge("analyze_technical", "assess_risk")
-        g.add_edge("assess_risk", "request_approval")
-        g.add_edge("request_approval", "synthesize")
+        g.add_edge("run_subqueries_node", "request_approval")
+        g.add_edge("request_approval",    "synthesize_final")
     else:
-        for n in _INTENT_NODE_NAMES:
-            g.add_edge(n, "cache_save_node")
-        g.add_edge("fusion_search", "grade_or_critique")
-        g.add_conditional_edges("grade_or_critique", decide_next,
-            {"synthesize": "synthesize", "web_search": "run_web_search", "fusion_search": "fusion_search"})
-        g.add_edge("run_web_search", "synthesize")
-        g.add_edge("collect", "analyze_technical")
-        g.add_edge("analyze_technical", "assess_risk")
-        g.add_edge("assess_risk", "synthesize")
+        g.add_edge("run_subqueries_node", "synthesize_final")
 
-    g.add_edge("synthesize", "cache_save_node")
-    g.add_edge("cache_save_node", END)
+    g.add_edge("synthesize_final",    "cache_save_node")
+    g.add_edge("cache_save_node",     END)
 
     return g.compile(checkpointer=checkpointer)
 

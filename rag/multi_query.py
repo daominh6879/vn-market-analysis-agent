@@ -1,12 +1,8 @@
 """
-rag/multi_query.py — Sub-query generation and source tagging for RAG-Fusion.
+rag/multi_query.py — Structured query decomposition + source tagging for RAG-Fusion.
 
-RAG-Fusion idea: one query has multiple "angles". Decompose into N sub-queries,
-retrieve for each independently, then fuse with RRF.
-
-Trap guard: sub-queries can drift far from the original (especially short queries).
-Constraint injected in prompt: all sub-queries must ask about the same company
-and same time period as the original.
+decompose_query() uses tool calling to return structured SubTask objects directly
+(intent + tickers + question). No free-text re-classification needed downstream.
 """
 from __future__ import annotations
 
@@ -27,74 +23,110 @@ except ImportError:
 from llm.factory import create_client
 from llm.types import Message
 
+_VALID_INTENTS = [
+    "price_action", "technical_analysis", "news_sentiment",
+    "macro_sector", "investment_case", "screening",
+    "rag_qa", "breakout_scan",
+]
 
-def generate_sub_queries(query: str, n: int = 4) -> list[str]:
-    """Use LLM to decompose query into N sub-queries, each covering a different angle.
+_DECOMPOSE_TOOL = {
+    "name": "decompose_query",
+    "description": (
+        "Phân tách câu hỏi phân tích tài chính thành các sub-task độc lập. "
+        "Mỗi sub-task có intent rõ ràng, danh sách mã cổ phiếu cụ thể, và câu hỏi standalone."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "tasks": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "intent": {
+                            "type": "string",
+                            "enum": _VALID_INTENTS,
+                            "description": "Loại phân tích cần thực hiện",
+                        },
+                        "tickers": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Mã cổ phiếu VN cần tra cứu (ví dụ: VCB, CTG, BID). Bắt buộc có ít nhất 1 mã.",
+                        },
+                        "question": {
+                            "type": "string",
+                            "description": "Câu hỏi standalone đầy đủ ngữ cảnh cho sub-task này.",
+                        },
+                    },
+                    "required": ["intent", "tickers", "question"],
+                },
+            }
+        },
+        "required": ["tasks"],
+    },
+}
 
-    Angles: số liệu (metrics) · so sánh (comparison) · ngữ cảnh ngành (sector context)
-            · sự kiện gần đây (recent events).
+_INTENT_DESCRIPTIONS = {
+    "price_action":       "biến động giá, khối lượng, OHLCV, phiên giao dịch",
+    "technical_analysis": "chỉ báo kỹ thuật RSI, MACD, MA, Bollinger, breakout",
+    "news_sentiment":     "tin tức, sự kiện, khối ngoại, tâm lý thị trường",
+    "macro_sector":       "vĩ mô, ngành, so sánh chỉ số, tương quan thị trường",
+    "investment_case":    "định giá, PE, ROE, cơ bản doanh nghiệp, luận điểm đầu tư",
+    "screening":          "sàng lọc cổ phiếu theo tiêu chí, top tăng/giảm",
+    "rag_qa":             "báo cáo tài chính BCTC, số liệu kế toán, kiểm toán",
+    "breakout_scan":      "breakout, phá vỡ kháng cự/hỗ trợ, mô hình giá",
+}
 
-    Guard: all sub-queries must stay on the same company and time period.
-    Returns at most n sub-queries (falls back to [query] on parse error).
+
+def decompose_query(query: str, n: int = 4, ticker: str = "") -> list[dict]:
+    """Decompose a financial query into structured sub-tasks via tool calling.
+
+    Returns list of dicts: [{intent, tickers, question}, ...].
+    Falls back to single task wrapping original query on tool call failure.
+
+    Args:
+        ticker: classifier-extracted ticker/sector (injected as constraint).
     """
-    import datetime as _dt
-    today = _dt.date.today().isoformat()   # e.g. "2026-08-31"
-    current_year = _dt.date.today().year   # e.g. 2026
-
     client = create_client()
-    prompt = f"""Nhiệm vụ: sinh đúng {n} câu hỏi con từ câu gốc bên dưới.
-Hôm nay: {today}.
 
-Quy tắc bắt buộc:
-1. Phải có đúng {n} câu — không được ít hơn, dù câu gốc có đơn giản đến đâu.
-2. Mỗi câu hỏi về CÙNG công ty và CÙNG kỳ thời gian với câu gốc.
-   - Nếu câu gốc không nêu kỳ cụ thể → dùng kỳ gần nhất có thể (năm {current_year} hoặc {current_year - 1}).
-   - KHÔNG tự thêm kỳ thời gian khác (ví dụ không thêm "năm 2023" nếu câu gốc không nhắc).
-3. Mỗi câu nhấn một góc khác nhau: (a) số liệu cụ thể, (b) so sánh kỳ trước, (c) ngữ cảnh ngành, (d) sự kiện ảnh hưởng.
-4. Chỉ trả về JSON array of strings. Không có text nào khác.
+    intent_guide = "\n".join(f"- {k}: {v}" for k, v in _INTENT_DESCRIPTIONS.items())
+    ticker_hint = (
+        f"\nChủ thể câu hỏi: '{ticker}'. Dùng đúng mã/ngành này, không thêm mã không liên quan."
+        if ticker else ""
+    )
 
-Ví dụ — câu gốc: "Doanh thu HPG gần nhất?"
-Output: ["Doanh thu thuần của HPG trong kỳ báo cáo gần nhất là bao nhiêu tỷ đồng?", "So với kỳ trước, doanh thu HPG tăng hay giảm bao nhiêu phần trăm?", "Trong bối cảnh ngành thép Việt Nam, doanh thu HPG đứng ở vị trí nào?", "Yếu tố nào tác động lớn nhất đến doanh thu HPG gần đây?"]
-
-Câu gốc: {query}
-Output (JSON array, đúng {n} phần tử):"""
+    prompt = (
+        f"Phân tách câu hỏi sau thành {n} sub-task phân tích tài chính đa góc nhìn.\n"
+        f"Câu hỏi: {query}{ticker_hint}\n\n"
+        f"Hướng dẫn chọn intent:\n{intent_guide}\n\n"
+        "Yêu cầu:\n"
+        "- Mỗi sub-task một intent khác nhau nếu có thể\n"
+        "- tickers: mã cổ phiếu cụ thể (2-4 ký tự viết hoa, VD: VCB, CTG, BID)\n"
+        "- question: câu hỏi đầy đủ, standalone, chứa ticker và thời gian nếu cần"
+    )
 
     resp = client.generate(
         [Message(role="user", content=prompt)],
-        max_tokens=512,
-        system="Bạn là chuyên gia phân tích tài chính. Trả về JSON array of strings. Không giải thích. Không có text nào khác ngoài JSON array.",
+        max_tokens=1024,
+        system="Bạn là chuyên gia phân tích tài chính Việt Nam. Gọi tool decompose_query với kết quả phân tách.",
+        tools=[_DECOMPOSE_TOOL],
     )
-    import re as _re
-    raw = resp.text.strip()
-    # Strip <think>...</think> blocks (deepseek reasoning mode)
-    raw = _re.sub(r"<think>.*?</think>", "", raw, flags=_re.DOTALL).strip()
-    # Strip markdown code fences if present
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
-    # Extract first complete JSON array — handles prose before AND after the array
-    start = raw.find("[")
-    if start >= 0:
-        depth, end = 0, -1
-        for i, ch in enumerate(raw[start:], start):
-            if ch == "[":
-                depth += 1
-            elif ch == "]":
-                depth -= 1
-                if depth == 0:
-                    end = i + 1
-                    break
-        if end > start:
-            raw = raw[start:end]
-    try:
-        sub_queries = json.loads(raw)
-        if not isinstance(sub_queries, list):
-            raise ValueError("not a list")
-        return [str(q) for q in sub_queries[:n]]
-    except (json.JSONDecodeError, ValueError):
-        return [query]
+
+    if resp.tool_calls:
+        tc = resp.tool_calls[0]
+        tasks = tc.input.get("tasks", [])
+        # Validate: drop tasks with no tickers or invalid intent
+        valid = [
+            t for t in tasks
+            if t.get("intent") in _VALID_INTENTS
+            and t.get("tickers")
+            and t.get("question")
+        ]
+        if valid:
+            return valid[:n]
+
+    # Fallback: single macro_sector task
+    return [{"intent": "macro_sector", "tickers": [ticker] if ticker else [], "question": query}]
 
 
 def tag_source(chunk: str, metadata: dict) -> str:

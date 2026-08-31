@@ -40,7 +40,9 @@ class AgentState(TypedDict, total=False):
     grades: dict             # {"verdict": "enough" | "insufficient" | "rewrite"}
     iteration: int           # loop counter for rewrite guard
     # RAG-Fusion (rag/rag_fusion_graph.py)
-    sub_queries: list[str]   # generated sub-queries
+    sub_queries: list[str]   # generated sub-queries (legacy)
+    sub_tasks: list[dict]    # structured sub-tasks [{intent, tickers, question}]
+    sub_results: list[str]   # raw data gathered per sub-query (no LLM)
     fused_chunks: list[str]  # RRF-merged top chunks
     sources_used: list[str]  # source labels (BCTC, TIN TỨC, WEB, …)
     # Intent routing (set by classify_node inside graph)
