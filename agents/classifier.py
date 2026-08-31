@@ -122,6 +122,16 @@ _PRICE_ACTION_KW = frozenset({
     "giá cổ phiếu",
 })
 
+_BREAKOUT_KW = frozenset({
+    "quét breakout", "scan breakout", "tìm breakout",
+    "breakout scan", "cổ phiếu breakout", "mã breakout",
+    "bứt phá", "cổ phiếu bứt phá", "tín hiệu bứt phá",
+    "vượt đỉnh nền", "nền giá", "tích lũy nền",
+    "phát hiện breakout", "kiểm tra breakout",
+    "có breakout không", "breakout chưa",
+    "short breakout", "mid breakout", "long breakout",
+})
+
 _COMPANY_NAME_MAP: dict[str, str] = {
     "ngan hang quan doi": "MBB", "quan doi": "MBB", "mb bank": "MBB",
     "ngan hang ngoai thuong": "VCB", "vietcombank": "VCB",
@@ -192,6 +202,17 @@ def classify(query: str) -> RouterResult:
     lower = query.lower()
     upper = query.upper()
 
+    if any(kw in lower for kw in _BREAKOUT_KW):
+        _ticker: str | None = None
+        for _m in re.finditer(r"\b([A-Z]{2,5})\b", query):
+            _t = _m.group(1)
+            if _t not in _VN_NOISE and _t not in _MARKET_INDICES:
+                _ticker = _t
+                break
+        if _ticker is None:
+            _ticker = _resolve_company_name(_strip_diacritics(query))
+        return RouterResult("breakout_scan", _ticker, "breakout keyword")
+
     if any(kw in lower for kw in _MARKET_KW):
         return RouterResult("market_brief", None, "market keyword")
     for idx in _MARKET_INDICES:
@@ -230,11 +251,16 @@ def classify(query: str) -> RouterResult:
 
 INTENTS = (
     "price_action", "technical_analysis", "rag_qa", "macro_sector",
-    "news_sentiment", "investment_case", "screening", "market_brief", "conversation",
+    "news_sentiment", "investment_case", "screening", "market_brief",
+    "breakout_scan", "conversation",
 )
 
 _SYSTEM = """\
 You are a query intent classifier for a Vietnamese financial analysis assistant.
+
+When conversation history is provided, use it to resolve the ticker for ambiguous follow-up queries
+(e.g. "phân tích hôm nay" after discussing TCB → ticker is TCB).
+If the current query explicitly mentions a different ticker or asks about all stocks, use that context instead.
 
 Classify the user's message into exactly one intent:
 
@@ -295,16 +321,31 @@ _TOOL = {
 }
 
 
-def llm_classify(query: str, client=None) -> RouterResult | None:
-    """Classify query via LLM tool-call. Returns None on any error."""
+def llm_classify(query: str, client=None, messages: list | None = None) -> RouterResult | None:
+    """Classify query via LLM tool-call. Returns None on any error.
+
+    Pass `messages` (conversation history) so the LLM can resolve tickers from context
+    instead of relying on post-hoc inheritance rules.
+    """
     try:
         if client is None:
             from llm.factory import create_client
             client = create_client()
 
         from llm.types import Message
+
+        # Build multi-turn history: last 6 user/assistant turns for context, then current query.
+        history_msgs: list[Message] = []
+        if messages:
+            for m in messages[-6:]:
+                role = m.get("role", "")
+                content = m.get("content", "")
+                if role in ("user", "assistant") and content:
+                    history_msgs.append(Message(role=role, content=str(content)[:400]))
+        history_msgs.append(Message(role="user", content=query))
+
         resp = client.generate(
-            messages=[Message(role="user", content=query)],
+            messages=history_msgs,
             system=_SYSTEM,
             tools=[_TOOL],
             max_tokens=256,
@@ -346,31 +387,28 @@ def llm_classify(query: str, client=None) -> RouterResult | None:
 _LLM_FALLBACK_MIN_WORDS = 3
 
 
-def classify_hybrid(query: str, client=None) -> RouterResult:
-    """Keyword-first router with LLM fallback on uncertain results."""
+def classify_hybrid(query: str, client=None, messages: list | None = None) -> RouterResult:
+    """Keyword-first router with LLM fallback on uncertain results.
+
+    Pass `messages` (conversation history) so LLM can resolve tickers from context.
+    """
     result = classify(query)
 
     _is_ticker_default = (
         result.intent == "technical_analysis"
         and result.reason.endswith("default")
     )
-    if result.intent != "conversation" and not _is_ticker_default:
-        return result
+    # Short queries (< 3 words): keyword result is sufficient — LLM adds no value.
     if len(query.split()) < _LLM_FALLBACK_MIN_WORDS:
         return result
+
+    # LLM fallback when intent or ticker is uncertain on a multi-word query.
+    _needs_llm = result.intent == "conversation" or _is_ticker_default or not result.ticker
+    if not _needs_llm:
+        return result
     try:
-        llm_result = llm_classify(query, client=client)
-        if (
-            llm_result
-            and llm_result.intent != "conversation"
-            and llm_result.intent in INTENTS
-        ):
-            if llm_result.ticker is None and result.ticker is not None:
-                return RouterResult(
-                    intent=llm_result.intent,
-                    ticker=result.ticker,
-                    reason=llm_result.reason,
-                )
+        llm_result = llm_classify(query, client=client, messages=messages)
+        if llm_result and llm_result.intent in INTENTS:
             return llm_result
     except Exception:
         pass

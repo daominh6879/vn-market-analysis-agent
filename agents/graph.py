@@ -55,7 +55,7 @@ _bm25_cache: dict[str, object] = {}
 _INTENT_NODES = frozenset({
     "price_action", "technical_analysis", "rag_qa",
     "news_sentiment", "macro_sector", "investment_case", "screening",
-    "market_brief",
+    "market_brief", "breakout_scan",
 })
 
 # Keywords that signal a document/financial-report query → "knowledge" path
@@ -66,27 +66,6 @@ _KNOWLEDGE_KEYWORDS = frozenset({
     "quý 1", "quý 2", "quý 3", "quý 4", "năm tài chính",
     "tài chính", "kiểm toán", "hợp nhất",
 })
-
-
-# ── Node −2: merge_pending_node ───────────────────────────────────────────────
-
-def merge_pending_node(state: AgentState) -> dict:
-    """Merge pending clarification context (if any) into query before classification."""
-    conv_id = state.get("conversation_id")
-    if not conv_id:
-        return {}
-    try:
-        from memory.conversation import get_pending_context, clear_pending_context
-        pending_raw = get_pending_context(conv_id)
-        if not pending_raw:
-            return {}
-        from memory.clarification import pending_from_dict, merge_with_pending
-        pending = pending_from_dict(pending_raw)
-        merged = merge_with_pending(pending, state.get("query", ""))
-        clear_pending_context(conv_id)
-        return {"query": merged}
-    except Exception:
-        return {}
 
 
 # ── Node −1: classify_node ────────────────────────────────────────────────────
@@ -105,25 +84,11 @@ def classify_node(state: AgentState) -> dict:
     except Exception:
         rid = uuid.uuid4().hex[:12]
 
-    from agents.classifier import classify_hybrid, _VN_NOISE, _MARKET_INDICES
-    result = classify_hybrid(state.get("query", ""))
-
-    # If no ticker extracted, inherit last mentioned ticker from user messages only.
-    # Scanning assistant messages risks picking up abbreviations like SL/TP/MA from reports.
-    if not result.ticker and result.intent != "conversation":
-        import re as _re
-        for msg in reversed(state.get("messages") or []):
-            if msg.get("role") != "user":
-                continue
-            content = msg.get("content", "")
-            for m in _re.finditer(r"\b([A-Z]{2,5})\b", content):
-                t = m.group(1)
-                if t not in _VN_NOISE and t not in _MARKET_INDICES:
-                    from dataclasses import replace as _replace
-                    result = _replace(result, ticker=t)
-                    break
-            if result.ticker:
-                break
+    from agents.classifier import classify_hybrid
+    result = classify_hybrid(
+        state.get("query", ""),
+        messages=state.get("messages"),
+    )
 
     is_market = result.intent == "market_brief" or (result.ticker or "") in _MARKET_TICKERS
 
@@ -147,7 +112,7 @@ def classify_node(state: AgentState) -> dict:
 
 
 def check_conversation(state: AgentState) -> str:
-    """Skip verify_context for pure conversation turns — stream_turn handles streaming."""
+    """Skip cache/clarify for pure conversation turns — stream_turn handles streaming."""
     return "skip" if state.get("intent") == "conversation" else "verify"
 
 
@@ -175,11 +140,12 @@ def check_cache_hit(state: AgentState) -> str:
     return "hit" if state.get("_cache_hit") else "miss"
 
 
-# ── Node 0a: verify_context ───────────────────────────────────────────────────
+# ── Node 0a: clarify_node ─────────────────────────────────────────────────────
 
-def verify_context(state: AgentState) -> dict:
-    """Check intent + context requirements. Saves pending context to Postgres on clarification."""
-    from memory.clarification import detect_ambiguity, build_clarification_message, pending_to_dict
+def clarify_node(state: AgentState) -> dict:
+    """Ask user for missing intent/ticker via interrupt(). On resume, re-classify merged query."""
+    from langgraph.types import interrupt
+    from memory.clarification import detect_ambiguity, build_clarification_message, merge_with_pending
 
     class _Route:
         def __init__(self, intent, ticker, reason=""):
@@ -193,27 +159,22 @@ def verify_context(state: AgentState) -> dict:
         state.get("classify_reason", ""),
     )
     pending = detect_ambiguity(route, state.get("query", ""))
-    if pending is not None:
-        pdict = pending_to_dict(pending)
-        # Save to Postgres — stream_turn no longer needs to
-        conv_id = state.get("conversation_id")
-        if conv_id:
-            try:
-                from memory.conversation import set_pending_context
-                set_pending_context(conv_id, pdict)
-            except Exception:
-                pass
-        return {
-            "needs_clarification": True,
-            "clarification_message": build_clarification_message(pending),
-            "pending_context": pdict,
-        }
-    return {"needs_clarification": False}
+    if pending is None:
+        return {}
 
+    question = build_clarification_message(pending)
+    answer = interrupt(question)  # pauses graph; resumes when user replies
 
-def check_clarification(state: AgentState) -> str:
-    """Conditional edge: needs_clarification → END, else → route_question."""
-    return "clarify" if state.get("needs_clarification") else "proceed"
+    merged_query = merge_with_pending(pending, answer)
+    from agents.classifier import classify_hybrid
+    result = classify_hybrid(merged_query, messages=state.get("messages"))
+
+    return {
+        "query": merged_query,
+        "intent": result.intent,
+        "ticker": result.ticker or "",
+        "classify_reason": result.reason,
+    }
 
 
 # ── Node 0a: route_question (guide A5) ───────────────────────────────────────
@@ -500,6 +461,11 @@ def node_market_brief(state: AgentState) -> dict:
     return {"report": final.get("report_text") or "[Không có báo cáo thị trường]"}
 
 
+def node_breakout_scan(state: AgentState) -> dict:
+    from agents.intents.breakout import run
+    return {"report": run(state.get("ticker", ""), state.get("query", ""))}
+
+
 def node_rag_qa(state: AgentState) -> dict:
     ticker = state.get("ticker")
     query = state.get("query", "")
@@ -526,7 +492,7 @@ def cache_save_node(state: AgentState) -> dict:
 _INTENT_NODE_NAMES = (
     "node_price_action", "node_technical", "node_news_sentiment",
     "node_macro_sector", "node_investment_case", "node_screening",
-    "node_rag_qa", "node_market_brief",
+    "node_rag_qa", "node_market_brief", "node_breakout_scan",
 )
 
 _INTENT_NODE_MAP = {
@@ -538,6 +504,7 @@ _INTENT_NODE_MAP = {
     "screening":          "node_screening",
     "rag_qa":             "node_rag_qa",
     "market_brief":       "node_market_brief",
+    "breakout_scan":      "node_breakout_scan",
 }
 
 # ── Graph builder ─────────────────────────────────────────────────────────────
@@ -571,17 +538,17 @@ def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGra
     """Build the agent graph.
 
     Args:
-        checkpointer: LangGraph checkpointer (required when human_approval=True).
+        checkpointer: LangGraph checkpointer. Required for clarify_node (interrupt) and
+                      human_approval. Pass PostgresCheckpointer() for production use.
         human_approval: When True, inserts request_approval before synthesize so
                         a human can review/reject before the report is written.
                         Used by api/sessions.py (Bài 27).
     """
     g = StateGraph(AgentState)
 
-    g.add_node("merge_pending_node", merge_pending_node)
     g.add_node("classify_node", classify_node)
     g.add_node("check_cache_node", check_cache_node)
-    g.add_node("verify_context", verify_context)
+    g.add_node("clarify_node", clarify_node)
     g.add_node("route_question", route_question)
 
     g.add_node("node_price_action", node_price_action)
@@ -592,6 +559,7 @@ def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGra
     g.add_node("node_screening", node_screening)
     g.add_node("node_rag_qa", node_rag_qa)
     g.add_node("node_market_brief", node_market_brief)
+    g.add_node("node_breakout_scan", node_breakout_scan)
 
     g.add_node("fusion_search", fusion_search)
     g.add_node("grade_or_critique", grade_or_critique)
@@ -605,14 +573,12 @@ def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGra
     if human_approval:
         g.add_node("request_approval", _request_approval)
 
-    g.set_entry_point("merge_pending_node")
-    g.add_edge("merge_pending_node", "classify_node")
+    g.set_entry_point("classify_node")
     g.add_conditional_edges("classify_node", check_conversation,
         {"skip": END, "verify": "check_cache_node"})
     g.add_conditional_edges("check_cache_node", check_cache_hit,
-        {"hit": END, "miss": "verify_context"})
-    g.add_conditional_edges("verify_context", check_clarification,
-        {"clarify": END, "proceed": "route_question"})
+        {"hit": END, "miss": "clarify_node"})
+    g.add_edge("clarify_node", "route_question")
     g.add_conditional_edges("route_question", pick_branch, {
         **_INTENT_NODE_MAP,
         "knowledge": "fusion_search",

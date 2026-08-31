@@ -243,22 +243,40 @@ async def stream_turn(
         except Exception:
             episodes = []
 
-    # ── Invoke graph (handles: pending merge, classify, cache, verify, all dispatch) ──
+    # ── Invoke graph ──────────────────────────────────────────────────────────
     from agents.state import make_initial_state
     from agents.graph import build_graph
+    from agents.checkpointer import PostgresCheckpointer
+    from langgraph.types import Command
 
     yield _sse_status("routing")
 
-    state = make_initial_state(
-        user_message,
-        conversation_id=conversation_id,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        messages=history,
-    )
+    checkpointer = PostgresCheckpointer()
+    app = build_graph(checkpointer=checkpointer)
+    thread_config = {"configurable": {"thread_id": conversation_id}}
+
+    # If previous turn left graph in interrupted state (waiting for clarification answer),
+    # resume with the user's message instead of starting fresh.
+    try:
+        prior_state = await asyncio.to_thread(app.get_state, thread_config)
+        is_interrupted = bool(prior_state and prior_state.next)
+    except Exception:
+        is_interrupted = False
+
+    if is_interrupted:
+        invoke_input = Command(resume=user_message)
+    else:
+        invoke_input = make_initial_state(
+            user_message,
+            conversation_id=conversation_id,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            messages=history,
+        )
+
     try:
         task = asyncio.create_task(
-            asyncio.to_thread(build_graph().invoke, state)
+            asyncio.to_thread(app.invoke, invoke_input, thread_config)
         )
         while not task.done():
             try:
@@ -271,6 +289,28 @@ async def stream_turn(
     except Exception as exc:
         yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
         return
+
+    # After invoke, check if graph paused at clarify_node waiting for user answer.
+    try:
+        after_state = await asyncio.to_thread(app.get_state, thread_config)
+        if after_state and after_state.next:
+            interrupts = (
+                after_state.tasks[0].interrupts
+                if after_state.tasks else []
+            )
+            question = interrupts[0].value if interrupts else "Bạn cần cung cấp thêm thông tin."
+            log.info("clarify.interrupt conv=%s question=%r", conversation_id[:8], question[:60])
+            yield _sse_status("streaming", agent="clarification")
+            for line in question.split("\n"):
+                yield _sse_chunk(line + "\n")
+            try:
+                save_turn(conversation_id, user_message, question)
+            except Exception:
+                pass
+            yield _sse_done(len(question), "clarification")
+            return
+    except Exception:
+        pass
 
     intent = final.get("intent", "conversation")
     ticker = final.get("ticker") or None
@@ -293,20 +333,6 @@ async def stream_turn(
         return
 
     assistant_reply = ""
-
-    # ── Clarification: pending already saved to Postgres by verify_context ───
-    if final.get("needs_clarification"):
-        clarification = final.get("clarification_message", "")
-        log.info("clarification conv=%s intent=%s", conversation_id[:8], intent)
-        yield _sse_status("streaming", agent="clarification")
-        for line in clarification.split("\n"):
-            yield _sse_chunk(line + "\n")
-        try:
-            save_turn(conversation_id, user_message, clarification)
-        except Exception:
-            pass
-        yield _sse_done(len(clarification), "clarification")
-        return
 
     # ── Conversation: stream LLM directly (graph returned intent="conversation") ──
     if intent == "conversation":

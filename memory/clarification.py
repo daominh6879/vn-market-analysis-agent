@@ -81,16 +81,18 @@ def detect_ambiguity(route, query: str) -> Optional[PendingContext]:
        (distinguished from case 1 by presence of company-name-like text)
     """
     intent = route.intent
-    ticker = route.ticker
+    ticker = route.ticker or None  # normalize "" → None
     lower = query.lower()
 
-    # Case 0: bare ticker — intent known only by default, not by keywords
-    # e.g. user typed "HPG" alone — we have the ticker but not what they want
-    if (
-        intent in _TICKER_REQUIRED
-        and ticker
-        and getattr(route, "reason", "").endswith("default")
-    ):
+    # Case 0: bare ticker — user provided only a ticker symbol with no action expressed
+    # Detected from query content, not classifier internals.
+    _tokens = query.strip().split()
+    _is_bare_ticker = (
+        len(_tokens) <= 2
+        and any(t.upper() == t and 2 <= len(t) <= 5 for t in _tokens)
+        and not any(c in lower for c in ("phân tích", "giá", "tin", "mua", "bán", "đánh giá", "review"))
+    )
+    if intent in _TICKER_REQUIRED and ticker and _is_bare_ticker:
         return PendingContext(
             original_query=query,
             missing=["intent"],
