@@ -300,6 +300,7 @@ async def stream_turn(
         )
         agent_state["intent"] = intent
         agent_state["ticker"] = ticker
+        agent_state["original_query"] = user_message
 
         try:
             task = asyncio.create_task(

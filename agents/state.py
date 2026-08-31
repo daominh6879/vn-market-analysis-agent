@@ -57,6 +57,7 @@ class AgentState(TypedDict, total=False):
     user_id: str
     tenant_id: str           # for cache key namespacing
     messages: list[dict]     # last N turns [{role, content}] — for cache turn-1 check
+    original_query: str      # verbatim user message — used for cache key (query may be LLM-expanded)
     # Cache (set by check_cache_node / cache_save_node inside graph)
     _cache_hit: bool
     _cache_tier: str

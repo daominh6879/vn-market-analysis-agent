@@ -132,9 +132,12 @@ def check_conversation(state: AgentState) -> str:
 def check_cache_node(state: AgentState) -> dict:
     """Check cache using classified intent+ticker. Returns early if hit."""
     from core.cache import make_cache_key, cache_get
+    # Use original_query (verbatim user message) for cache key — query may be LLM-expanded
+    # and differs each turn, causing cache misses for semantically identical requests.
+    cache_question = state.get("original_query") or state.get("query", "")
     ck = make_cache_key(
         state.get("tenant_id", "default"),
-        state.get("query", ""),
+        cache_question,
         state.get("ticker") or "",
         state.get("intent", "conversation"),
         state.get("messages") or [],
