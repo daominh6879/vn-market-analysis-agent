@@ -427,6 +427,16 @@ def detect_candle_pattern(df: pd.DataFrame) -> ToolResult:
         o, h, l, c = float(row["open"]), float(row["high"]), float(row["low"]), float(row["close"])
         body = abs(c - o)
         candle_range = h - l
+
+        # Previous candle for 2-candle patterns
+        prev = df.iloc[-2] if len(df) >= 2 else None
+        if prev is not None:
+            po, pc = float(prev["open"]), float(prev["close"])
+            prev_body = abs(pc - po)
+            prev_range = float(prev["high"]) - float(prev["low"])
+        else:
+            po = pc = prev_body = prev_range = None
+
         if candle_range == 0:
             pattern = "Không xác định (range = 0)"
         else:
@@ -434,39 +444,78 @@ def detect_candle_pattern(df: pd.DataFrame) -> ToolResult:
             upper_shadow = h - max(o, c)
             lower_shadow = min(o, c) - l
 
-            # Hammer/Hanging Man checked first: long lower shadow can have tiny body
-            # that would otherwise be misclassified as Doji
-            if (
-                lower_shadow >= max(body * 2, candle_range * 0.5)
-                and upper_shadow < lower_shadow * 0.3
-                and c >= o
-            ):
-                pattern = "Hammer — râu dưới dài, tiềm năng đảo chiều tăng"
-            elif (
-                lower_shadow >= max(body * 2, candle_range * 0.5)
-                and upper_shadow < lower_shadow * 0.3
-                and c < o
-            ):
-                pattern = "Hanging Man — râu dưới dài trên đỉnh, cảnh báo đảo chiều giảm"
-            elif (
-                upper_shadow >= max(body * 2, candle_range * 0.5)
-                and lower_shadow < upper_shadow * 0.3
-            ):
-                direction = "tăng" if c >= o else "giảm"
-                pattern = f"Shooting Star — râu trên dài, nến {direction}, cảnh báo từ chối vùng cao"
-            elif body_ratio > 0.85 and upper_shadow < body * 0.1 and lower_shadow < body * 0.1:
-                color = "xanh" if c >= o else "đỏ"
-                pattern = f"Marubozu {color} — thân lớn, không râu, xu hướng mạnh"
-            elif body_ratio < 0.1:
-                pattern = "Doji — thân nến rất nhỏ, do dự"
-            elif 0.1 <= body_ratio <= 0.4:
-                color = "tăng" if c >= o else "giảm"
-                pattern = f"Spinning Top {color} — thân nhỏ, hai râu, lực cân bằng"
-            else:
-                # Normal candle — describe direction and relative body size
-                color = "tăng" if c >= o else "giảm"
-                size = "lớn" if body_ratio > 0.65 else "vừa"
-                pattern = f"Nến {color} thân {size} — chưa có mẫu đặc biệt"
+            # ── 2-candle patterns (checked first — higher priority) ──────────
+            if prev is not None and prev_body and prev_range:
+                prev_body_ratio = prev_body / prev_range if prev_range else 0
+                # Bullish Engulfing: prev red, current green, current body wraps prev
+                if pc < po and c > o and c > po and o < pc and prev_body_ratio > 0.4:
+                    pattern = "Bullish Engulfing — nến xanh bao trùm nến đỏ trước, đảo chiều tăng"
+                # Bearish Engulfing: prev green, current red, current body wraps prev
+                elif pc > po and c < o and o > pc and c < po and prev_body_ratio > 0.4:
+                    pattern = "Bearish Engulfing — nến đỏ bao trùm nến xanh trước, đảo chiều giảm"
+                # Bullish Harami: prev large red, current small green inside prev body
+                elif pc < po and c > o and prev_body_ratio > 0.5 and o > pc and c < po and body < prev_body * 0.5:
+                    pattern = "Bullish Harami — nến xanh nhỏ trong thân nến đỏ lớn, tiềm năng đảo chiều"
+                # Bearish Harami: prev large green, current small red inside prev body
+                elif pc > po and c < o and prev_body_ratio > 0.5 and o < pc and c > po and body < prev_body * 0.5:
+                    pattern = "Bearish Harami — nến đỏ nhỏ trong thân nến xanh lớn, tiềm năng đảo chiều"
+                # Tweezer Top: same high, second candle red
+                elif abs(h - float(prev["high"])) < candle_range * 0.05 and c < o:
+                    pattern = "Tweezer Top — hai nến cùng đỉnh, cảnh báo kháng cự mạnh"
+                # Tweezer Bottom: same low, second candle green
+                elif abs(l - float(prev["low"])) < candle_range * 0.05 and c >= o:
+                    pattern = "Tweezer Bottom — hai nến cùng đáy, tín hiệu hỗ trợ mạnh"
+                else:
+                    prev = None  # fall through to single-candle patterns
+
+            # ── Single-candle patterns ───────────────────────────────────────
+            if prev is None:
+                if (
+                    lower_shadow >= max(body * 2, candle_range * 0.5)
+                    and upper_shadow < lower_shadow * 0.3
+                    and c >= o
+                ):
+                    pattern = "Hammer — râu dưới dài, tiềm năng đảo chiều tăng"
+                elif (
+                    lower_shadow >= max(body * 2, candle_range * 0.5)
+                    and upper_shadow < lower_shadow * 0.3
+                    and c < o
+                ):
+                    pattern = "Hanging Man — râu dưới dài trên đỉnh, cảnh báo đảo chiều giảm"
+                elif (
+                    upper_shadow >= max(body * 2, candle_range * 0.5)
+                    and lower_shadow < upper_shadow * 0.3
+                    and c < o
+                ):
+                    pattern = "Shooting Star — râu trên dài, nến đỏ, cảnh báo từ chối vùng cao"
+                elif (
+                    upper_shadow >= max(body * 2, candle_range * 0.5)
+                    and lower_shadow < upper_shadow * 0.3
+                    and c >= o
+                ):
+                    pattern = "Inverted Hammer — râu trên dài, nến xanh, tiềm năng đảo chiều tăng"
+                elif body_ratio > 0.85 and upper_shadow < body * 0.1 and lower_shadow < body * 0.1:
+                    color = "xanh" if c >= o else "đỏ"
+                    pattern = f"Marubozu {color} — thân lớn không râu, xu hướng mạnh"
+                elif body_ratio < 0.05:
+                    # Distinguish Dragonfly / Gravestone Doji
+                    if upper_shadow < candle_range * 0.1:
+                        pattern = "Dragonfly Doji — thân tại đỉnh, râu dưới dài, tín hiệu đảo chiều tăng"
+                    elif lower_shadow < candle_range * 0.1:
+                        pattern = "Gravestone Doji — thân tại đáy, râu trên dài, tín hiệu đảo chiều giảm"
+                    elif upper_shadow > candle_range * 0.35 and lower_shadow > candle_range * 0.35:
+                        pattern = "Long-legged Doji — thân rất nhỏ, hai râu dài, lực cân bằng tuyệt đối"
+                    else:
+                        pattern = "Doji — thân nến rất nhỏ, do dự"
+                elif body_ratio < 0.1:
+                    pattern = "Doji — thân nến rất nhỏ, do dự"
+                elif 0.1 <= body_ratio <= 0.4:
+                    color = "tăng" if c >= o else "giảm"
+                    pattern = f"Spinning Top {color} — thân nhỏ, hai râu, lực cân bằng"
+                else:
+                    color = "tăng" if c >= o else "giảm"
+                    size = "lớn" if body_ratio > 0.65 else "vừa"
+                    pattern = f"Nến {color} thân {size} — chưa có mẫu đặc biệt"
 
         msg = f"Mẫu nến (phiên cuối): {pattern}"
         return ToolResult(status="ok", data=pattern, message=msg)
