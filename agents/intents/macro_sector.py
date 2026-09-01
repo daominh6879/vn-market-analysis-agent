@@ -73,18 +73,24 @@ def _assemble_report(
 
 
 def gather_data(ticker: str | None, query: str) -> str:
-    """Fetch FX, commodities, sector performance — no LLM call."""
+    """Fetch FX, commodities, VN gold, sector performance — no LLM call."""
+    from tools.global_market import get_vn_gold
     fx_r        = get_fx_rates()
     comm_r      = get_commodities()
+    vn_gold_r   = get_vn_gold()
     sector_text = _sector_performance_text()
-    fx_text   = fx_r.message   if fx_r.status   == "ok" else "Không có dữ liệu tỷ giá."
-    comm_text = comm_r.message if comm_r.status  == "ok" else "Không có dữ liệu hàng hóa."
-    return (
-        f"[VĨ MÔ & NGÀNH]\n"
-        f"Tỷ giá: {fx_text}\n\n"
-        f"Hàng hóa: {comm_text}\n\n"
-        f"Ngành: {sector_text}"
-    )
+    fx_text      = fx_r.message      if fx_r.status      == "ok" else "Không có dữ liệu tỷ giá."
+    comm_text    = comm_r.message    if comm_r.status     == "ok" else "Không có dữ liệu hàng hóa."
+    vn_gold_text = vn_gold_r.message if vn_gold_r.status  == "ok" else ""
+    parts = [
+        "[VĨ MÔ & NGÀNH]",
+        f"Tỷ giá: {fx_text}",
+        f"Hàng hóa (thế giới): {comm_text}",
+    ]
+    if vn_gold_text:
+        parts.append(f"Vàng SJC (trong nước): {vn_gold_text}")
+    parts.append(f"Ngành: {sector_text}")
+    return "\n\n".join(parts)
 
 
 @observe(name="intent.macro_sector")

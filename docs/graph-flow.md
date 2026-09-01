@@ -53,7 +53,12 @@ flowchart TD
     check_cache_node -->|miss| clarify_node
 
     clarify_node["clarify_node\n① detect_ambiguity — ticker/intent missing?\n② yes → interrupt() — wait for user answer\n③ merge answer → re-classify\n④ no ambiguity → pass through"]
-    clarify_node --> decompose_node
+    clarify_node --> route_check{simple\nquery?}
+
+    route_check -->|"intent∈{price_action,technical,\nnews_sentiment,rag_qa,\nscreening,breakout}\nAND ticker set"| fast_node["build_single_subtask_node\nWrap intent+ticker → 1 sub_task\nno LLM call"]
+    route_check -->|"market_brief / investment_case\n/ macro_sector\nOR no ticker"| decompose_node
+
+    fast_node --> run_subqueries_node
 
     decompose_node["decompose_node\nLLM tool-call decomposition\n→ N sub_tasks [{intent, tickers, question}]\nintent + tickers pre-set in each task"]
     decompose_node --> run_subqueries_node
@@ -122,10 +127,15 @@ when a sub-task has multiple tickers, each ticker is fetched independently and r
 | Path | LLM calls |
 |---|---|
 | Direct reply (social) | 1 (`llm_route`) |
-| Agent path (no clarify) | 1 (`llm_route`) + 1 (`decompose_node`) + 1 (`synthesize_final`) = **3** |
-| Agent path (with clarify) | 1 (`llm_route`) + 1 (clarify re-classify) + 1 (`decompose_node`) + 1 (`synthesize_final`) = **4** |
+| Simple query (specific ticker, leaf intent) | 1 (`llm_route`) + 1 (`synthesize_final`) = **2** |
+| Complex query (no clarify) | 1 (`llm_route`) + 1 (`decompose_node`) + 1 (`synthesize_final`) = **3** |
+| Complex query (with clarify) | 1 (`llm_route`) + 1 (clarify re-classify) + 1 (`decompose_node`) + 1 (`synthesize_final`) = **4** |
 
-No per-sub-query classification — intent and tickers are pre-set by `decompose_node` tool calls.
+Simple path: `price_action`, `technical_analysis`, `news_sentiment`, `rag_qa`, `screening`, `breakout_scan` — only when a specific ticker is identified by `llm_route`.
+
+Complex path (always decompose): `market_brief`, `investment_case`, `macro_sector`, or any intent with no ticker.
+
+No per-sub-query classification — intent and tickers are pre-set by `decompose_node` tool calls (complex path) or by `llm_route` directly (simple path).
 
 ## Key architecture decisions
 
@@ -140,3 +150,4 @@ No per-sub-query classification — intent and tickers are pre-set by `decompose
 | No per-sub-query `classify_hybrid` | `decompose_node` uses tool calling — LLM returns structured `{intent, tickers, question}` directly. Saves N LLM calls per turn. |
 | `classify_node` skips LLM when intent pre-set | Avoid redundant classification after `llm_route` already decided. |
 | `conversation` intent exits graph immediately | No cache check, no decompose, no gather for pure chat turns. |
+| Fast path bypasses `decompose_node` | Single-ticker leaf-intent queries (price_action, technical_analysis, news_sentiment, rag_qa, screening, breakout_scan) skip decompose entirely — saves 1 LLM call + avoids 3 unnecessary data fetches. `macro_sector`, `investment_case`, `market_brief` always decompose (multi-component or no ticker). |

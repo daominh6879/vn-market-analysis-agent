@@ -58,6 +58,10 @@ _INTENT_NODES = frozenset({
     "market_brief", "breakout_scan",
 })
 
+# Intents that require multi-angle decomposition — always go through decompose_node.
+# All others use the fast path (build_single_subtask_node) when a ticker is present.
+_COMPLEX_INTENTS = frozenset({"market_brief", "investment_case", "macro_sector"})
+
 # Keywords that signal a document/financial-report query → "knowledge" path
 _KNOWLEDGE_KEYWORDS = frozenset({
     "bctc", "báo cáo tài chính", "p/e", "pe", "roe", "roa", "eps",
@@ -674,6 +678,31 @@ def synthesize_final(state: AgentState) -> dict:
         }],
     }
 
+# ── Fast-path routing ────────────────────────────────────────────────────────
+
+def _route_after_clarify(state: AgentState) -> str:
+    """Skip decompose for single-ticker leaf-intent queries — saves 1 LLM call + 3 data fetches."""
+    intent = state.get("intent", "")
+    ticker = state.get("ticker", "")
+    if (intent
+            and intent not in _COMPLEX_INTENTS
+            and intent != "conversation"
+            and ticker):
+        return "simple"
+    return "decompose"
+
+
+def build_single_subtask_node(state: AgentState) -> dict:
+    """Wrap pre-classified intent+ticker into a single sub-task, bypassing decompose_node."""
+    intent = state.get("intent", "macro_sector")
+    ticker = state.get("ticker", "")
+    query = state.get("query", "")
+    return {
+        "sub_tasks": [{"intent": intent, "tickers": [ticker] if ticker else [], "question": query}],
+        "iteration": 0,
+    }
+
+
 # ── Graph builder ─────────────────────────────────────────────────────────────
 
 def _request_approval(state: AgentState) -> dict:
@@ -713,13 +742,14 @@ def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGra
     """
     g = StateGraph(AgentState)
 
-    g.add_node("classify_node",       classify_node)
-    g.add_node("check_cache_node",    check_cache_node)
-    g.add_node("clarify_node",        clarify_node)
-    g.add_node("decompose_node",      decompose_node)
-    g.add_node("run_subqueries_node", run_subqueries_node)
-    g.add_node("synthesize_final",    synthesize_final)
-    g.add_node("cache_save_node",     cache_save_node)
+    g.add_node("classify_node",            classify_node)
+    g.add_node("check_cache_node",         check_cache_node)
+    g.add_node("clarify_node",             clarify_node)
+    g.add_node("build_single_subtask_node", build_single_subtask_node)
+    g.add_node("decompose_node",           decompose_node)
+    g.add_node("run_subqueries_node",      run_subqueries_node)
+    g.add_node("synthesize_final",         synthesize_final)
+    g.add_node("cache_save_node",          cache_save_node)
 
     if human_approval:
         g.add_node("request_approval", _request_approval)
@@ -729,8 +759,10 @@ def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGra
         {"skip": END, "verify": "check_cache_node"})
     g.add_conditional_edges("check_cache_node", check_cache_hit,
         {"hit": END, "miss": "clarify_node"})
-    g.add_edge("clarify_node",        "decompose_node")
-    g.add_edge("decompose_node",      "run_subqueries_node")
+    g.add_conditional_edges("clarify_node", _route_after_clarify,
+        {"simple": "build_single_subtask_node", "decompose": "decompose_node"})
+    g.add_edge("build_single_subtask_node", "run_subqueries_node")
+    g.add_edge("decompose_node",            "run_subqueries_node")
 
     if human_approval:
         g.add_edge("run_subqueries_node", "request_approval")
