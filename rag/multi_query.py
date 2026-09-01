@@ -1,8 +1,12 @@
 """
-rag/multi_query.py — Structured query decomposition + source tagging for RAG-Fusion.
+rag/multi_query.py — Sub-query generation and source tagging for RAG-Fusion.
 
-decompose_query() uses tool calling to return structured SubTask objects directly
-(intent + tickers + question). No free-text re-classification needed downstream.
+RAG-Fusion idea: one query has multiple "angles". Decompose into N sub-queries,
+retrieve for each independently, then fuse with RRF.
+
+Trap guard: sub-queries can drift far from the original (especially short queries).
+Constraint injected in prompt: all sub-queries must ask about the same company
+and same time period as the original.
 """
 from __future__ import annotations
 
@@ -23,112 +27,41 @@ except ImportError:
 from llm.factory import create_client
 from llm.types import Message
 
-_VALID_INTENTS = [
-    "price_action", "technical_analysis", "news_sentiment",
-    "macro_sector", "investment_case", "screening",
-    "rag_qa", "breakout_scan",
-]
 
-_DECOMPOSE_TOOL = {
-    "name": "decompose_query",
-    "description": (
-        "Phân tách câu hỏi phân tích tài chính thành các sub-task độc lập. "
-        "Mỗi sub-task có intent rõ ràng, danh sách mã cổ phiếu cụ thể, và câu hỏi standalone."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "tasks": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "intent": {
-                            "type": "string",
-                            "enum": _VALID_INTENTS,
-                            "description": "Loại phân tích cần thực hiện",
-                        },
-                        "tickers": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "Mã cổ phiếu VN cần tra cứu (ví dụ: VCB, CTG, BID). Bắt buộc có ít nhất 1 mã.",
-                        },
-                        "question": {
-                            "type": "string",
-                            "description": "Câu hỏi standalone đầy đủ ngữ cảnh cho sub-task này.",
-                        },
-                    },
-                    "required": ["intent", "tickers", "question"],
-                },
-            }
-        },
-        "required": ["tasks"],
-    },
-}
+def generate_sub_queries(query: str, n: int = 4) -> list[str]:
+    """Use LLM to decompose query into N sub-queries, each covering a different angle.
 
-_INTENT_DESCRIPTIONS = {
-    "price_action":       "biến động giá, khối lượng, OHLCV, phiên giao dịch",
-    "technical_analysis": "chỉ báo kỹ thuật RSI, MACD, MA, Bollinger, breakout",
-    "news_sentiment":     "tin tức, sự kiện, khối ngoại, tâm lý thị trường",
-    "macro_sector":       "vĩ mô, ngành, so sánh chỉ số, tương quan thị trường",
-    "investment_case":    "định giá, PE, ROE, cơ bản doanh nghiệp, luận điểm đầu tư",
-    "screening":          "sàng lọc cổ phiếu theo tiêu chí, top tăng/giảm",
-    "rag_qa":             "báo cáo tài chính BCTC, số liệu kế toán, kiểm toán",
-    "breakout_scan":      "breakout, phá vỡ kháng cự/hỗ trợ, mô hình giá",
-}
-
-
-def decompose_query(query: str, n: int = 4, ticker: str = "", intent: str = "") -> list[dict]:
-    """Decompose a financial query into structured sub-tasks via tool calling.
-
-    Returns list of dicts: [{intent, tickers, question}, ...].
-    Falls back to single task wrapping original query on tool call failure.
-
-    Args:
-        ticker: classifier-extracted ticker/sector (injected as constraint).
-        intent: pre-classified intent — used as fallback task intent on LLM failure.
+    Returns at most n sub-queries (falls back to [query] on parse/empty error).
     """
+    import re as _re
+
     client = create_client()
-
-    intent_guide = "\n".join(f"- {k}: {v}" for k, v in _INTENT_DESCRIPTIONS.items())
-    ticker_hint = (
-        f"\nChủ thể câu hỏi: '{ticker}'. Dùng đúng mã/ngành này, không thêm mã không liên quan."
-        if ticker else ""
-    )
-
     prompt = (
-        f"Phân tách câu hỏi sau thành {n} sub-task phân tích tài chính đa góc nhìn.\n"
-        f"Câu hỏi: {query}{ticker_hint}\n\n"
-        f"Hướng dẫn chọn intent:\n{intent_guide}\n\n"
-        "Yêu cầu:\n"
-        "- Mỗi sub-task một intent khác nhau nếu có thể\n"
-        "- tickers: mã cổ phiếu cụ thể (2-4 ký tự viết hoa, VD: VCB, CTG, BID)\n"
-        "- question: câu hỏi đầy đủ, standalone, chứa ticker và thời gian nếu cần"
+        f"Sinh {n} truy vấn con đa dạng (góc nhìn khác nhau) cho câu hỏi "
+        f"phân tích sau, mỗi dòng một truy vấn, không đánh số:\n{query}"
     )
 
     resp = client.generate(
         [Message(role="user", content=prompt)],
-        max_tokens=1024,
-        system="Bạn là chuyên gia phân tích tài chính Việt Nam. Gọi tool decompose_query với kết quả phân tách.",
-        tools=[_DECOMPOSE_TOOL],
+        max_tokens=512,
+        system=(
+            "Bạn là chuyên gia phân tích tài chính. "
+            "Trả về đúng số truy vấn yêu cầu, mỗi dòng một truy vấn, không đánh số, không giải thích. "
+            "QUAN TRỌNG: Chỉ đề cập đúng các mã cổ phiếu/ngành/chỉ số có trong câu hỏi gốc. "
+        ),
     )
-
-    if resp.tool_calls:
-        tc = resp.tool_calls[0]
-        tasks = tc.input.get("tasks", [])
-        # Validate: drop tasks with no tickers or invalid intent
-        valid = [
-            t for t in tasks
-            if t.get("intent") in _VALID_INTENTS
-            and t.get("tickers")
-            and t.get("question")
-        ]
-        if valid:
-            return valid[:n]
-
-    # Fallback: preserve original intent so wrong gather_data is not called
-    fallback_intent = intent if intent and intent in _VALID_INTENTS else "macro_sector"
-    return [{"intent": fallback_intent, "tickers": [ticker] if ticker else [], "question": query}]
+    raw = resp.text.strip()
+    # Strip <think>...</think> blocks (deepseek reasoning mode)
+    raw = _re.sub(r"<think>.*?</think>", "", raw, flags=_re.DOTALL).strip()
+    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    # Drop leading numbering if model ignores the instruction
+    cleaned = []
+    for ln in lines:
+        ln = _re.sub(r"^\s*\d+[\.\)]\s*", "", ln)
+        if ln:
+            cleaned.append(ln)
+    result = cleaned[:n]
+    return result if result else [query]
 
 
 def tag_source(chunk: str, metadata: dict) -> str:
