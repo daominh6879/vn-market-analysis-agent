@@ -56,16 +56,31 @@ def _load_tickers() -> set[str]:
     global _TICKERS
     if _TICKERS is not None:
         return _TICKERS
+
+    # L1: securities table
+    try:
+        from core.tickers import get_tickers
+        tickers = get_tickers()
+        if tickers:
+            _TICKERS = set(tickers)
+            return _TICKERS
+    except Exception:
+        pass
+
+    # L2: known_tickers.txt file
     ticker_file = ROOT / "data" / "known_tickers.txt"
     if ticker_file.exists():
-        _TICKERS = set(ticker_file.read_text(encoding="utf-8").splitlines())
-    else:
-        # Fallback — core HOSE names
-        _TICKERS = {
-            "HPG", "VNM", "FPT", "VIC", "MSN", "VHM", "TCB", "MBB", "VCB",
-            "CTG", "BID", "VPB", "ACB", "STB", "HDB", "SSI", "VND", "HCM",
-            "MWG", "DGW", "PNJ", "GAS", "PLX", "REE", "GMD", "VRE", "KDH",
-        }
+        lines = [l.strip() for l in ticker_file.read_text(encoding="utf-8").splitlines() if l.strip()]
+        if lines:
+            _TICKERS = set(lines)
+            return _TICKERS
+
+    # L3: hardcoded fallback
+    _TICKERS = {
+        "HPG", "VNM", "FPT", "VIC", "MSN", "VHM", "TCB", "MBB", "VCB",
+        "CTG", "BID", "VPB", "ACB", "STB", "HDB", "SSI", "VND", "HCM",
+        "MWG", "DGW", "PNJ", "GAS", "PLX", "REE", "GMD", "VRE", "KDH",
+    }
     return _TICKERS
 
 

@@ -631,31 +631,19 @@ _vn_ticker_cache: set[str] | None = None
 
 
 def _vn_ticker_set() -> set[str]:
-    """Lazy-load VN ticker universe from hose_tickers.json + securities DB (cached)."""
+    """Lazy-load VN ticker universe from securities table (cached)."""
     global _vn_ticker_cache
     if _vn_ticker_cache is not None:
         return _vn_ticker_cache
-    tickers: set[str] = set()
-    # Try hose_tickers.json first (fast, no DB)
     try:
-        import json
-        from pathlib import Path as _P
-        json_path = _P(__file__).parent.parent / "data" / "hose_tickers.json"
-        if json_path.exists():
-            data = json.loads(json_path.read_text(encoding="utf-8"))
-            tickers.update(item["ticker"].upper() for item in data if item.get("ticker"))
+        from core.tickers import get_tickers
+        tickers = get_tickers()
+        if tickers:
+            _vn_ticker_cache = set(tickers)
+            return _vn_ticker_cache
     except Exception:
         pass
-    # Supplement with securities table if available
-    try:
-        from core.db import get_conn
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT ticker FROM securities")
-                tickers.update(r[0].upper() for r in cur.fetchall())
-    except Exception:
-        pass
-    _vn_ticker_cache = tickers or {"HPG", "VCB", "FPT", "VNM", "TCB", "MBB", "VHM"}
+    _vn_ticker_cache = {"HPG", "VCB", "FPT", "VNM", "TCB", "MBB", "VHM"}
     return _vn_ticker_cache
 
 
