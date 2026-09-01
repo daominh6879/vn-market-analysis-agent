@@ -67,15 +67,7 @@ def _load_tickers() -> set[str]:
     except Exception:
         pass
 
-    # L2: known_tickers.txt file
-    ticker_file = ROOT / "data" / "known_tickers.txt"
-    if ticker_file.exists():
-        lines = [l.strip() for l in ticker_file.read_text(encoding="utf-8").splitlines() if l.strip()]
-        if lines:
-            _TICKERS = set(lines)
-            return _TICKERS
-
-    # L3: hardcoded fallback
+    # L2: hardcoded fallback
     _TICKERS = {
         "HPG", "VNM", "FPT", "VIC", "MSN", "VHM", "TCB", "MBB", "VCB",
         "CTG", "BID", "VPB", "ACB", "STB", "HDB", "SSI", "VND", "HCM",
