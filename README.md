@@ -239,7 +239,7 @@ make up              # docker compose up -d
 make down            # docker compose down
 make test            # pytest tests/
 make eval            # run RAGAS eval
-make api-b32         # start FastAPI on :8032
+make api-b31         # start FastAPI on :8032
 make ui-react        # start React UI
 make pipeline-dev    # start Dagster
 make ingest-daily    # daily market data refresh
