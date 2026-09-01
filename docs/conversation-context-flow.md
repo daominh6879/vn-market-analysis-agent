@@ -6,14 +6,16 @@ Giải thích cách context/memory được truyền qua các turn trong một s
 
 ## Nơi lưu trữ history
 
-| Layer | Lưu gì | Công nghệ |
-|---|---|---|
-| Postgres `messages` | Toàn bộ messages (user + assistant, full content) | Postgres |
-| Postgres `conversations.pending_context` | PendingContext khi graph bị interrupt (clarify) | Postgres JSONB |
-| Qdrant episodic memory | 3 episode tương tự từ các conversation cũ | Qdrant vector |
-| Postgres `user_memory` | Preferences người dùng học được từ lịch sử | Postgres |
+| Layer | Lưu gì | Công nghệ | Khi nào dùng |
+|---|---|---|---|
+| Postgres `messages` | Toàn bộ messages (user + assistant, full content) | Postgres | Mỗi turn |
+| Postgres `conversations.pending_context` | PendingContext khi graph bị interrupt (clarify) | Postgres JSONB | Khi clarify interrupt |
+| Qdrant episodic memory | 3 episode tương tự từ các conversation cũ | Qdrant vector | Turn đầu tiên của session |
+| Postgres `user_memory` | Preferences người dùng học được từ lịch sử | Postgres | Mỗi turn |
+| ChromaDB `chat_history` | Từng cặp (user + assistant) dưới dạng document | ChromaDB local | Mỗi turn (retrieve + store) |
 
 Không có in-memory store giữa các HTTP request — mỗi turn fetch Postgres từ đầu.
+ChromaDB là store duy nhất cho **turn-level semantic retrieval** — tìm lại những lượt hội thoại cụ thể (khác Qdrant lưu summary episode).
 
 ---
 
@@ -205,6 +207,40 @@ với context "user này hay hỏi về gì, sở thích phân tích ra sao". Kh
 
 ---
 
+## ChromaDB hybrid memory (turn-level)
+
+Chạy **mỗi turn** — khác Qdrant chỉ chạy turn đầu:
+
+```python
+# Trước khi gọi LLM
+chroma_turns = chroma_retrieve(user_message, user_id, top_k=3)
+system_prompt = _build_system(user_memory, episodes, chroma_turns=chroma_turns)
+
+# Sau khi lưu turn vào Postgres
+chroma_store(conversation_id, user_id, user_message, assistant_reply)
+```
+
+**Khác biệt so với Qdrant episodic:**
+
+| | Qdrant episodic | ChromaDB hybrid |
+|---|---|---|
+| Đơn vị lưu | Summary cả conversation | Từng cặp (user turn + assistant reply) |
+| Khi retrieve | Turn đầu session | Mỗi turn |
+| Nội dung | "User hay hỏi về ngành gì, phong cách phân tích" | Lượt hội thoại cụ thể liên quan đến query hiện tại |
+| Ví dụ | "3 tháng trước user hỏi nhiều về HPG, thích DCF" | "2 session trước user hỏi HPG nợ vay → câu trả lời đó" |
+| Persist | Khi gọi `finish_conversation()` | Sau mỗi turn |
+
+**Sliding window (HybridMemoryAgent.chat):**
+`HybridMemoryAgent` dùng thêm `deque(maxlen=8)` lưu 4 turn gần nhất trong RAM — chỉ tồn tại trong process hiện tại. ChromaDB là durable store. Khi restart process, window reset nhưng ChromaDB còn nguyên.
+
+**Storage management:**
+- Docs gắn metadata `{conversation_id, user_id, created_at}`.
+- Cap `max_docs=1000`: khi vượt, prune 100 doc cũ nhất theo `created_at`.
+- Persist ở `./chroma_db/` (local, gitignored).
+- Khi `delete_conversation()` gọi → ChromaDB docs của conversation đó bị xóa cùng Postgres + Qdrant.
+
+---
+
 ## Tóm tắt data flow một turn
 
 ```mermaid
@@ -214,8 +250,11 @@ flowchart TD
     HTTP --> LOAD["load_history(limit=10)\n→ 20 messages từ Postgres"]
     HTTP --> MEM["load_user_memory()\n→ Postgres preferences"]
     HTTP --> EPI["retrieve_similar()\n[turn 1 only]\n→ Qdrant episodes"]
+    HTTP --> CHR["chroma_retrieve(query, user_id)\n[mỗi turn]\n→ top 3 similar past turns\nfrom ChromaDB"]
 
-    LOAD & MEM & EPI --> ROUTE["llm_route\nhistory[-8:] truncated\n→ {type, intent, ticker, query}"]
+    LOAD & MEM & EPI & CHR --> SYS["_build_system()\n→ system prompt\n(preferences + episodes\n+ chroma_turns)"]
+
+    SYS --> ROUTE["llm_route\nhistory[-8:] truncated\n→ {type, intent, ticker, query}"]
 
     ROUTE -->|"type=text\n(social/direct)"| STREAM["Stream text\nto user"]
 
@@ -236,5 +275,6 @@ flowchart TD
     SYN --> SAVE["cache_save_node\nRedis"]
 
     SAVE --> PERSIST["save_turn()\nPostgres full content"]
+    PERSIST --> CHRS["chroma_store()\n→ ChromaDB\n(durable turn-level memory)"]
     PERSIST --> PREF["extract_preferences()\nPostgres user_memory"]
 ```

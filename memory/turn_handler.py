@@ -38,7 +38,11 @@ Trả lời bằng tiếng Việt. Dựa vào lịch sử hội thoại và sở
 Dữ liệu thị trường chỉ đến từ công cụ phân tích (needs_agent_run) — lịch sử hội thoại chứa kết quả cũ, không dùng để trả lời câu hỏi mới về bất kỳ mã/ngành nào."""
 
 
-def _build_system(user_memory: list[dict], episodes: list[dict] | None = None) -> str:
+def _build_system(
+    user_memory: list[dict],
+    episodes: list[dict] | None = None,
+    chroma_turns: list[str] | None = None,
+) -> str:
     parts = [_BASE_SYSTEM]
 
     if user_memory:
@@ -55,6 +59,9 @@ def _build_system(user_memory: list[dict], episodes: list[dict] | None = None) -
                 f"- [{ep['days_old']} ngày trước] {ep['first_question']}: {ep['conclusion']}"
             )
         parts.append(f"\nCác cuộc trò chuyện liên quan trước đây:\n" + "\n".join(ep_lines))
+
+    if chroma_turns:
+        parts.append("\nCác lượt hội thoại liên quan:\n" + "\n---\n".join(chroma_turns))
 
     return "\n".join(parts)
 
@@ -79,7 +86,14 @@ def run_turn(
         except Exception:
             episodes = []
 
-    system_prompt = _build_system(user_memory, episodes)
+    chroma_turns: list[str] = []
+    try:
+        from memory.chat_context import chroma_retrieve
+        chroma_turns = chroma_retrieve(user_message, user_id, top_k=3)
+    except Exception:
+        pass
+
+    system_prompt = _build_system(user_memory, episodes, chroma_turns=chroma_turns)
 
     # Build LLM messages: history + new user message
     lm_messages = [Message(role=m["role"], content=m["content"]) for m in history]
@@ -95,6 +109,12 @@ def run_turn(
 
     # Persist turn
     save_turn(conversation_id, user_message, assistant_reply)
+
+    try:
+        from memory.chat_context import chroma_store
+        chroma_store(conversation_id, user_id, user_message, assistant_reply)
+    except Exception:
+        pass
 
     # Extract preferences from this turn only (run AFTER turn completes)
     turn_messages = [
@@ -221,7 +241,15 @@ async def stream_turn(
         except Exception:
             episodes = []
 
-    system_prompt = _build_system(user_memory, episodes)
+    chroma_turns: list[str] = []
+    try:
+        from memory.chat_context import chroma_retrieve
+        # Run in thread — ChromaDB is synchronous I/O; must not block the event loop
+        chroma_turns = await asyncio.to_thread(chroma_retrieve, user_message, user_id, 3)
+    except Exception:
+        pass
+
+    system_prompt = _build_system(user_memory, episodes, chroma_turns=chroma_turns)
     client = create_client()
 
     from agents.state import make_initial_state
@@ -384,6 +412,12 @@ async def stream_turn(
     # ── Persist + extract preferences ─────────────────────────────────────────
     try:
         save_turn(conversation_id, user_message, assistant_reply)
+
+        try:
+            from memory.chat_context import chroma_store
+            await asyncio.to_thread(chroma_store, conversation_id, user_id, user_message, assistant_reply)
+        except Exception:
+            pass
 
         turn_messages = [
             {"role": "user", "content": user_message},

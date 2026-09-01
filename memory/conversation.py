@@ -198,4 +198,10 @@ def delete_conversation(conversation_id: str) -> bool:
         except Exception:
             pass  # Qdrant unavailable — Postgres already cleaned up
 
+        try:
+            from memory.chat_context import delete_conversation_context
+            delete_conversation_context(conversation_id)
+        except Exception:
+            pass  # Chroma unavailable — Postgres + Qdrant already cleaned up
+
     return found
