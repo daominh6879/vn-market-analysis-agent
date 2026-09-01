@@ -18,18 +18,7 @@ from langfuse import observe
 from llm.factory import create_client
 from llm.types import Message
 from agents.intents import strip_preamble, strip_thinking, extract_slot
-
-_BANKING_PEERS  = ["VCB", "BID", "CTG", "MBB", "TCB", "VPB", "ACB", "STB"]
-_STEEL_PEERS    = ["HPG", "HSG", "NKG", "TLH"]
-_TECH_PEERS     = ["FPT", "CMG", "VGI"]
-_REALESTATE     = ["VHM", "VIC", "NVL", "PDR", "DXG"]
-
-_SECTOR_MAP: dict[str, list[str]] = {
-    **{t: _BANKING_PEERS for t in _BANKING_PEERS},
-    **{t: _STEEL_PEERS   for t in _STEEL_PEERS},
-    **{t: _TECH_PEERS    for t in _TECH_PEERS},
-    **{t: _REALESTATE    for t in _REALESTATE},
-}
+from core.tickers import get_sector_peers
 
 
 # ── Data fetching ─────────────────────────────────────────────────────────────
@@ -422,7 +411,7 @@ def gather_data(ticker: str | None, query: str) -> str:
         return f"[SO SÁNH {' & '.join(peers)}]\n{_build_analysis(ticker, rows)}"
 
     if _is_sector_comparison(query):
-        peers = _SECTOR_MAP.get(ticker, [ticker])
+        peers = get_sector_peers(ticker)
         rows = [_fetch_valuation(t) for t in peers]
         return f"[CƠ BẢN & ĐỊNH GIÁ {ticker}]\n{_build_analysis(ticker, rows)}"
 
@@ -447,7 +436,7 @@ def gather_data(ticker: str | None, query: str) -> str:
 @observe(name="intent.fundamentals")
 def run(ticker: str | None, query: str) -> str:
     if ticker and _is_sector_comparison(query):
-        peers    = _SECTOR_MAP.get(ticker, [ticker])
+        peers    = get_sector_peers(ticker)
         rows     = [_fetch_valuation(t) for t in peers]
         analysis = _build_analysis(ticker, rows)
         data_table = _extract_data_table(analysis)

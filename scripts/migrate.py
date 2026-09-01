@@ -258,10 +258,12 @@ def backfill_market_index(dry: bool) -> bool:
 
 def populate_ratios(dry: bool) -> bool:
     print("\n[7/8] Stock ratios (vnstock KBS → stock_ratios)")
-    from pipeline.assets_vnstock import _RATIO_TICKERS, _UPSERT_SQL
-    print(f"  tickers: {_RATIO_TICKERS}")
+    from pipeline.assets_vnstock import _UPSERT_SQL
+    from core.tickers import get_ratio_tickers
+    ticker_list = get_ratio_tickers()
+    print(f"  tickers ({len(ticker_list)}): {ticker_list}")
     if dry:
-        print(f"  [DRY] would fetch {len(_RATIO_TICKERS)} tickers via vnstock KBS")
+        print(f"  [DRY] would fetch {len(ticker_list)} tickers via vnstock KBS")
         return True
 
     import math, time
@@ -269,7 +271,7 @@ def populate_ratios(dry: bool) -> bool:
     from core.db import get_conn
 
     ok = failed = 0
-    for ticker in _RATIO_TICKERS:
+    for ticker in ticker_list:
         print(f"  {ticker}", end="", flush=True)
         try:
             df = VnFinance(symbol=ticker, source='KBS').ratio(period='year', lang='en')

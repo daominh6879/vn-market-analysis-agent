@@ -119,14 +119,6 @@ def vnstock_prices(context: AssetExecutionContext, config: VnstockPricesConfig) 
 
 # ── Ratios asset ───────────────────────────────────────────────────────────────
 
-# All tickers the fundamentals intent may need for peer comparison
-_RATIO_TICKERS = [
-    "VCB", "BID", "CTG", "MBB", "TCB", "VPB", "ACB", "STB",  # banking
-    "HPG", "HSG", "NKG", "TLH",                                # steel
-    "FPT", "CMG", "VGI",                                       # tech
-    "VHM", "VIC", "NVL", "PDR", "DXG",                        # real estate
-]
-
 _UPSERT_SQL = """
 INSERT INTO stock_ratios (
     ticker, fetched_at,
@@ -167,11 +159,14 @@ def vnstock_ratios(context: AssetExecutionContext) -> dict:
     import time
     from vnstock.api.financial import Finance as VnFinance
     from core.db import get_conn
+    from core.tickers import get_ratio_tickers
 
+    ticker_list = get_ratio_tickers()
+    context.log.info(f"vnstock_ratios: {len(ticker_list)} tickers from securities table")
     upserted = 0
     failed: list[str] = []
 
-    for ticker in _RATIO_TICKERS:
+    for ticker in ticker_list:
         context.log.info(f"Fetching ratios: {ticker}")
         try:
             df = VnFinance(symbol=ticker, source='KBS').ratio(period='year', lang='en')
@@ -217,7 +212,7 @@ def vnstock_ratios(context: AssetExecutionContext) -> dict:
 
     if failed:
         context.log.warning(f"vnstock_ratios: {len(failed)} failed: {failed}")
-    context.log.info(f"vnstock_ratios done: {upserted}/{len(_RATIO_TICKERS)} upserted")
+    context.log.info(f"vnstock_ratios done: {upserted}/{len(ticker_list)} upserted")
     return {"upserted": upserted, "failed": failed}
 
 
