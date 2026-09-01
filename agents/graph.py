@@ -146,11 +146,11 @@ def check_cache_node(state: AgentState) -> dict:
         state.get("intent", "conversation"),
     )
     if ck is None:
-        return {"_cache_key": None}
+        return {"_cache_key": None, "_cache_hit": False}
     hit, tier = cache_get(ck)
     if hit:
         return {"report": hit, "_cache_hit": True, "_cache_tier": tier, "_cache_key": ck}
-    return {"_cache_key": ck}
+    return {"_cache_key": ck, "_cache_hit": False}
 
 
 def check_cache_hit(state: AgentState) -> str:
