@@ -4,9 +4,9 @@ core/cache.py — Intent-level response cache (Bài 32).
 Single tier: SHA-256(CacheKey JSON) → Redis  key: cache:b32:{hash}
 
 Key = (tenant_id, intent, ticker, scope, prompt_version, model_version).
-ticker fully differentiates most intents. For macro_sector/screening/rag_qa/breakout_scan
-with empty ticker, scope = sha256(normalize_question)[:8] prevents cross-topic hits
-(e.g. "xây dựng" and "ngân hàng" are both macro_sector+ticker="" but different scope).
+Intents in _ALWAYS_SCOPE_INTENTS (macro_sector, rag_qa, screening, breakout_scan) always
+include scope = sha256(normalize_question)[:8] — ticker alone does not specify the query.
+All other intents: scope = "" (ticker fully differentiates).
 
 TTL is per-intent, with separate market-hours and off-hours values:
   - Fast-moving data (price_action, breakout_scan): short TTL during market hours
@@ -95,8 +95,17 @@ def _extract_all_tickers(question: str) -> str:
     return "|".join(hits) if len(hits) > 1 else (hits[0] if hits else "")
 
 
-# Intents where ticker="" is ambiguous — need question-level scope to avoid cross-sector hits
-_SCOPE_REQUIRED_INTENTS = frozenset({"macro_sector", "screening", "rag_qa", "breakout_scan"})
+# Intents where (intent, ticker) does NOT fully specify the query — always use question scope.
+#
+# price_action / technical_analysis / news_sentiment / investment_case / market_brief:
+#   ticker is the primary key; same ticker = same analysis (TTL handles staleness). No scope.
+#
+# macro_sector: sector context matters more than any ticker mentioned ("ngân hàng → VCB"
+#   is a sector query, not a VCB query; different phrasing = different answer).
+# rag_qa:        "Doanh thu HPG Q1?" ≠ "Tổng nợ HPG 2023?" — both rag_qa+HPG without scope.
+# screening:     filter criteria vary per question; ticker in query is illustrative, not key.
+# breakout_scan: market-wide scan; ticker mention is incidental.
+_ALWAYS_SCOPE_INTENTS = frozenset({"macro_sector", "rag_qa", "screening", "breakout_scan"})
 
 
 def _question_scope(question: str) -> str:
@@ -114,19 +123,14 @@ def make_cache_key(
     """Return CacheKey, or None if this turn should not be cached.
 
     conversation intent → always skip.
-    Intents in _SCOPE_REQUIRED_INTENTS with empty ticker → scope = question hash
-      (prevents macro_sector:banking and macro_sector:construction sharing one slot).
+    _ALWAYS_SCOPE_INTENTS → scope = question hash (ticker alone doesn't specify the query).
     All other intents → scope = "" (ticker fully differentiates).
     """
     if not intent or intent == "conversation":
         return None
     model_version = os.environ.get("DEEPSEEK_MODEL", "unknown")
     stable_ticker = _extract_all_tickers(question) or (ticker.upper() if ticker else "")
-    scope = (
-        _question_scope(question)
-        if intent in _SCOPE_REQUIRED_INTENTS and not stable_ticker
-        else ""
-    )
+    scope = _question_scope(question) if intent in _ALWAYS_SCOPE_INTENTS else ""
     return CacheKey(
         tenant_id=tenant_id,
         intent=intent,
