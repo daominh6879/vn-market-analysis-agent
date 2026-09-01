@@ -144,7 +144,6 @@ def check_cache_node(state: AgentState) -> dict:
         cache_question,
         state.get("ticker") or "",
         state.get("intent", "conversation"),
-        state.get("messages") or [],
     )
     if ck is None:
         return {"_cache_key": None}
@@ -507,24 +506,6 @@ def cache_save_node(state: AgentState) -> dict:
     return {}
 
 
-_INTENT_NODE_NAMES = (
-    "node_price_action", "node_technical", "node_news_sentiment",
-    "node_macro_sector", "node_investment_case", "node_screening",
-    "node_rag_qa", "node_market_brief", "node_breakout_scan",
-)
-
-_INTENT_NODE_MAP = {
-    "price_action":       "node_price_action",
-    "technical_analysis": "node_technical",
-    "news_sentiment":     "node_news_sentiment",
-    "macro_sector":       "node_macro_sector",
-    "investment_case":    "node_investment_case",
-    "screening":          "node_screening",
-    "rag_qa":             "node_rag_qa",
-    "market_brief":       "node_market_brief",
-    "breakout_scan":      "node_breakout_scan",
-}
-
 # ── New pipeline nodes ────────────────────────────────────────────────────────
 
 def decompose_node(state: AgentState) -> dict:
@@ -534,6 +515,7 @@ def decompose_node(state: AgentState) -> dict:
         state.get("query", ""),
         n=4,
         ticker=state.get("ticker", ""),
+        intent=state.get("intent", ""),
     )
     print(f"[decompose] {len(sub_tasks)} sub-tasks:")
     for i, t in enumerate(sub_tasks, 1):
@@ -564,27 +546,6 @@ def _get_gather_map() -> dict:
             "conversation":       lambda t, q: "",
         })
     return _GATHER_MAP
-
-
-_MULTI_TICKER_RE = __import__("re").compile(r'\b([A-Z]{2,4})\b')
-_TICKER_STOPWORDS = frozenset({
-    "VE", "VA", "LA", "CO", "DE", "VS", "ROE", "ROA", "EPS",
-    "PE", "PB", "MA", "OR", "SO", "KY", "SO", "VA", "VA",
-})
-
-
-def _extract_multi_tickers(text: str, primary: str) -> list[str]:
-    """Return all VN tickers mentioned in text, primary first, deduped."""
-    hits = list(dict.fromkeys(
-        t for t in _MULTI_TICKER_RE.findall(text.upper())
-        if t not in _TICKER_STOPWORDS and len(t) >= 2
-    ))
-    if not hits:
-        return [primary] if primary else []
-    # Ensure primary is first
-    if primary and primary not in hits:
-        hits.insert(0, primary)
-    return hits
 
 
 _FANOUT_INTENTS = frozenset({"price_action", "technical_analysis", "investment_case", "breakout_scan"})
@@ -645,7 +606,6 @@ def synthesize_final(state: AgentState) -> dict:
     if strict:
         user_prompt = (
             f"Tổng hợp phân tích DỮ KIỆN từ ngữ cảnh. Trình bày trung lập.\n"
-            f"TUYỆT ĐỐI không đưa khuyến nghị mua/bán/nắm giữ.\n"
             f"Ngữ cảnh: {context}\nCâu hỏi: {query}"
         )
     else:
@@ -654,6 +614,7 @@ def synthesize_final(state: AgentState) -> dict:
             f"Ngữ cảnh: {context}\nCâu hỏi: {query}"
         )
 
+    strict_note = " TUYỆT ĐỐI không đưa khuyến nghị mua/bán/nắm giữ." if strict else ""
     t0 = time.perf_counter()
     client = create_client()
     resp = client.generate(
@@ -662,6 +623,7 @@ def synthesize_final(state: AgentState) -> dict:
         system=(
             "Bạn là chuyên gia phân tích tài chính Việt Nam. "
             "Trả lời bằng Markdown, trích dẫn số liệu cụ thể từ ngữ cảnh."
+            + strict_note
         ),
     )
     elapsed = time.perf_counter() - t0
@@ -720,14 +682,9 @@ def _request_approval(state: AgentState) -> dict:
     return {}
 
 
-def _decide_next_approval(state: AgentState) -> str:
-    """decide_next variant that routes to request_approval instead of synthesize."""
-    v = state.get("grades", {}).get("verdict", "enough")
-    if v == "enough":
-        return "request_approval"
-    if state.get("iteration", 0) >= MAX_ITER or v == "insufficient":
-        return "web_search"
-    return "fusion_search"
+def _check_approval_decision(state: AgentState) -> str:
+    """Route to END on rejection, synthesize_final on approval."""
+    return "end" if state.get("error") == "rejected_by_user" else "synthesize_final"
 
 
 def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGraph":
@@ -766,7 +723,8 @@ def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGra
 
     if human_approval:
         g.add_edge("run_subqueries_node", "request_approval")
-        g.add_edge("request_approval",    "synthesize_final")
+        g.add_conditional_edges("request_approval", _check_approval_decision,
+            {"end": END, "synthesize_final": "synthesize_final"})
     else:
         g.add_edge("run_subqueries_node", "synthesize_final")
 

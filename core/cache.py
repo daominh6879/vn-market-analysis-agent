@@ -3,8 +3,10 @@ core/cache.py — Intent-level response cache (Bài 32).
 
 Single tier: SHA-256(CacheKey JSON) → Redis  key: cache:b32:{hash}
 
-Key = (tenant_id, intent, ticker, prompt_version, model_version).
-No question text — same intent+ticker always returns the same cached answer.
+Key = (tenant_id, intent, ticker, scope, prompt_version, model_version).
+ticker fully differentiates most intents. For macro_sector/screening/rag_qa/breakout_scan
+with empty ticker, scope = sha256(normalize_question)[:8] prevents cross-topic hits
+(e.g. "xây dựng" and "ngân hàng" are both macro_sector+ticker="" but different scope).
 
 TTL is per-intent, with separate market-hours and off-hours values:
   - Fast-moving data (price_action, breakout_scan): short TTL during market hours
@@ -62,9 +64,11 @@ class CacheKey(BaseModel):
     tenant_id: str
     intent: str
     ticker: str          # uppercase; "" for ticker-less intents
+    scope: str           # "" for intents fully specified by ticker; question-hash otherwise
     prompt_version: str
     model_version: str
-    # NO conversation_id, NO question text — cache is cross-conversation, intent-level
+    # NO conversation_id — cache is cross-conversation, intent-level
+    # scope differentiates same-intent queries when ticker is empty (macro_sector, screening, rag_qa)
 
 
 def normalize_question(text: str) -> str:
@@ -91,26 +95,43 @@ def _extract_all_tickers(question: str) -> str:
     return "|".join(hits) if len(hits) > 1 else (hits[0] if hits else "")
 
 
+# Intents where ticker="" is ambiguous — need question-level scope to avoid cross-sector hits
+_SCOPE_REQUIRED_INTENTS = frozenset({"macro_sector", "screening", "rag_qa", "breakout_scan"})
+
+
+def _question_scope(question: str) -> str:
+    """8-char hash of normalized question — stable scope for ticker-less intents."""
+    normalized = normalize_question(question)
+    return hashlib.sha256(normalized.encode()).hexdigest()[:8]
+
+
 def make_cache_key(
     tenant_id: str,
     question: str,
     ticker: str,
     intent: str,
-    history: list | None = None,
 ) -> Optional[CacheKey]:
     """Return CacheKey, or None if this turn should not be cached.
 
-    conversation intent → always skip (direct reply, no agent result).
-    All other intents → cache at intent+ticker level regardless of turn.
+    conversation intent → always skip.
+    Intents in _SCOPE_REQUIRED_INTENTS with empty ticker → scope = question hash
+      (prevents macro_sector:banking and macro_sector:construction sharing one slot).
+    All other intents → scope = "" (ticker fully differentiates).
     """
     if not intent or intent == "conversation":
         return None
     model_version = os.environ.get("DEEPSEEK_MODEL", "unknown")
     stable_ticker = _extract_all_tickers(question) or (ticker.upper() if ticker else "")
+    scope = (
+        _question_scope(question)
+        if intent in _SCOPE_REQUIRED_INTENTS and not stable_ticker
+        else ""
+    )
     return CacheKey(
         tenant_id=tenant_id,
         intent=intent,
         ticker=stable_ticker,
+        scope=scope,
         prompt_version=PROMPT_VERSION,
         model_version=model_version,
     )

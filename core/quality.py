@@ -179,7 +179,7 @@ def log_quarantine(
     chars_per_page: float | None,
 ) -> None:
     """Ghi lý do cách ly vào Postgres."""
-    from data.db import get_conn
+    from core.db import get_conn
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -195,7 +195,7 @@ def log_quarantine(
 
 def list_quarantine() -> None:
     """In danh sách file bị cách ly."""
-    from data.db import get_conn
+    from core.db import get_conn
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -278,7 +278,7 @@ def process_file(file_path: str) -> QualityResult:
 # ── Migration helper ──────────────────────────────────────────────────────────
 
 def run_migration() -> None:
-    from data.db import run_migration as _run
+    from core.db import run_migration as _run
 
     sql_path = ROOT / "infra" / "migrations" / "002_quarantine_log.sql"
     _run(str(sql_path))

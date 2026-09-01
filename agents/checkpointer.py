@@ -308,7 +308,8 @@ class PostgresCheckpointer(BaseCheckpointSaver):
         ns = config["configurable"].get("checkpoint_ns", "")
 
         query = (
-            "SELECT checkpoint_id FROM lg_checkpoints "
+            "SELECT checkpoint_id, parent_checkpoint_id, checkpoint_data, metadata_data "
+            "FROM lg_checkpoints "
             "WHERE thread_id=%s AND checkpoint_ns=%s "
             "ORDER BY checkpoint_id DESC"
         )
@@ -317,17 +318,49 @@ class PostgresCheckpointer(BaseCheckpointSaver):
             query += " LIMIT %s"
             params.append(limit)
 
+        results: list[CheckpointTuple] = []
         with _conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, params)
-                ids = [r[0] for r in cur.fetchall()]
+                rows = cur.fetchall()
+                for cp_id, parent_id, cp_blob, meta_blob in rows:
+                    try:
+                        cp_blob = bytes(cp_blob)
+                        meta_blob = bytes(meta_blob)
+                        cp_type, cp_bytes = cp_blob.split(b"\n", 1)
+                        meta_type, meta_bytes = meta_blob.split(b"\n", 1)
+                        cp: Checkpoint = self.serde.loads_typed((cp_type.decode(), cp_bytes))  # type: ignore[assignment]
+                        meta: CheckpointMetadata = self.serde.loads_typed((meta_type.decode(), meta_bytes))  # type: ignore[assignment]
+                        cp["channel_values"] = self._load_blobs(
+                            cur, thread_id, ns, cp.get("channel_versions", {})
+                        )
+                        pending_writes = self._load_writes(cur, thread_id, ns, cp_id)
+                        results.append(CheckpointTuple(
+                            config={
+                                "configurable": {
+                                    "thread_id": thread_id,
+                                    "checkpoint_ns": ns,
+                                    "checkpoint_id": cp_id,
+                                }
+                            },
+                            checkpoint=cp,
+                            metadata=meta,
+                            parent_config=(
+                                {
+                                    "configurable": {
+                                        "thread_id": thread_id,
+                                        "checkpoint_ns": ns,
+                                        "checkpoint_id": parent_id,
+                                    }
+                                }
+                                if parent_id else None
+                            ),
+                            pending_writes=pending_writes,
+                        ))
+                    except Exception:
+                        continue
 
-        for cp_id in ids:
-            t = self.get_tuple({
-                "configurable": {"thread_id": thread_id, "checkpoint_ns": ns, "checkpoint_id": cp_id}
-            })
-            if t:
-                yield t
+        yield from results
 
 
 # ── Session state helpers (agent_sessions table) ──────────────────────────────

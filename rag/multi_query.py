@@ -78,7 +78,7 @@ _INTENT_DESCRIPTIONS = {
 }
 
 
-def decompose_query(query: str, n: int = 4, ticker: str = "") -> list[dict]:
+def decompose_query(query: str, n: int = 4, ticker: str = "", intent: str = "") -> list[dict]:
     """Decompose a financial query into structured sub-tasks via tool calling.
 
     Returns list of dicts: [{intent, tickers, question}, ...].
@@ -86,6 +86,7 @@ def decompose_query(query: str, n: int = 4, ticker: str = "") -> list[dict]:
 
     Args:
         ticker: classifier-extracted ticker/sector (injected as constraint).
+        intent: pre-classified intent — used as fallback task intent on LLM failure.
     """
     client = create_client()
 
@@ -125,8 +126,9 @@ def decompose_query(query: str, n: int = 4, ticker: str = "") -> list[dict]:
         if valid:
             return valid[:n]
 
-    # Fallback: single macro_sector task
-    return [{"intent": "macro_sector", "tickers": [ticker] if ticker else [], "question": query}]
+    # Fallback: preserve original intent so wrong gather_data is not called
+    fallback_intent = intent if intent and intent in _VALID_INTENTS else "macro_sector"
+    return [{"intent": fallback_intent, "tickers": [ticker] if ticker else [], "question": query}]
 
 
 def tag_source(chunk: str, metadata: dict) -> str:

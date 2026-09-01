@@ -18,7 +18,10 @@ from pydantic import BaseModel
 
 from agents.checkpointer import PostgresCheckpointer, _conn, load_checkpoint
 from agents.graph import build_graph
+from agents.state import AgentState
 from langgraph.types import Command
+
+_VALID_STATE_KEYS = frozenset(AgentState.__annotations__.keys())
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -82,7 +85,7 @@ def approve_session(session_id: str, body: ApproveBody = ApproveBody()):
     checkpointer = PostgresCheckpointer()
     app = build_graph(checkpointer=checkpointer, human_approval=True)
     thread_config = {"configurable": {"thread_id": session_id}}
-    update = body.edits or {}
+    update = {k: v for k, v in (body.edits or {}).items() if k in _VALID_STATE_KEYS}
     final = app.invoke(
         Command(resume=True, update=update if update else None),
         config=thread_config,

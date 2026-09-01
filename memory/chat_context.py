@@ -1,3 +1,4 @@
+import threading
 import time
 import uuid
 from collections import deque
@@ -46,19 +47,23 @@ def _get_singleton(persist_dir: str = _PERSIST_DIR) -> Chroma:
     return _chroma_singleton
 
 
+_prune_lock = threading.Lock()
+
+
 def _prune_collection(chroma: Chroma, max_docs: int) -> None:
     """Delete oldest _PRUNE_BATCH docs when collection exceeds max_docs."""
-    count = chroma._collection.count()
-    if count <= max_docs:
-        return
-    result = chroma._collection.get(include=["metadatas"])
-    pairs = sorted(
-        zip(result["ids"], result["metadatas"]),
-        key=lambda x: x[1].get("created_at", 0),
-    )
-    to_delete = [id_ for id_, _ in pairs[:_PRUNE_BATCH]]
-    if to_delete:
-        chroma._collection.delete(ids=to_delete)
+    with _prune_lock:
+        count = chroma._collection.count()
+        if count <= max_docs:
+            return
+        result = chroma._collection.get(include=["metadatas"])
+        pairs = sorted(
+            zip(result["ids"], result["metadatas"]),
+            key=lambda x: x[1].get("created_at", 0),
+        )
+        to_delete = [id_ for id_, _ in pairs[:_PRUNE_BATCH]]
+        if to_delete:
+            chroma._collection.delete(ids=to_delete)
 
 
 class HybridMemoryAgent:
@@ -74,7 +79,7 @@ class HybridMemoryAgent:
         self.conversation_id = conversation_id
         self.user_id = user_id
         self.max_docs = max_docs
-        self._chroma = _get_chroma(persist_dir)
+        self._chroma = _get_singleton()
         # Sliding window: 4 turns × 2 messages (user + assistant) = maxlen 8
         # Resets on restart — ChromaDB carries persistence across sessions
         self._buffer: deque[dict] = deque(maxlen=8)
@@ -110,25 +115,16 @@ class HybridMemoryAgent:
         )
         ai_reply = response.text.strip()
 
+        if not ai_reply:
+            return ai_reply
+
         # Step 5: persist to both stores
         # Sliding window (in-memory) — immediate context for next turn
         self._buffer.append({"role": "user", "content": user_message})
         self._buffer.append({"role": "assistant", "content": ai_reply})
 
-        if not ai_reply:
-            return ai_reply
-
-        # ChromaDB (durable) — semantic retrieval across sessions
-        self._chroma.add_texts(
-            texts=[f"User: {user_message}\nAssistant: {ai_reply}"],
-            metadatas=[{
-                "conversation_id": self.conversation_id,
-                "user_id": self.user_id,
-                "created_at": int(time.time()),
-            }],
-            ids=[str(uuid.uuid4())],
-        )
-        _prune_collection(self._chroma, self.max_docs)
+        # ChromaDB (durable) — use module-level chroma_store so all writes/prunes share one client
+        chroma_store(self.conversation_id, self.user_id, user_message, ai_reply)
 
         return ai_reply
 
@@ -177,11 +173,8 @@ def chroma_store(
     _prune_collection(chroma, _MAX_DOCS)
 
 
-def delete_conversation_context(
-    conversation_id: str,
-    persist_dir: str = _PERSIST_DIR,
-) -> None:
+def delete_conversation_context(conversation_id: str) -> None:
     """Deletion hook called by conversation.py on conversation delete.
     Uses the singleton so the same client instance handles writes and deletes."""
-    chroma = _get_singleton(persist_dir)
+    chroma = _get_singleton()
     chroma._collection.delete(where={"conversation_id": conversation_id})

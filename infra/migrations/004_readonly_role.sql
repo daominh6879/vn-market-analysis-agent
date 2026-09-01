@@ -14,3 +14,4 @@ GRANT CONNECT ON DATABASE ragdb TO rag_readonly;
 GRANT USAGE ON SCHEMA public TO rag_readonly;
 GRANT SELECT ON financial_facts TO rag_readonly;
 GRANT SELECT ON stock_prices TO rag_readonly;
+GRANT SELECT ON news_articles TO rag_readonly;

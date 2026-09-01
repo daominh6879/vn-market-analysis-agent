@@ -148,8 +148,9 @@ def test_prune_oldest_when_over_cap():
         chroma_store(cid, uid, f"turn {i} user", f"turn {i} assistant")
         time.sleep(0.01)  # ensure distinct created_at timestamps
 
-    # Trigger prune manually via agent's method (private)
-    agent._prune()
+    # Trigger prune manually
+    from memory.chat_context import _prune_collection
+    _prune_collection(agent._chroma, agent.max_docs)
 
     count = agent._chroma._collection.count()
     # May include docs from other tests — check only this conversation's docs

@@ -12,7 +12,7 @@ from qdrant_client import QdrantClient
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from data.contracts import compute_doc_id
+from core.contracts import compute_doc_id
 from rag.index import run
 
 TEST_COLLECTION = "test_idempotent_b9"
@@ -76,7 +76,7 @@ def test_changed_content_changes_doc_id():
 
 def test_empty_content_rejected():
     """Chunk rỗng bị chặn bởi schema."""
-    from data.contracts import ParsedDoc
+    from core.contracts import ParsedDoc
     import pytest as pt
 
     with pt.raises(Exception):

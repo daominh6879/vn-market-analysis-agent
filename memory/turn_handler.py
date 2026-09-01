@@ -73,11 +73,10 @@ def run_turn(
     tenant_id: str = "default",
     is_first_turn: bool = False,
 ) -> str:
-    """Run one turn, persist history, extract and save preferences. Returns assistant reply."""
+    """Synchronous turn — uses llm_route + graph (same logic as stream_turn, no streaming)."""
     history = load_history(conversation_id, limit=10)
     user_memory = load_user_memory(user_id, tenant_id, max_items=5)
 
-    # Inject episodic context only on first turn of a new conversation
     episodes: list[dict] = []
     if is_first_turn:
         try:
@@ -94,43 +93,70 @@ def run_turn(
         pass
 
     system_prompt = _build_system(user_memory, episodes, chroma_turns=chroma_turns)
-
-    # Build LLM messages: history + new user message
-    lm_messages = [Message(role=m["role"], content=m["content"]) for m in history]
-    lm_messages.append(Message(role="user", content=user_message))
-
     client = create_client()
-    response = client.generate(
-        messages=lm_messages,
-        system=system_prompt,
-        max_tokens=3500,
-    )
-    assistant_reply = response.text.strip()
 
-    # Persist turn
-    save_turn(conversation_id, user_message, assistant_reply)
+    from agents.conversation_router import llm_route
+    route = llm_route(user_message, history, system_prompt, client)
 
-    try:
-        from memory.chat_context import chroma_store
-        chroma_store(conversation_id, user_id, user_message, assistant_reply)
-    except Exception:
-        pass
+    if route.get("type") == "agent":
+        from agents.state import make_initial_state
+        from agents.graph import build_graph
+        from agents.checkpointer import PostgresCheckpointer
 
-    # Extract preferences from this turn only (run AFTER turn completes)
-    turn_messages = [
-        {"role": "user", "content": user_message},
-        {"role": "assistant", "content": assistant_reply},
-    ]
-    preferences = extract_preferences(turn_messages)
-    for pref in preferences:
-        save_memory_item(
+        checkpointer = PostgresCheckpointer()
+        app = build_graph(checkpointer=checkpointer)
+        thread_config = {"configurable": {"thread_id": conversation_id}}
+
+        query = route.get("query") or user_message
+        agent_state = make_initial_state(
+            query,
+            conversation_id=conversation_id,
             user_id=user_id,
             tenant_id=tenant_id,
-            key=pref.key,
-            value=pref.value,
-            confidence=pref.confidence,
-            source_message=pref.source_message,
+            messages=history,
         )
+        agent_state["intent"] = route["intent"]
+        agent_state["ticker"] = route.get("ticker", "")
+        agent_state["original_query"] = user_message
+
+        final = app.invoke(agent_state, thread_config)
+        assistant_reply = final.get("report") or ""
+    else:
+        text = route.get("text") or ""
+        if text:
+            assistant_reply = text
+        else:
+            lm_messages = [Message(role=m["role"], content=m["content"]) for m in history]
+            lm_messages.append(Message(role="user", content=user_message))
+            resp = client.generate(messages=lm_messages, system=system_prompt, max_tokens=3500)
+            assistant_reply = resp.text.strip()
+
+    if not assistant_reply:
+        return assistant_reply
+
+    save_turn(conversation_id, user_message, assistant_reply)
+
+    if route.get("type") == "agent":
+        try:
+            from memory.chat_context import chroma_store
+            chroma_store(conversation_id, user_id, user_message, assistant_reply)
+        except Exception:
+            pass
+
+        turn_messages = [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": assistant_reply},
+        ]
+        preferences = extract_preferences(turn_messages)
+        for pref in preferences:
+            save_memory_item(
+                user_id=user_id,
+                tenant_id=tenant_id,
+                key=pref.key,
+                value=pref.value,
+                confidence=pref.confidence,
+                source_message=pref.source_message,
+            )
 
     return assistant_reply
 
@@ -407,32 +433,34 @@ async def stream_turn(
             assistant_reply = text
 
     if not assistant_reply:
+        yield _sse_done(0, route.get("intent", "conversation"))
         return
 
     # ── Persist + extract preferences ─────────────────────────────────────────
     try:
         save_turn(conversation_id, user_message, assistant_reply)
 
-        try:
-            from memory.chat_context import chroma_store
-            await asyncio.to_thread(chroma_store, conversation_id, user_id, user_message, assistant_reply)
-        except Exception:
-            pass
+        if route.get("type") == "agent":
+            try:
+                from memory.chat_context import chroma_store
+                await asyncio.to_thread(chroma_store, conversation_id, user_id, user_message, assistant_reply)
+            except Exception:
+                pass
 
-        turn_messages = [
-            {"role": "user", "content": user_message},
-            {"role": "assistant", "content": assistant_reply},
-        ]
-        preferences = extract_preferences(turn_messages)
-        for pref in preferences:
-            save_memory_item(
-                user_id=user_id,
-                tenant_id=tenant_id,
-                key=pref.key,
-                value=pref.value,
-                confidence=pref.confidence,
-                source_message=pref.source_message,
-            )
+            turn_messages = [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": assistant_reply},
+            ]
+            preferences = extract_preferences(turn_messages)
+            for pref in preferences:
+                save_memory_item(
+                    user_id=user_id,
+                    tenant_id=tenant_id,
+                    key=pref.key,
+                    value=pref.value,
+                    confidence=pref.confidence,
+                    source_message=pref.source_message,
+                )
     except Exception:
         pass
 
