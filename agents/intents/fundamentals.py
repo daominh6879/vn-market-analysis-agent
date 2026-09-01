@@ -1,7 +1,7 @@
 """
 agents/intents/fundamentals.py — Nhóm 3: Cơ bản & Định giá.
 
-Fetches real valuation metrics (P/E, P/B, ROE, EPS) via yfinance,
+Fetches real valuation metrics (P/E, P/B, ROE, EPS) via vnstock KBS source,
 pre-computes rankings in Python, injects factual statements into LLM prompt.
 LLM only narrates — never re-derives comparisons from scratch.
 Falls back to rag/qa.py for BCTC-specific questions.
@@ -10,9 +10,9 @@ Falls back to rag/qa.py for BCTC-specific questions.
 from __future__ import annotations
 
 import math
+import time as _time
 from typing import Optional
 
-import yfinance as yf
 from langfuse import observe
 
 from llm.factory import create_client
@@ -34,43 +34,138 @@ _SECTOR_MAP: dict[str, list[str]] = {
 
 # ── Data fetching ─────────────────────────────────────────────────────────────
 
-def _fetch_valuation(ticker: str) -> dict:
-    try:
-        info = yf.Ticker(f"{ticker}.VN").info
-    except Exception:
-        info = {}
-    pe  = info.get("trailingPE") or info.get("forwardPE")
-    roe = info.get("returnOnEquity")
-    roa = info.get("returnOnAssets")
-    gross_m = info.get("grossMargins")
-    net_m   = info.get("profitMargins")
-    rev_g   = info.get("revenueGrowth")
-    earn_g  = info.get("earningsGrowth")
-    de      = info.get("debtToEquity")
-    op_cf   = info.get("operatingCashflow")
-    fcf     = info.get("freeCashflow")
-    net_inc = info.get("netIncomeToCommon")
-    ev      = info.get("enterpriseValue")
-    ebitda  = info.get("ebitda")
+# In-process TTL cache — L1 guard; Postgres is L2; live vnstock is fallback
+_VALUATION_CACHE: dict[str, tuple[float, dict]] = {}
+_CACHE_TTL = 3600        # 1 hour in-process
+_STALE_THRESHOLD = 172800  # 48 hours — treat Postgres row as stale beyond this
+
+
+def _row_to_dict(ticker: str, row) -> dict:
+    """Convert a Postgres stock_ratios row (tuple) to valuation dict."""
+    (pe, pb, roe_pct, roa_pct, eps,
+     gross_margin_pct, net_margin_pct,
+     revenue_growth_pct, earnings_growth_pct,
+     de_ratio, ev_ebitda) = row
+    roe_f = float(roe_pct) if roe_pct is not None else None
     return {
-        "ticker":            ticker,
-        "pe":                pe,
-        "pb":                info.get("priceToBook"),
-        "roe":               roe,
-        "roe_pct":           roe * 100 if roe else None,
-        "roa_pct":           roa * 100 if roa else None,
-        "eps":               info.get("trailingEps"),
-        "price":             info.get("currentPrice") or info.get("previousClose"),
-        "gross_margin_pct":  gross_m * 100 if gross_m else None,
-        "net_margin_pct":    net_m   * 100 if net_m   else None,
-        "revenue_growth_pct": rev_g  * 100 if rev_g  else None,
-        "earnings_growth_pct": earn_g * 100 if earn_g else None,
-        "de_ratio":          de,
-        "op_cashflow":       op_cf,
-        "fcf":               fcf,
-        "net_income":        net_inc,
-        "ev_ebitda":         (ev / ebitda) if ev and ebitda and ebitda > 0 else None,
+        "ticker":             ticker,
+        "pe":                 float(pe)  if pe  is not None else None,
+        "pb":                 float(pb)  if pb  is not None else None,
+        "roe":                roe_f / 100 if roe_f is not None else None,
+        "roe_pct":            roe_f,
+        "roa_pct":            float(roa_pct) if roa_pct is not None else None,
+        "eps":                float(eps) if eps is not None else None,
+        "price":              None,
+        "gross_margin_pct":   float(gross_margin_pct)    if gross_margin_pct    is not None else None,
+        "net_margin_pct":     float(net_margin_pct)      if net_margin_pct      is not None else None,
+        "revenue_growth_pct": float(revenue_growth_pct)  if revenue_growth_pct  is not None else None,
+        "earnings_growth_pct": float(earnings_growth_pct) if earnings_growth_pct is not None else None,
+        "de_ratio":           float(de_ratio)   if de_ratio   is not None else None,
+        "op_cashflow":        None,
+        "fcf":                None,
+        "net_income":         None,
+        "ev_ebitda":          float(ev_ebitda) if ev_ebitda is not None else None,
     }
+
+
+def _fetch_from_db(ticker: str) -> dict | None:
+    """Read latest ratios from Postgres stock_ratios. Returns None if missing or stale."""
+    try:
+        from core.db import get_conn
+        import datetime
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT pe, pb, roe_pct, roa_pct, eps,
+                           gross_margin_pct, net_margin_pct,
+                           revenue_growth_pct, earnings_growth_pct,
+                           de_ratio, ev_ebitda, fetched_at
+                    FROM stock_ratios WHERE ticker = %s
+                    """,
+                    (ticker,),
+                )
+                row = cur.fetchone()
+        if row is None:
+            return None
+        fetched_at = row[-1]  # last element
+        age = (_time.time() - fetched_at.timestamp()) if fetched_at else _STALE_THRESHOLD + 1
+        if age > _STALE_THRESHOLD:
+            return None
+        return _row_to_dict(ticker, row[:-1])
+    except Exception:
+        return None
+
+
+def _fetch_from_vnstock(ticker: str) -> dict | None:
+    """Live vnstock KBS call. Returns None on any error."""
+    def _empty() -> dict:
+        return {
+            "ticker": ticker, "pe": None, "pb": None, "roe": None,
+            "roe_pct": None, "roa_pct": None, "eps": None, "price": None,
+            "gross_margin_pct": None, "net_margin_pct": None,
+            "revenue_growth_pct": None, "earnings_growth_pct": None,
+            "de_ratio": None, "op_cashflow": None, "fcf": None,
+            "net_income": None, "ev_ebitda": None,
+        }
+    try:
+        from vnstock.api.financial import Finance as _VnFinance
+        df = _VnFinance(symbol=ticker, source='KBS').ratio(period='year', lang='en')
+        df = df.set_index('item_id').drop(columns=['item'], errors='ignore')
+        latest = df.iloc[:, 0]
+
+        def _get(key) -> float | None:
+            v = latest.get(key)
+            if v is None:
+                return None
+            try:
+                f = float(v)
+                return None if math.isnan(f) else f
+            except (TypeError, ValueError):
+                return None
+
+        roe_pct = _get('roe')
+        de_pct  = _get('debt_to_equity')
+        return {
+            "ticker":             ticker,
+            "pe":                 _get('pe_ratio'),
+            "pb":                 _get('pb_ratio'),
+            "roe":                roe_pct / 100 if roe_pct is not None else None,
+            "roe_pct":            roe_pct,
+            "roa_pct":            _get('roa'),
+            "eps":                _get('trailing_eps'),
+            "price":              None,
+            "gross_margin_pct":   _get('gross_margin'),
+            "net_margin_pct":     _get('net_margin'),
+            "revenue_growth_pct": _get('net_revenue'),
+            "earnings_growth_pct": _get('profit_after_tax_for_shareholders_of_the_parent_company'),
+            "de_ratio":           de_pct / 100 if de_pct is not None else None,
+            "op_cashflow":        None,
+            "fcf":                None,
+            "net_income":         None,
+            "ev_ebitda":          _get('ev_ebitda'),
+        }
+    except Exception:
+        return _empty()
+
+
+def _fetch_valuation(ticker: str) -> dict:
+    # L1: in-process cache
+    now = _time.time()
+    if ticker in _VALUATION_CACHE:
+        ts, cached = _VALUATION_CACHE[ticker]
+        if now - ts < _CACHE_TTL:
+            return cached
+
+    # L2: Postgres (Dagster pre-fetches daily)
+    result = _fetch_from_db(ticker)
+
+    # L3: live vnstock fallback (hits rate limit only when Postgres missing/stale)
+    if result is None:
+        result = _fetch_from_vnstock(ticker)
+
+    _VALUATION_CACHE[ticker] = (now, result)
+    return result
 
 
 def _na(v) -> bool:
@@ -292,7 +387,7 @@ def _assemble_fund_report(
         f"## Định giá (P/E, P/B, EV/EBITDA)\n{dinh_gia}\n\n"
         f"## Lợi thế cạnh tranh (Moat)\n{moat}\n\n"
         f"## Nhận định tổng thể\n{nhan_dinh}\n\n"
-        f"[Nguồn: yfinance]"
+        f"[Nguồn: vnstock/KBS]"
     )
 
 

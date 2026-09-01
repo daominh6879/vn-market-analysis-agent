@@ -10,7 +10,8 @@ Steps:
   4. Financial facts  — vnstock (primary) for HPG, VCB, FPT (2020-2025)
   5. OHLCV + foreign  — Fireant (primary) -> VCI/KBS fallback, 1-year backfill
   6. Market index     — SSI iBoard, 365 days (VNINDEX/HNX/UPCOM/VN30/HNX30)
-  7. Audit            — scripts/audit_db.py to verify completeness
+  7. Stock ratios     — vnstock KBS → stock_ratios (P/E, P/B, ROE, EPS for peer tickers)
+  8. Audit            — scripts/audit_db.py to verify completeness
 
 Usage:
     python scripts/migrate.py
@@ -56,6 +57,7 @@ MIGRATION_ORDER = [
     "028_conversations.sql",
     "029_episodic.sql",
     "030_pending_context.sql",
+    "031_stock_ratios.sql",
     "004_readonly_role.sql",  # last: GRANTs need tables to exist
 ]
 
@@ -78,7 +80,7 @@ def _run(cmd: list[str], label: str, dry: bool) -> bool:
 # ── Step 1: SQL migrations ────────────────────────────────────────────────────
 
 def run_migrations(dry: bool) -> bool:
-    print("\n[1/7] SQL migrations")
+    print("\n[1/8] SQL migrations")
     from data.db import get_conn
 
     ok = err = skip = 0
@@ -136,7 +138,7 @@ def run_migrations(dry: bool) -> bool:
 # ── Step 2: Seed securities ───────────────────────────────────────────────────
 
 def seed_securities(dry: bool) -> bool:
-    print("\n[2/7] Seed securities (~400 HOSE tickers)")
+    print("\n[2/8] Seed securities (~400 HOSE tickers)")
     if dry:
         print("  [DRY] skip")
         return True
@@ -154,7 +156,7 @@ def seed_securities(dry: bool) -> bool:
 # ── Step 3: MinIO bucket + PDF upload ────────────────────────────────────────
 
 def setup_minio_and_upload(dry: bool) -> bool:
-    print("\n[3/7] MinIO bucket + BCTC PDF upload")
+    print("\n[3/8] MinIO bucket + BCTC PDF upload")
     pdfs = sorted(REPORTS_DIR.rglob("*.pdf"))
     print(f"  PDFs found: {len(pdfs)}")
     for p in pdfs:
@@ -209,7 +211,7 @@ def setup_minio_and_upload(dry: bool) -> bool:
 def populate_financials(dry: bool) -> bool:
     # No --tickers arg: populate_financial_data.py calls core.tickers.get_tickers()
     # which reads securities table (populated in step 2). Falls back to TICKERS env var.
-    print("\n[4/7] Financial facts (vnstock -> financial_facts)")
+    print("\n[4/8] Financial facts (vnstock -> financial_facts)")
     print("  tickers: from securities table (step 2)  periods: 2020-2025")
     return _run(
         [
@@ -230,7 +232,7 @@ def populate_financials(dry: bool) -> bool:
 #   Upserts ohlcv_daily AND foreign_flows in one pass.
 
 def backfill_ohlcv(dry: bool) -> bool:
-    print("\n[5/7] OHLCV + foreign flows (Fireant->VCI/KBS, 1-year backfill)")
+    print("\n[5/8] OHLCV + foreign flows (Fireant->VCI/KBS, 1-year backfill)")
     print("  Provider chain: Fireant (primary) -> KBS -> VCI")
     print("  Fireant response includes foreign buy/sell -> populates foreign_flows too")
     return _run(
@@ -243,7 +245,7 @@ def backfill_ohlcv(dry: bool) -> bool:
 # ── Step 6: Market index (SSI iBoard) ────────────────────────────────────────
 
 def backfill_market_index(dry: bool) -> bool:
-    print("\n[6/7] Market index daily (SSI iBoard, 365 days)")
+    print("\n[6/8] Market index daily (SSI iBoard, 365 days)")
     print("  Indices: VNINDEX, HNX, UPCOM, VN30, HNX30")
     return _run(
         [PYTHON, "ingest/fetch_index.py", "--days", "365"],
@@ -252,10 +254,71 @@ def backfill_market_index(dry: bool) -> bool:
     )
 
 
-# ── Step 7: Audit ─────────────────────────────────────────────────────────────
+# ── Step 7: Stock ratios (vnstock KBS → stock_ratios) ─────────────────────────
+
+def populate_ratios(dry: bool) -> bool:
+    print("\n[7/8] Stock ratios (vnstock KBS → stock_ratios)")
+    from pipeline.assets_vnstock import _RATIO_TICKERS, _UPSERT_SQL
+    print(f"  tickers: {_RATIO_TICKERS}")
+    if dry:
+        print(f"  [DRY] would fetch {len(_RATIO_TICKERS)} tickers via vnstock KBS")
+        return True
+
+    import math, time
+    from vnstock.api.financial import Finance as VnFinance
+    from core.db import get_conn
+
+    ok = failed = 0
+    for ticker in _RATIO_TICKERS:
+        print(f"  {ticker}", end="", flush=True)
+        try:
+            df = VnFinance(symbol=ticker, source='KBS').ratio(period='year', lang='en')
+            df = df.set_index('item_id').drop(columns=['item'], errors='ignore')
+            latest = df.iloc[:, 0]
+
+            def _get(key):
+                v = latest.get(key)
+                if v is None:
+                    return None
+                try:
+                    f = float(v)
+                    return None if math.isnan(f) else f
+                except (TypeError, ValueError):
+                    return None
+
+            de_pct  = _get('debt_to_equity')
+            row = {
+                "ticker":             ticker,
+                "pe":                 _get('pe_ratio'),
+                "pb":                 _get('pb_ratio'),
+                "roe_pct":            _get('roe'),
+                "roa_pct":            _get('roa'),
+                "eps":                _get('trailing_eps'),
+                "gross_margin_pct":   _get('gross_margin'),
+                "net_margin_pct":     _get('net_margin'),
+                "revenue_growth_pct": _get('net_revenue'),
+                "earnings_growth_pct": _get('profit_after_tax_for_shareholders_of_the_parent_company'),
+                "de_ratio":           de_pct / 100 if de_pct is not None else None,
+                "ev_ebitda":          _get('ev_ebitda'),
+            }
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(_UPSERT_SQL, row)
+            print(f"  OK (pe={row['pe']}, roe={row['roe_pct']}%)")
+            ok += 1
+        except Exception as e:
+            print(f"  ERROR: {e}")
+            failed += 1
+        time.sleep(2.0)
+
+    print(f"  -> {ok} OK, {failed} errors")
+    return failed == 0
+
+
+# ── Step 8: Audit ─────────────────────────────────────────────────────────────
 
 def run_audit(dry: bool) -> bool:
-    print("\n[7/7] DB completeness audit")
+    print("\n[8/8] DB completeness audit")
     if dry:
         print("  [DRY] skip")
         return True
@@ -277,7 +340,7 @@ def main() -> None:
     parser.add_argument("--skip-securities",  action="store_true",
                         help="Skip HOSE securities seed")
     parser.add_argument("--skip-market-data", action="store_true",
-                        help="Skip steps 4-6 (financial facts, OHLCV, market index)")
+                        help="Skip steps 4-7 (financial facts, OHLCV, market index, stock ratios)")
     parser.add_argument("--skip-audit",       action="store_true",
                         help="Skip final DB audit")
     args = parser.parse_args()
@@ -298,28 +361,30 @@ def main() -> None:
     if not args.skip_securities:
         results["securities"] = seed_securities(dry)
     else:
-        print("\n[2/7] Securities seed -- SKIPPED")
+        print("\n[2/8] Securities seed -- SKIPPED")
 
     if not args.skip_minio:
         results["minio"] = setup_minio_and_upload(dry)
     else:
-        print("\n[3/7] MinIO/PDF -- SKIPPED")
+        print("\n[3/8] MinIO/PDF -- SKIPPED")
 
     # Market data population
     if not args.skip_market_data:
         results["financials"]    = populate_financials(dry)
         results["ohlcv"]         = backfill_ohlcv(dry)
         results["market_index"]  = backfill_market_index(dry)
+        results["stock_ratios"]  = populate_ratios(dry)
     else:
-        print("\n[4/7] Financial facts -- SKIPPED")
-        print("\n[5/7] OHLCV + foreign flows -- SKIPPED")
-        print("\n[6/7] Market index -- SKIPPED")
+        print("\n[4/8] Financial facts -- SKIPPED")
+        print("\n[5/8] OHLCV + foreign flows -- SKIPPED")
+        print("\n[6/8] Market index -- SKIPPED")
+        print("\n[7/8] Stock ratios -- SKIPPED")
 
     # Audit
     if not args.skip_audit:
         results["audit"] = run_audit(dry)
     else:
-        print("\n[7/7] Audit -- SKIPPED")
+        print("\n[8/8] Audit -- SKIPPED")
 
     # Summary
     print("\n" + "=" * 60)

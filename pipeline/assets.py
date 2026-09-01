@@ -403,9 +403,9 @@ def delete_doc(context: AssetExecutionContext, config: DeleteConfig) -> dict:
 
 from pipeline.assets_news import news_raw, fireant_news, cafef_ticker_news, news_indexed, news_purge
 from pipeline.assets_vnstock import (
-    vnstock_financials, vnstock_prices,
-    vnstock_financials_job, vnstock_prices_job,
-    vnstock_financials_schedule, vnstock_prices_schedule,
+    vnstock_financials, vnstock_prices, vnstock_ratios,
+    vnstock_financials_job, vnstock_prices_job, vnstock_ratios_job,
+    vnstock_financials_schedule, vnstock_prices_schedule, vnstock_ratios_schedule,
 )
 from pipeline.assets_ohlcv import (
     ohlcv_daily_ingest,
@@ -611,18 +611,18 @@ def _serialize_cursor(data: dict[str, dict[str, str]]) -> str:
 defs = Definitions(
     assets=[raw_pdf, parsed_doc, embeddings, delete_doc,
             news_raw, fireant_news, cafef_ticker_news, news_indexed, news_purge,
-            vnstock_financials, vnstock_prices,
+            vnstock_financials, vnstock_prices, vnstock_ratios,
             ohlcv_daily_ingest,
             market_index_daily_ingest, global_quotes_ingest,
             foreign_flows_ingest, corporate_events_ingest, daily_brief],
     jobs=[ingestion_job, ingestion_full_rebuild_job, delete_job,
           news_job, news_purge_job,
-          vnstock_financials_job, vnstock_prices_job,
+          vnstock_financials_job, vnstock_prices_job, vnstock_ratios_job,
           ohlcv_ingest_job,
           market_index_ingest_job,
           foreign_flows_job, corporate_events_job, daily_brief_job],
     schedules=[daily_schedule, news_schedule, news_purge_schedule,
-               vnstock_financials_schedule, vnstock_prices_schedule,
+               vnstock_financials_schedule, vnstock_prices_schedule, vnstock_ratios_schedule,
                ohlcv_ingest_schedule,
                market_index_ingest_schedule,
                foreign_flows_schedule, corporate_events_schedule, daily_brief_schedule],

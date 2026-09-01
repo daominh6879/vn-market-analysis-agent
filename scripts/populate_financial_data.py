@@ -72,6 +72,7 @@ def main():
                 print(f"  → {n} rows inserted")
             except Exception as e:
                 print(f"  ERROR: {e}")
+            time.sleep(1.1)  # stay under 60 req/min community rate limit
         print(f"\nPrices done: {total_rows} total rows")
 
     # --- Verify ---
