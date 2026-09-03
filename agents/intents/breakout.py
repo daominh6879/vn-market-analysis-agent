@@ -28,13 +28,7 @@ _SYSTEM = (
 
 
 def _get_market_df() -> pd.DataFrame:
-    try:
-        from tools.ohlcv_db import query_ohlcv
-        df = query_ohlcv("VNINDEX", days=150)
-        if df is not None and len(df) >= 60:
-            return df
-    except Exception:
-        pass
+    """VNINDEX OHLCV — DB-first with freshness check; falls back to live API."""
     try:
         from tools.price import get_historical_ohlcv
         r = get_historical_ohlcv("VNINDEX", days=150)

@@ -603,7 +603,33 @@ def _is_market_index(ticker: str) -> bool:
 
 
 def _auto_fetch_ticker_news(ticker: str, days: int) -> None:
-    """Background fetch from cafef + tavily when ticker has no news. Non-fatal."""
+    """Ensure `ticker` has indexed news. Non-fatal.
+
+    Order:
+      1. Index any pending unindexed articles (covers "saved but not embedded").
+      2. If the ticker already has articles (any age), stop — re-fetching returns the
+         same URLs ("0 new") and never fixes a narrow search window.
+      3. Only fetch from cafef + tavily when the ticker has no articles at all.
+    """
+    try:
+        from data.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM news_articles WHERE indexed_at IS NULL LIMIT 1")
+                pending = cur.fetchone() is not None
+                cur.execute(
+                    "SELECT 1 FROM news_articles WHERE tickers @> %s::text[] LIMIT 1",
+                    ([ticker],),
+                )
+                has_ticker_articles = cur.fetchone() is not None
+        if pending:
+            from rag.news_index import index_unindexed_batch
+            index_unindexed_batch()
+        if has_ticker_articles:
+            return
+    except Exception:
+        pass  # DB unavailable — fall through to fetch
+
     try:
         from data.cafef_ticker_scraper import fetch_and_save as cafef_fetch
         from data.tavily_news import fetch_and_save as tavily_fetch
@@ -692,14 +718,19 @@ def search_financial_news(
 
     unique = _dedup_news(raw, limit=5)
 
-    # Auto-fetch on miss for stock tickers (not indices)
+    # Auto-fetch on miss for stock tickers (not indices). If the ticker already has
+    # stored articles, the narrow `days` window is why we missed — widen the window
+    # instead of re-fetching the same URLs.
     if not unique and not market_query:
         _auto_fetch_ticker_news(t, days)
-        try:
-            raw2 = search_news_by_text(t, days=days, limit=10, ticker=t)
-            unique = _dedup_news(raw2, limit=5)
-        except Exception:
-            pass
+        for w in (days, max(days, 30)):
+            try:
+                raw2 = search_news_by_text(t, days=w, limit=10, ticker=t)
+                unique = _dedup_news(raw2, limit=5)
+                if unique:
+                    break
+            except Exception:
+                pass
 
     if not unique:
         if market_query:

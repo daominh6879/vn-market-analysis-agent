@@ -45,6 +45,60 @@ def query_market_foreign_net(target_date: date_type) -> Optional[dict]:
         return None
 
 
+def query_ticker_foreign_net(ticker: str, as_of_date: Optional[str] = None) -> Optional[dict]:
+    """Return latest foreign-flow row for a ticker <= as_of_date, or None.
+
+    as_of_date: ISO string 'YYYY-MM-DD'. None = absolute latest.
+    Values are raw VND (buy_value/sell_value/net_value); divide by 1e9 for "tỷ".
+    """
+    try:
+        from core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                if as_of_date:
+                    cur.execute(
+                        """
+                        SELECT date, buy_value, sell_value, net_value,
+                               buy_volume, sell_volume, net_volume
+                        FROM foreign_flows
+                        WHERE ticker = %s AND date <= %s
+                        ORDER BY date DESC
+                        LIMIT 1
+                        """,
+                        (ticker.upper(), as_of_date),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT date, buy_value, sell_value, net_value,
+                               buy_volume, sell_volume, net_volume
+                        FROM foreign_flows
+                        WHERE ticker = %s
+                        ORDER BY date DESC
+                        LIMIT 1
+                        """,
+                        (ticker.upper(),),
+                    )
+                row = cur.fetchone()
+        if not row:
+            return None
+        cols = ["date", "buy_value", "sell_value", "net_value",
+                "buy_volume", "sell_volume", "net_volume"]
+        d = dict(zip(cols, row))
+        return {
+            "date": str(d["date"]),
+            "buy_value": float(d["buy_value"] or 0),
+            "sell_value": float(d["sell_value"] or 0),
+            "net_value": float(d["net_value"] or 0),
+            "buy_volume": int(d["buy_volume"] or 0),
+            "sell_volume": int(d["sell_volume"] or 0),
+            "net_volume": int(d["net_volume"] or 0),
+        }
+    except Exception as e:
+        sys.stderr.write(f"[foreign_flow_db] query_ticker_foreign_net({ticker}) failed: {e}\n")
+        return None
+
+
 def query_top_foreign(
     target_date: date_type,
     n: int = 5,

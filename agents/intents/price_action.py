@@ -44,17 +44,32 @@ def _get_foreign_flow_summary(ticker: str) -> str:
         except Exception:
             pass
         return "Không có dữ liệu dòng tiền khối ngoại thị trường."
-    # Stock ticker → per-ticker DB query
+    # Stock ticker → per-ticker DB query (fresh) → live VCI fallback
     try:
         from datetime import date
         from tools.foreign_flow_db import query_ticker_foreign_net
+        from tools.price import _is_db_fresh
         today = date.today()
-        row = query_ticker_foreign_net(ticker, today)
-        if row:
+        row = query_ticker_foreign_net(ticker, today.isoformat())
+        if row and _is_db_fresh(row["date"]):
+            # foreign_flows stores values in tỷ đồng (ingest divides raw VND by 1e9)
             return (
                 f"Khối ngoại: mua {row['buy_value']:,.0f} tỷ, "
                 f"bán {row['sell_value']:,.0f} tỷ, "
                 f"ròng {row['net_value']:+,.0f} tỷ"
+            )
+    except Exception:
+        pass
+    # Live fallback: VCI price board per-ticker foreign data (DB empty/stale)
+    try:
+        from tools.providers import VciDirectProvider
+        rows = VciDirectProvider().fetch_foreign_batch([t])
+        if rows:
+            r = rows[0]
+            return (
+                f"Khối ngoại (live): mua {r['buy_value']/1e9:,.0f} tỷ, "
+                f"bán {r['sell_value']/1e9:,.0f} tỷ, "
+                f"ròng {r['net_value']/1e9:+,.0f} tỷ"
             )
     except Exception:
         pass
@@ -92,16 +107,17 @@ def _load_ohlcv(ticker: str) -> pd.DataFrame | None:
     """DB-first for indices (market_index_daily); live API for stocks; CSV cache fallback."""
     t = ticker.strip().upper()
 
-    # Index path: DB → live API
+    # Index path: DB → live API (skip stale DB)
     if t in _INDEX_CODES:
         from tools.index_db import query_index
+        from tools.price import _is_db_fresh
         df = query_index(t, days=25)
-        if df is not None and not df.empty:
+        if df is not None and not df.empty and _is_db_fresh(df["time"].iloc[-1]):
             # Rename matched_volume → volume for downstream compatibility
             if "matched_volume" in df.columns and "volume" not in df.columns:
                 df = df.rename(columns={"matched_volume": "volume"})
             return df
-        # Fallback: live VCI
+        # Fallback: live VCI (DB empty or stale)
         r = get_historical_ohlcv(t, days=25)
         if r.status == "ok" and r.data is not None:
             return r.data

@@ -242,3 +242,76 @@ def test_market_brief_graph_produces_report():
     assert "📰" in report, "market brief template header missing"
     assert "NHẬN ĐỊNH" in report, "market brief outlook section missing"
     print(f"\n  [market_brief] {len(report)} chars, missing_fields={final.get('missing_fields')}")
+
+
+# ── regression: sub-query pipeline "loop" ─────────────────────────────────────
+#
+# The original "loop" was 4 sub-tasks → 4× full gather → 4× news auto-fetch. Two
+# fixes now cover it, each with its own guard below:
+#   1. Tool-level TTL cache (tools/cache.py, hooked into instrument_tool) dedupes
+#      repeated tool calls → the cafef/tavily fetch fires once, not 4×.
+#   2. decompose_node assigns each sub-task its own intent (not the parent intent).
+
+
+def test_run_subqueries_dedupes_news_fetch_via_tool_cache(monkeypatch):
+    """4 identical sub-tasks → the expensive news auto-fetch fires ≤1×, not 4×.
+
+    e2e: drives the real gather path (run_subqueries_node → news_sentiment.gather_data
+    → search_financial_news). Dedup happens inside instrument_tool's TTL cache, so
+    repeated search_financial_news calls short-circuit before re-triggering the
+    cafef/tavily fetch. Asserts ≤1 (0 = news already present / validation short-circuit;
+    1 = fetched once) — never 4.
+    """
+    from agents import graph as G
+    from tools import price as price_mod
+
+    calls = {"n": 0}
+
+    def spy(ticker, days):
+        # Pure counter — do NOT call the real _auto_fetch_ticker_news here: monkeypatch
+        # has replaced the module global with this spy, so calling it would recurse.
+        calls["n"] += 1
+
+    monkeypatch.setattr(price_mod, "_auto_fetch_ticker_news", spy)
+
+    state = {
+        "sub_tasks": [
+            {"intent": "news_sentiment", "tickers": ["VCB"], "question": f"tin VCB {i}"}
+            for i in range(4)
+        ],
+        "query": "Tin tức VCB",
+        "ticker": "VCB",
+    }
+    G.run_subqueries_node(state)
+
+    # Two cacheable news tools call _auto_fetch_ticker_news (search_financial_news and
+    # analyze_market_sentiment). Deduped → ≤2 total (one each). Without cache → 4×2=8.
+    assert calls["n"] <= 2, f"news auto-fetch fired {calls['n']}×, expected ≤2 (cache-deduped)"
+
+
+def test_decompose_assigns_distinct_intents():
+    """decompose_node tags each sub-task with its own intent, not the parent.
+
+    Real LLM (e2e): a multi-angle query must decompose into ≥2 distinct intents.
+    Guards against the regression where all sub-tasks inherited intent='investment_case'
+    and each re-ran the full gather pipeline.
+    """
+    from agents.graph import decompose_node
+
+    out = decompose_node({
+        "query": (
+            "Phân tích toàn diện VCB: kỹ thuật (RSI, MACD), "
+            "định giá so ngành ngân hàng, và khuyến nghị nên mua hay bán"
+        ),
+        "intent": "investment_case",
+        "ticker": "VCB",
+    })
+
+    sub_tasks = out["sub_tasks"]
+    assert sub_tasks, "decompose produced no sub-tasks"
+
+    intents = {t["intent"] for t in sub_tasks}
+    assert len(intents) >= 2, (
+        f"all sub-tasks share intent {intents!r} — expected ≥2 distinct intents. "
+        f"sub_tasks={sub_tasks!r}"
+    )

@@ -64,6 +64,70 @@ def generate_sub_queries(query: str, n: int = 4) -> list[str]:
     return result if result else [query]
 
 
+# Sub-task intents valid for the decompose pipeline. Mirrors agents.classifier.INTENTS
+# minus conversation/market_brief (those never gather data through sub-tasks).
+_SUB_INTENTS = (
+    "price_action", "technical_analysis", "rag_qa", "valuation", "macro_sector",
+    "news_sentiment", "investment_case", "screening", "breakout_scan",
+)
+
+
+def generate_sub_tasks(query: str, n: int = 4) -> list[dict]:
+    """Decompose query into N sub-tasks, each tagged with its own intent (one LLM call).
+
+    Returns [{"intent": str, "question": str}]. `intent` is "" when the model failed to
+    tag a line — the caller then falls back to its parent intent for that sub-task.
+    Falls back to a single untagged sub-task on any error.
+    """
+    import re as _re
+
+    client = create_client()
+    prompt = (
+        f"Phân rã câu hỏi sau thành {n} truy vấn con, mỗi truy vấn một góc nhìn khác nhau.\n"
+        f"Mỗi truy vấn con gán đúng 1 intent trong danh sách: {', '.join(_SUB_INTENTS)}.\n"
+        f"Trả về đúng {n} dòng, mỗi dòng theo định dạng: `intent | câu hỏi con`. "
+        f"Không đánh số, không giải thích.\n\nCâu hỏi: {query}"
+    )
+
+    try:
+        resp = client.generate(
+            [Message(role="user", content=prompt)],
+            max_tokens=768,
+            temperature=0,
+            system=(
+                "Bạn là chuyên gia phân tích tài chính. "
+                "Trả về đúng số dòng yêu cầu, mỗi dòng `intent | câu hỏi`. "
+                "Intent phải nằm trong danh sách cho trước. "
+                "Chỉ đề cập đúng các mã cổ phiếu/ngành/chỉ số có trong câu hỏi gốc."
+            ),
+        )
+        raw = resp.text.strip()
+    except Exception:
+        return [{"intent": "", "question": query}]
+
+    raw = _re.sub(r"<think>.*?</think>", "", raw, flags=_re.DOTALL).strip()
+
+    tasks: list[dict] = []
+    for ln in raw.splitlines():
+        ln = _re.sub(r"^\s*\d+[\.\)]\s*", "", ln).strip()
+        if not ln:
+            continue
+        intent = ""
+        question = ln
+        for cand in _SUB_INTENTS:
+            m = _re.search(rf"\b{_re.escape(cand)}\b", ln, flags=_re.IGNORECASE)
+            if m:
+                intent = cand
+                question = (ln[: m.start()] + ln[m.end():]).strip(" |:-–—\t")
+                break
+        if question:
+            tasks.append({"intent": intent, "question": question})
+        if len(tasks) >= n:
+            break
+
+    return tasks if tasks else [{"intent": "", "question": query}]
+
+
 def tag_source(chunk: str, metadata: dict) -> str:
     """Prefix a chunk with its source label so the LLM knows where data came from."""
     src = metadata.get("source_type", "unknown")

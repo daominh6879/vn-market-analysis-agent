@@ -553,13 +553,19 @@ def cache_save_node(state: AgentState) -> dict:
 # ── New pipeline nodes ────────────────────────────────────────────────────────
 
 def decompose_node(state: AgentState) -> dict:
-    """Decompose original query into structured sub-tasks via tool calling."""
-    from rag.multi_query import generate_sub_queries
-    questions = generate_sub_queries(state.get("query", ""), n=4)
-    intent = state.get("intent", "macro_sector")
+    """Decompose original query into structured sub-tasks, each with its own intent."""
+    from rag.multi_query import generate_sub_tasks
+    parent_intent = state.get("intent", "macro_sector")
     ticker = state.get("ticker", "")
     tickers = [ticker] if ticker else []
-    sub_tasks = [{"intent": intent, "tickers": tickers, "question": q} for q in questions]
+    sub_tasks = [
+        {
+            "intent": t.get("intent") or parent_intent,
+            "tickers": tickers,
+            "question": t.get("question", ""),
+        }
+        for t in generate_sub_tasks(state.get("query", ""), n=4)
+    ]
     try:
         print(f"[decompose] {len(sub_tasks)} sub-tasks:")
         for i, t in enumerate(sub_tasks, 1):
@@ -572,8 +578,8 @@ def decompose_node(state: AgentState) -> dict:
         get_tracer().event("gate", {
             "node": "decompose",
             "sub_tasks": len(sub_tasks),
-            "questions": [q[:80] for q in questions],
-            "intent": intent,
+            "questions": [t["question"][:80] for t in sub_tasks],
+            "intent": parent_intent,
             "ticker": ticker,
         })
     except Exception:

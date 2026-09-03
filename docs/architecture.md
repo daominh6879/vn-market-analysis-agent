@@ -275,6 +275,25 @@ detect_candle_pattern, find_support_resistance,
 get_corporate_events, get_broker_views
 ```
 
+### Tool result cache (`tools/cache.py`) — Bài 32B
+
+Cache in-memory TTL cho `ToolResult`, hook vào `instrument_tool` (tracing.py) — điểm chặn duy nhất
+của mọi tool. Key = SHA-256(tool_name + version + args), loại `provider` khỏi key (test mock
+không đổi identity).
+
+Chính sách (từ `TOOL_REGISTRY` metadata):
+- `side_effect=True` → không cache (ghi trạng thái ngoài).
+- `cost_hint="free"` → không cache (pure compute, không có gì để tiết kiệm).
+- `cost_hint="low"` → mặc định 30s; `medium` → 300s. Ghi đè per-tool trong `_TTL_OVERRIDES`
+  (price 15s, sentiment 600s, news 120s...).
+- Tool **zero-arg** (get_crypto_prices, get_fx_rates, get_vn_gold...) → không cache: key chỉ
+  còn tên tool, snapshot live thay đổi theo thời gian.
+- Chỉ cache `ok` / `no_data` — không cache `upstream_error` / `rate_limited` / `invalid_input`.
+
+Khác với `core/cache.py` (Redis, intent-level, cross-request): cache tool-level là in-memory,
+per-process, để dedupe các lần gọi tool lặp lại **trong một agent run** (planner gọi cùng tool
+nhiều lần, sentiment LLM gọi 2 lần). Cross-request đã có intent cache lo.
+
 ### Price tools (`tools/price.py`) — dùng VciDirectProvider hoặc YFinanceProvider
 
 | Function | Mô tả |
@@ -448,3 +467,4 @@ câu hỏi → classify (LLM) → label
 | Daily brief p5 | corporate_events table + scraper, broker_views table, get_corporate_events, get_broker_views |
 | Daily brief p6 | market_brief_graph final assembly: compose_outlook, render_report, _strip_reasoning, template, Dagster schedule |
 | 23 | agents/planner.py: Step/Plan schema, validate_plan (5 checks + DFS cycle detection), generate_plan (LLM + retry + fallback) |
+| 32B | tools/cache.py: tool-level in-memory TTL cache (hook vào instrument_tool, per-tool TTL, bỏ qua side_effect/free/zero-arg/error) |

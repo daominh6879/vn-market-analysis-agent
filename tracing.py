@@ -473,9 +473,29 @@ def instrument_tool(name: str | None = None):
                 sig = inspect.signature(fn)
                 bound = sig.bind(*args, **kwargs)
                 bound.apply_defaults()
-                log_args = {k: _safe_repr(v) for k, v in bound.arguments.items()}
+                raw_args = dict(bound.arguments)
+                log_args = {k: _safe_repr(v) for k, v in raw_args.items()}
             except Exception:
+                raw_args = {}
                 log_args = {}
+
+            # Tool-level cache (in-memory TTL) — short-circuit before running the tool.
+            cached = None
+            try:
+                from tools.cache import tool_cache_get
+                cached = tool_cache_get(tool_name, raw_args)
+            except Exception:
+                cached = None
+            if cached is not None:
+                _emit("tool", {
+                    "tool": tool_name,
+                    "args": log_args,
+                    "status": "cache_hit",
+                    "preview": _result_summary(cached)["preview"],
+                    "duration_ms": 0,
+                    "error": None,
+                })
+                return cached
 
             t0 = time.perf_counter()
             try:
@@ -490,6 +510,11 @@ def instrument_tool(name: str | None = None):
                     "duration_ms": duration_ms,
                     "error": None,
                 })
+                try:
+                    from tools.cache import tool_cache_set
+                    tool_cache_set(tool_name, raw_args, result)
+                except Exception:
+                    pass
                 return result
             except Exception as exc:
                 duration_ms = round((time.perf_counter() - t0) * 1000)

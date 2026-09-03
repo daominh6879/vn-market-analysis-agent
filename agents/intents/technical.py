@@ -34,14 +34,11 @@ _SYSTEM = (
 
 
 def _get_ohlcv(ticker: str) -> tuple[str, "pd.DataFrame | None"]:
-    """DB-first OHLCV fetch; falls back to live API."""
-    try:
-        from tools.ohlcv_db import query_ohlcv
-        df = query_ohlcv(ticker, days=365)
-        if df is not None and len(df) >= 20:
-            return "ok", df
-    except Exception:
-        pass
+    """DB-first OHLCV fetch; falls back to live API when DB is empty or stale.
+
+    Delegates to get_historical_ohlcv, which already checks DB freshness
+    (_is_db_fresh) and falls back to the live provider when ohlcv_daily is stale.
+    """
     r = get_historical_ohlcv(ticker, days=365)
     return r.status, r.data if r.status == "ok" else None
 

@@ -1,4 +1,4 @@
-.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-fetch-ticker news-backfill news-reindex test-sentiment mcp-server mcp-inspect test-tools test-chaos migrate-b28 test-b28 api-b28 test-b30 eval-b30 eval-b30-notes test-b31 api-b31 curl-stream-b31 ui-b31 ui-chainlit ui-react test-b32 test-b32-unit api-b32 ingest-migrate ingest-daily ingest-ohlcv ingest-foreign ingest-index audit test-fireant
+.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-fetch-ticker news-backfill news-reindex test-sentiment mcp-server mcp-inspect test-tools test-chaos migrate-b28 test-b28 api-b28 test-b30 eval-b30 eval-b30-notes test-b31 api-b31 curl-stream-b31 ui-b31 ui-chainlit ui-react test-b32 test-b32-unit api-b32 ingest-migrate ingest-daily ingest-ohlcv ingest-foreign ingest-index audit test-fireant test-intents
 
 up:
 	docker compose up -d
@@ -309,3 +309,6 @@ test-fireant:
 # Tests — Fireant live API (requires network + valid .env creds)
 test-fireant-live:
 	pytest tests/test_fireant_ingest.py -v -m live -s
+
+test-intents:
+	pytest tests/test_e2e_intents.py -v -m e2e
