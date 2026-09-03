@@ -48,14 +48,14 @@ flowchart TD
     classify_node -->|intent == conversation| END0([END — stream_turn handles streaming])
     classify_node -->|intent != conversation| check_cache_node
 
-    check_cache_node["check_cache_node\nRedis only — single tier\nkey = (tenant_id, intent, ticker, prompt_version, model_version)\nNO question text in key"]
+    check_cache_node["check_cache_node\nRedis only — single tier\nkey = (tenant_id, intent, ticker, scope, prompt_version, model_version)\nscope = question-hash for _ALWAYS_SCOPE_INTENTS"]
     check_cache_node -->|hit| END2([END — _cache_hit=True, report=cached])
     check_cache_node -->|miss| clarify_node
 
     clarify_node["clarify_node\n① detect_ambiguity — ticker/intent missing?\n② yes → interrupt() — wait for user answer\n③ merge answer → re-classify\n④ no ambiguity → pass through"]
     clarify_node --> route_check{simple\nquery?}
 
-    route_check -->|"intent∈{price_action,technical,\nnews_sentiment,rag_qa,\nscreening,breakout}\nAND ticker set"| fast_node["build_single_subtask_node\nWrap intent+ticker → 1 sub_task\nno LLM call"]
+    route_check -->|"intent∈{price_action,technical,\nnews_sentiment,rag_qa,valuation,\nscreening,breakout}\nAND ticker set"| fast_node["build_single_subtask_node\nWrap intent+ticker → 1 sub_task\nno LLM call"]
     route_check -->|"market_brief / investment_case\n/ macro_sector\nOR no ticker"| decompose_node
 
     fast_node --> run_subqueries_node
@@ -80,9 +80,13 @@ flowchart TD
 
 ## Cache design (single-tier Redis)
 
-Key model: `(tenant_id, intent, ticker, prompt_version, model_version)` — **no question text**.
+Key model: `(tenant_id, intent, ticker, scope, prompt_version, model_version)` — **no full question text**.
 
-Same intent+ticker always returns the same cached answer, cross-conversation.
+Same intent+ticker (+scope where applicable) always returns the same cached answer, cross-conversation.
+
+`_ALWAYS_SCOPE_INTENTS` (`macro_sector`, `rag_qa`, `valuation`, `screening`, `breakout_scan`)
+add an 8-char question-hash `scope` to the key — for these, ticker alone does not specify the
+query (e.g. "P/E HPG" ≠ "ROE HPG"). All other intents use `scope=""` (ticker fully differentiates).
 
 `original_query` is passed to `make_cache_key` only for stable multi-ticker extraction
 (e.g. "HPG so với VCB" → `ticker="HPG|VCB"`), not stored in key.
@@ -98,6 +102,7 @@ Same intent+ticker always returns the same cached answer, cross-conversation.
 | `market_brief` | 120 s | 1800 s |
 | `investment_case` | 1800 s | 86400 s |
 | `rag_qa` | 3600 s | 86400 s |
+| `valuation` | 3600 s | 86400 s |
 | `screening` | 300 s | 3600 s |
 | `breakout_scan` | 120 s | 3600 s |
 
@@ -116,6 +121,7 @@ Market hours: Mon–Fri 09:00–14:45 VN time (UTC+7).
 | `investment_case` | `intents/investment_case.gather_data` |
 | `screening` | `intents/screening.gather_data` |
 | `rag_qa` | `rag/qa.retrieve_only` |
+| `valuation` | `intents/fundamentals.gather_data` |
 | `breakout_scan` | `intents/breakout.gather_data` |
 | `market_brief` | static placeholder |
 
@@ -131,7 +137,7 @@ when a sub-task has multiple tickers, each ticker is fetched independently and r
 | Complex query (no clarify) | 1 (`llm_route`) + 1 (`decompose_node`) + 1 (`synthesize_final`) = **3** |
 | Complex query (with clarify) | 1 (`llm_route`) + 1 (clarify re-classify) + 1 (`decompose_node`) + 1 (`synthesize_final`) = **4** |
 
-Simple path: `price_action`, `technical_analysis`, `news_sentiment`, `rag_qa`, `screening`, `breakout_scan` — only when a specific ticker is identified by `llm_route`.
+Simple path: `price_action`, `technical_analysis`, `news_sentiment`, `rag_qa`, `valuation`, `screening`, `breakout_scan` — only when a specific ticker is identified by `llm_route`.
 
 Complex path (always decompose): `market_brief`, `investment_case`, `macro_sector`, or any intent with no ticker.
 
@@ -150,4 +156,5 @@ No per-sub-query classification — intent and tickers are pre-set by `decompose
 | No per-sub-query `classify_hybrid` | `decompose_node` uses tool calling — LLM returns structured `{intent, tickers, question}` directly. Saves N LLM calls per turn. |
 | `classify_node` skips LLM when intent pre-set | Avoid redundant classification after `llm_route` already decided. |
 | `conversation` intent exits graph immediately | No cache check, no decompose, no gather for pure chat turns. |
-| Fast path bypasses `decompose_node` | Single-ticker leaf-intent queries (price_action, technical_analysis, news_sentiment, rag_qa, screening, breakout_scan) skip decompose entirely — saves 1 LLM call + avoids 3 unnecessary data fetches. `macro_sector`, `investment_case`, `market_brief` always decompose (multi-component or no ticker). |
+| Fast path bypasses `decompose_node` | Single-ticker leaf-intent queries (price_action, technical_analysis, news_sentiment, rag_qa, valuation, screening, breakout_scan) skip decompose entirely — saves 1 LLM call + avoids 3 unnecessary data fetches. `macro_sector`, `investment_case`, `market_brief` always decompose (multi-component or no ticker). |
+| `valuation` split from `rag_qa` | LLM routes metric/peer queries (P/E, P/B, ROE, EPS, EV/EBITDA) to `valuation` → `fundamentals.gather_data` (vnstock/KBS peer table). Report-content queries (revenue, profit, balance sheet) stay `rag_qa` → `retrieve_only` (RAG/SQL). Removes the `_is_sector_comparison` keyword heuristic — routing decision lives in the LLM, not keywords. |

@@ -9,6 +9,7 @@ không trả empty list trần. Agent đọc .message để quyết định bư�
 from __future__ import annotations
 
 import json
+from datetime import date as _date, timedelta as _timedelta
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,52 @@ def set_provider(provider: PriceProvider) -> None:
     """Swap provider (dùng trong test để inject mock)."""
     global _default_provider
     _default_provider = provider
+
+
+# ── DB freshness helpers ───────────────────────────────────────────────────────
+
+def _previous_trading_day(d: _date | None = None) -> _date:
+    """Most recent weekday before `d` (default today). Holidays not modeled — same
+    rough calendar check the breadth/top-movers tools already use."""
+    d = d or _date.today()
+    d = d - _timedelta(days=1)
+    while d.weekday() >= 5:  # Sat=5, Sun=6
+        d -= _timedelta(days=1)
+    return d
+
+
+def _to_date(v) -> _date | None:
+    if isinstance(v, _date):
+        return v
+    try:
+        return _date.fromisoformat(str(v)[:10])
+    except Exception:
+        return None
+
+
+def _is_db_fresh(db_latest, as_of_date: str | None = None) -> bool:
+    """True if db_latest >= previous trading day of as_of_date (or today)."""
+    latest = _to_date(db_latest)
+    if latest is None:
+        return False
+    if as_of_date:
+        ref = _to_date(as_of_date) or _date.today()
+    else:
+        ref = _date.today()
+    return latest >= _previous_trading_day(ref)
+
+
+def _latest_ohlcv_date() -> _date | None:
+    """MAX(date) from ohlcv_daily, or None on error."""
+    try:
+        from core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT MAX(date) FROM ohlcv_daily")
+                row = cur.fetchone()
+        return _to_date(row[0]) if row and row[0] else None
+    except Exception:
+        return None
 
 
 # ── Error mapping helper ──────────────────────────────────────────────────────
@@ -164,6 +211,23 @@ def get_historical_ohlcv(
             message=f"days={days} không hợp lệ. Phải >= 1. Thử days=30 hoặc days=60.",
         )
     t = ticker.strip().upper()
+
+    # DB-first: read from ohlcv_daily (Postgres). Falls back to live VCI/yfinance if
+    # the DB is empty or unavailable. query_ohlcv returns None on error — never raises.
+    try:
+        from tools.ohlcv_db import query_ohlcv
+        db_df = query_ohlcv(t, days)
+        if db_df is not None and not db_df.empty and len(db_df) >= 2:
+            if _is_db_fresh(db_df["time"].iloc[-1]):
+                return ToolResult(
+                    status="ok",
+                    data=db_df,
+                    message=f"Lấy được {len(db_df)} phiên OHLCV của {t} từ DB (ohlcv_daily).",
+                )
+            # stale → fall through to live API
+    except Exception:
+        pass
+
     resolved = resolve_ticker(t)  # VNINDEX → ^VNINDEX, stock → unchanged
     p = provider or _detect_provider(t)
     try:
@@ -793,10 +857,10 @@ def get_market_performance(period: str = "week", ticker: str = "VNINDEX") -> Too
     t = (ticker.strip().upper() if ticker else "VNINDEX")
     resolved = resolve_ticker(t)
 
-    # DB-first
+    # DB-first (only if fresh)
     from tools.ohlcv_db import query_ohlcv
     df = query_ohlcv(resolved, days + 15)
-    if df is not None and len(df) >= 2:
+    if df is not None and len(df) >= 2 and _is_db_fresh(df["time"].iloc[-1]):
         return _compute_performance_from_df(df, period_key, t)
 
     # Fallback: live VCI API
@@ -886,21 +950,15 @@ def get_market_breadth(universe: str = "HOSE", as_of_date: Optional[str] = None)
 
     _db_fresh = False
     if db_df is not None and not db_df.empty and "date" in db_df.columns:
-        if as_of_date:
-            try:
-                import pandas as _pd
-                db_max = _pd.to_datetime(db_df["date"]).max().date()
-                # Previous trading day = as_of_date - 1 calendar day (rough check)
-                prev_day = (_pd.Timestamp(as_of_date) - _pd.Timedelta(days=1)).date()
-                _db_fresh = db_max >= prev_day
-                if not _db_fresh:
-                    sys.stderr.write(
-                        f"[get_market_breadth] DB stale: max={db_max} < prev={prev_day} — using VCI\n"
-                    )
-            except Exception:
-                _db_fresh = True  # can't verify → assume fresh
-        else:
-            _db_fresh = True
+        try:
+            db_max = pd.to_datetime(db_df["date"]).max().date()
+            _db_fresh = _is_db_fresh(db_max, as_of_date)
+            if not _db_fresh:
+                sys.stderr.write(
+                    f"[get_market_breadth] DB stale: max={db_max} — using VCI\n"
+                )
+        except Exception:
+            _db_fresh = True  # can't verify → assume fresh
 
     _MIN_COVERAGE = 200  # require at least 200 tickers to trust DB breadth for HOSE
     if _db_fresh and db_df is not None and not db_df.empty:
@@ -974,16 +1032,12 @@ def get_top_movers(by: str = "value", limit: int = 5, as_of_date: Optional[str] 
     def _db_is_fresh(df) -> bool:
         if df is None or df.empty or "date" not in df.columns:
             return False
-        if not as_of_date:
-            return True
         try:
-            import pandas as _pd
-            db_max = _pd.to_datetime(df["date"]).max().date()
-            prev_day = (_pd.Timestamp(as_of_date) - _pd.Timedelta(days=1)).date()
-            fresh = db_max >= prev_day
+            db_max = pd.to_datetime(df["date"]).max().date()
+            fresh = _is_db_fresh(db_max, as_of_date)
             if not fresh:
                 sys.stderr.write(
-                    f"[get_top_movers] DB stale: max={db_max} < prev={prev_day} — using VCI\n"
+                    f"[get_top_movers] DB stale: max={db_max} — using VCI\n"
                 )
             return fresh
         except Exception:
@@ -1108,6 +1162,9 @@ def get_foreign_flows(days: int = 1, as_of_date: Optional[str] = None) -> ToolRe
     )
 
     target_date = query_latest_foreign_date(as_of_date=as_of_date)
+    if target_date and not _is_db_fresh(target_date, as_of_date):
+        # DB stale → live VCI price board
+        return _get_foreign_flows_live()
     market = query_market_foreign_net(target_date) if target_date else None
 
     # Fallback: live VCI if DB empty
@@ -1233,24 +1290,37 @@ def _build_foreign_result(
 
 # ── Tool 8: Hiệu suất nhóm ngành ─────────────────────────────────────────────
 
+_SECTOR_PERIOD_SESSIONS = {"day": 1, "week": 5, "month": 22}
+_SECTOR_PERIOD_LABEL = {"day": "phiên gần nhất", "week": "5 phiên", "month": "22 phiên"}
+
+
 @instrument_tool("get_sector_performance")
 def get_sector_performance(period: str = "day") -> ToolResult:
     """Hiệu suất theo nhóm ngành: % thay đổi weighted theo giá trị giao dịch.
 
     Dữ liệu: JOIN ohlcv_daily × securities.sector.
     Fallback nếu bảng securities rỗng: dùng hose_universe seed (~140 mã).
-    period: "day" (mặc định) — hiện chỉ hỗ trợ phiên gần nhất.
+    period: "day" (1 phiên) | "week" (5 phiên) | "month" (22 phiên).
     """
-    if period not in ("day",):
+    period = period.strip().lower()
+    if period not in _SECTOR_PERIOD_SESSIONS:
         return ToolResult(
             status="invalid_input",
             data=None,
-            message="period phải là 'day'. Hỗ trợ thêm 'week'/'month' trong phiên bản sau.",
+            message="period phải là 'day', 'week', hoặc 'month'.",
+        )
+    sessions = _SECTOR_PERIOD_SESSIONS[period]
+
+    latest = _latest_ohlcv_date()
+    if latest is not None and not _is_db_fresh(latest):
+        import sys
+        sys.stderr.write(
+            f"[get_sector_performance] DB stale: max={latest} — no live fallback, using DB\n"
         )
 
-    sectors = _query_sector_performance_db()
+    sectors = _query_sector_performance_db(sessions)
     if sectors is None:
-        sectors = _query_sector_performance_fallback()
+        sectors = _query_sector_performance_fallback(sessions)
 
     if not sectors:
         return ToolResult(
@@ -1267,11 +1337,11 @@ def get_sector_performance(period: str = "day") -> ToolResult:
         f"~{s['total_value_bn']:.0f} tỷ)"
         for s in sectors
     ]
-    summary = "Hiệu suất nhóm ngành (phiên gần nhất):\n" + "\n".join(lines)
+    summary = f"Hiệu suất nhóm ngành ({_SECTOR_PERIOD_LABEL[period]}):\n" + "\n".join(lines)
     return ToolResult(status="ok", data=sectors, message=summary)
 
 
-def _query_sector_performance_db() -> list[dict] | None:
+def _query_sector_performance_db(sessions: int = 1) -> list[dict] | None:
     """SQL path: JOIN ohlcv_daily × securities. Returns None on error or empty securities."""
     try:
         from core.db import get_conn
@@ -1285,7 +1355,7 @@ def _query_sector_performance_db() -> list[dict] | None:
                 cur.execute(
                     """
                     WITH dates AS (
-                        SELECT DISTINCT date FROM ohlcv_daily ORDER BY date DESC LIMIT 2
+                        SELECT DISTINCT date FROM ohlcv_daily ORDER BY date DESC LIMIT %s
                     ),
                     latest_date AS (SELECT MAX(date) AS d FROM dates),
                     prev_date   AS (SELECT MIN(date) AS d FROM dates),
@@ -1313,7 +1383,8 @@ def _query_sector_performance_db() -> list[dict] | None:
                     FROM changes
                     GROUP BY sector
                     ORDER BY weighted_pct DESC
-                    """
+                    """,
+                    (sessions + 1,),
                 )
                 rows = cur.fetchall()
 
@@ -1335,7 +1406,7 @@ def _query_sector_performance_db() -> list[dict] | None:
         return None
 
 
-def _query_sector_performance_fallback() -> list[dict] | None:
+def _query_sector_performance_fallback(sessions: int = 1) -> list[dict] | None:
     """In-memory fallback: JOIN ohlcv_db result with hose_universe seed."""
     try:
         from data.hose_universe import load_hose_universe
@@ -1348,7 +1419,7 @@ def _query_sector_performance_fallback() -> list[dict] | None:
         ticker_to_sector = {u["ticker"]: u["sector"] for u in universe}
         tickers = list(ticker_to_sector.keys())
 
-        db_df = query_universe_latest(tickers)
+        db_df = query_universe_latest(tickers, sessions=sessions)
         if db_df is None or db_df.empty:
             return None
 

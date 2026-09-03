@@ -65,9 +65,10 @@ def query_ohlcv(ticker: str, days: int) -> Optional[pd.DataFrame]:
         return None
 
 
-def query_vn30_latest(tickers: list[str]) -> Optional[pd.DataFrame]:
+def query_vn30_latest(tickers: list[str], sessions: int = 1) -> Optional[pd.DataFrame]:
     """
-    Return last 2 closes for each ticker in list.
+    Return latest close + close `sessions` back for each ticker in list.
+    sessions=1 → day (prev close), 5 → week, 22 → month.
     Result has columns: ticker, date, close, prev_close, pct_change.
     Returns None on error.
     """
@@ -77,22 +78,22 @@ def query_vn30_latest(tickers: list[str]) -> Optional[pd.DataFrame]:
         from core.db import get_conn
         with get_conn() as conn:
             with conn.cursor() as cur:
-                # Get latest 2 dates available in the table
+                # Get latest (sessions+1) dates available in the table
                 cur.execute(
                     """
                     SELECT DISTINCT date FROM ohlcv_daily
                     WHERE ticker = ANY(%s)
                     ORDER BY date DESC
-                    LIMIT 2
+                    LIMIT %s
                     """,
-                    (tickers,),
+                    (tickers, sessions + 1),
                 )
                 dates = [row[0] for row in cur.fetchall()]
 
-        if len(dates) < 2:
+        if len(dates) < sessions + 1:
             return None
 
-        latest_date, prev_date = dates[0], dates[1]
+        latest_date, prev_date = dates[0], dates[-1]
 
         from core.db import get_conn
         with get_conn() as conn:

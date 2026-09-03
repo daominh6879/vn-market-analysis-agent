@@ -39,7 +39,10 @@ AGENT_RUN_TOOL: dict = {
                     "Use 'price_action' only for a single named stock's price/volume action. "
                     "Use 'market_brief' for broad market overview (VNINDEX, HNX, overall session). "
                     "Use 'screening' for filter/scan queries (ROE > x, P/E < y). "
-                    "Use 'investment_case' when asked buy/sell/hold recommendation for a stock."
+                    "Use 'investment_case' when asked buy/sell/hold recommendation for a stock. "
+                    "Use 'valuation' for a stock's valuation metric (P/E, P/B, ROE, EPS, EV/EBITDA) "
+                    "or comparing it against sector peers. "
+                    "Use 'rag_qa' for financial-report content (revenue, profit, balance sheet, period figures)."
                 ),
             },
             "ticker": {

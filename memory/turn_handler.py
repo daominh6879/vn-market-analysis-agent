@@ -77,20 +77,24 @@ def run_turn(
     history = load_history(conversation_id, limit=10)
     user_memory = load_user_memory(user_id, tenant_id, max_items=5)
 
+    from memory.retrieval_gate import should_retrieve
+    do_retrieve, refined_query = should_retrieve(user_message)
+
     episodes: list[dict] = []
-    if is_first_turn:
+    if is_first_turn and do_retrieve:
         try:
             from memory.episodic import retrieve_similar
-            episodes = retrieve_similar(user_message, user_id, top_k=3)
+            episodes = retrieve_similar(refined_query, user_id, top_k=3)
         except Exception:
             episodes = []
 
     chroma_turns: list[str] = []
-    try:
-        from memory.chat_context import chroma_retrieve
-        chroma_turns = chroma_retrieve(user_message, user_id, top_k=3)
-    except Exception:
-        pass
+    if do_retrieve:
+        try:
+            from memory.chat_context import chroma_retrieve
+            chroma_turns = chroma_retrieve(refined_query, user_id, top_k=3)
+        except Exception:
+            pass
 
     system_prompt = _build_system(user_memory, episodes, chroma_turns=chroma_turns)
     client = create_client()
@@ -136,6 +140,15 @@ def run_turn(
 
     save_turn(conversation_id, user_message, assistant_reply)
 
+    try:
+        from memory.consolidation import maybe_consolidate
+        full = load_history(conversation_id, limit=10000)
+        turn_count = len(full) // 2
+        first_question = next((m["content"] for m in full if m.get("role") == "user"), "")
+        maybe_consolidate(conversation_id, user_id, turn_count, full, first_question, tenant_id)
+    except Exception:
+        pass
+
     if route.get("type") == "agent":
         try:
             from memory.chat_context import chroma_store
@@ -174,6 +187,14 @@ def _sse_chunk(text: str) -> str:
 
 def _sse_done(length: int, agent: str) -> str:
     return f"event: done\ndata: {json.dumps({'saved': True, 'length': length, 'agent': agent})}\n\n"
+
+
+def _sse_tool(data: dict) -> str:
+    return f"event: tool\ndata: {json.dumps({'name': data.get('tool', ''), 'status': data.get('status', 'ok'), 'duration_ms': data.get('duration_ms', 0)})}\n\n"
+
+
+def _sse_gate(data: dict) -> str:
+    return f"event: gate\ndata: {json.dumps({'node': data.get('node', ''), 'route': data.get('route', '')})}\n\n"
 
 
 async def _stream_via_queue(
@@ -259,21 +280,25 @@ async def stream_turn(
     history = load_history(conversation_id, limit=10)
     user_memory = load_user_memory(user_id, tenant_id, max_items=5)
 
+    from memory.retrieval_gate import should_retrieve
+    do_retrieve, refined_query = should_retrieve(user_message)
+
     episodes: list[dict] = []
-    if is_first_turn:
+    if is_first_turn and do_retrieve:
         try:
             from memory.episodic import retrieve_similar
-            episodes = retrieve_similar(user_message, user_id, top_k=3)
+            episodes = retrieve_similar(refined_query, user_id, top_k=3)
         except Exception:
             episodes = []
 
     chroma_turns: list[str] = []
-    try:
-        from memory.chat_context import chroma_retrieve
-        # Run in thread — ChromaDB is synchronous I/O; must not block the event loop
-        chroma_turns = await asyncio.to_thread(chroma_retrieve, user_message, user_id, 3)
-    except Exception:
-        pass
+    if do_retrieve:
+        try:
+            from memory.chat_context import chroma_retrieve
+            # Run in thread — ChromaDB is synchronous I/O; must not block the event loop
+            chroma_turns = await asyncio.to_thread(chroma_retrieve, refined_query, user_id, 3)
+        except Exception:
+            pass
 
     system_prompt = _build_system(user_memory, episodes, chroma_turns=chroma_turns)
     client = create_client()
@@ -356,21 +381,65 @@ async def stream_turn(
         agent_state["ticker"] = ticker
         agent_state["original_query"] = user_message
 
-        try:
-            task = asyncio.create_task(
-                asyncio.to_thread(app.invoke, agent_state, thread_config)
-            )
-            while not task.done():
+        # Invoke graph in a thread with current_observer set, so synthesize_final's
+        # emit_llm_delta flows out as SSE in real time. Falls back to line-chunking
+        # (did_stream=False) for intents that don't stream (e.g. market_brief template).
+        from tracing import current_observer
+        loop = asyncio.get_event_loop()
+        stream_q: asyncio.Queue = asyncio.Queue()
+        stream_final: dict = {}
+        stream_err: dict = {}
+
+        def _observer(kind: str, data: dict) -> None:
+            try:
+                loop.call_soon_threadsafe(stream_q.put_nowait, (kind, data))
+            except RuntimeError:
+                pass
+
+        def _run() -> None:
+            current_observer.set(_observer)
+            try:
+                stream_final["v"] = app.invoke(agent_state, thread_config)
+            except Exception as exc:
+                stream_err["v"] = exc
+            finally:
                 try:
-                    await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
+                    loop.call_soon_threadsafe(stream_q.put_nowait, None)
+                except RuntimeError:
+                    pass
+
+        thread = threading.Thread(target=_run, daemon=True)
+        thread.start()
+        did_stream = False
+        stream_status_sent = False
+        try:
+            while True:
+                try:
+                    item = await asyncio.wait_for(stream_q.get(), timeout=HEARTBEAT_INTERVAL)
                 except asyncio.TimeoutError:
                     yield ": heartbeat\n\n"
-            final = task.result()
+                    continue
+                if item is None:
+                    break
+                kind, data = item
+                if kind == "llm_delta":
+                    if not stream_status_sent:
+                        yield _sse_status("streaming", agent=intent)
+                        stream_status_sent = True
+                    did_stream = True
+                    yield _sse_chunk(data.get("text", ""))
+                elif kind == "tool":
+                    yield _sse_tool(data)
+                elif kind == "gate":
+                    yield _sse_gate(data)
         except asyncio.CancelledError:
+            thread.join(timeout=1)
             return
-        except Exception as exc:
-            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
+        thread.join(timeout=1)
+        if stream_err.get("v"):
+            yield f"event: error\ndata: {json.dumps({'error': str(stream_err['v'])})}\n\n"
             return
+        final = stream_final.get("v")
 
         # Check if clarify_node interrupted
         try:
@@ -401,10 +470,13 @@ async def stream_turn(
             assistant_reply = cached
         else:
             report = final.get("report") or ""
-            yield _sse_status("streaming", agent=intent)
-            for line in report.split("\n"):
-                yield _sse_chunk(line + "\n")
-            assistant_reply = report
+            if did_stream:
+                assistant_reply = report  # already emitted token-by-token via llm_delta
+            else:
+                yield _sse_status("streaming", agent=intent)
+                for line in report.split("\n"):
+                    yield _sse_chunk(line + "\n")
+                assistant_reply = report
 
     else:
         # ── Direct reply: tool or free-text response ──────────────────────────
@@ -439,6 +511,12 @@ async def stream_turn(
     # ── Persist + extract preferences ─────────────────────────────────────────
     try:
         save_turn(conversation_id, user_message, assistant_reply)
+
+        from memory.consolidation import maybe_consolidate
+        full = load_history(conversation_id, limit=10000)
+        turn_count = len(full) // 2
+        first_question = next((m["content"] for m in full if m.get("role") == "user"), "")
+        maybe_consolidate(conversation_id, user_id, turn_count, full, first_question, tenant_id)
 
         if route.get("type") == "agent":
             try:

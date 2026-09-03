@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from core.config import settings
 
-_REDIS_PREFIX = "cache:b32:exact"
+_REDIS_PREFIX = "cache:b32"
 _QDRANT_COLLECTION = "cache_vectors"
 _EPISODES_COLLECTION = "episodic_memory"
 _CHROMA_PERSIST_DIR = "./chroma_db"

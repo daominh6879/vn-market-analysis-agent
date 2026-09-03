@@ -53,6 +53,7 @@ _INTENT_TTL: dict[str, tuple[int, int]] = {
     "market_brief":       (120,   1800),   # session overview
     "investment_case":    (1800,  86400),  # analysis stable intraday
     "rag_qa":             (3600,  86400),  # financial reports rarely change
+    "valuation":          (3600,  86400),  # valuation ratios slow-moving
     "screening":          (300,   3600),   # screen per-session
     "breakout_scan":      (120,   3600),   # breakout patterns time-sensitive
 }
@@ -105,7 +106,7 @@ def _extract_all_tickers(question: str) -> str:
 # rag_qa:        "Doanh thu HPG Q1?" ≠ "Tổng nợ HPG 2023?" — both rag_qa+HPG without scope.
 # screening:     filter criteria vary per question; ticker in query is illustrative, not key.
 # breakout_scan: market-wide scan; ticker mention is incidental.
-_ALWAYS_SCOPE_INTENTS = frozenset({"macro_sector", "rag_qa", "screening", "breakout_scan"})
+_ALWAYS_SCOPE_INTENTS = frozenset({"macro_sector", "rag_qa", "valuation", "screening", "breakout_scan"})
 
 
 def _question_scope(question: str) -> str:

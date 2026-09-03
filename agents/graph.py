@@ -53,7 +53,7 @@ _bm25_cache: dict[str, object] = {}
 
 # Intents handled by dedicated nodes — dispatched directly from pick_branch
 _INTENT_NODES = frozenset({
-    "price_action", "technical_analysis", "rag_qa",
+    "price_action", "technical_analysis", "rag_qa", "valuation",
     "news_sentiment", "macro_sector", "investment_case", "screening",
     "market_brief", "breakout_scan",
 })
@@ -87,6 +87,16 @@ def classify_node(state: AgentState) -> dict:
         current_request_id.set(rid)
     except Exception:
         rid = uuid.uuid4().hex[:12]
+
+    try:
+        from tracing import get_tracer
+        get_tracer().turn_start(
+            state.get("query", ""),
+            intent=state.get("intent", ""),
+            ticker=state.get("ticker", ""),
+        )
+    except Exception:
+        pass
 
     # Pre-classified by conversation_router reroute — skip LLM classification.
     pre_intent = state.get("intent", "")
@@ -149,6 +159,16 @@ def check_cache_node(state: AgentState) -> dict:
         return {"_cache_key": None, "_cache_hit": False}
     hit, tier = cache_get(ck)
     if hit:
+        try:
+            from tracing import get_tracer
+            get_tracer().turn_end(
+                intent=state.get("intent", ""),
+                ticker=state.get("ticker", ""),
+                report_len=len(hit),
+                cache_hit=True,
+            )
+        except Exception:
+            pass
         return {"report": hit, "_cache_hit": True, "_cache_tier": tier, "_cache_key": ck}
     return {"_cache_key": ck, "_cache_hit": False}
 
@@ -180,6 +200,15 @@ def clarify_node(state: AgentState) -> dict:
         return {}
 
     question = build_clarification_message(pending)
+    try:
+        from tracing import get_tracer
+        get_tracer().event("gate", {
+            "node": "clarify_interrupt",
+            "question": question[:200],
+            "pending_type": pending.__class__.__name__ if pending else "",
+        })
+    except Exception:
+        pass
     answer = interrupt(question)  # pauses graph; resumes when user replies
 
     merged_query = merge_with_pending(pending, answer)
@@ -472,10 +501,21 @@ def node_screening(state: AgentState) -> dict:
 def node_market_brief(state: AgentState) -> dict:
     from datetime import date
     from agents.market_brief_graph import build_brief_graph, make_initial_state as mb_init
+    try:
+        from tracing import get_tracer
+        get_tracer().event("gate", {"node": "market_brief_start", "intent": "market_brief"})
+    except Exception:
+        pass
     app = build_brief_graph()
     initial = mb_init(date=str(date.today()), output_path="")
     final = app.invoke(initial)
-    return {"report": final.get("report_text") or "[Không có báo cáo thị trường]"}
+    report = final.get("report_text") or "[Không có báo cáo thị trường]"
+    try:
+        from tracing import get_tracer
+        get_tracer().event("gate", {"node": "market_brief_done", "report_len": len(report)})
+    except Exception:
+        pass
+    return {"report": report}
 
 
 def node_breakout_scan(state: AgentState) -> dict:
@@ -484,14 +524,8 @@ def node_breakout_scan(state: AgentState) -> dict:
 
 
 def node_rag_qa(state: AgentState) -> dict:
-    ticker = state.get("ticker")
-    query = state.get("query", "")
-    if ticker:
-        from agents.intents.fundamentals import run as fund_run, _is_sector_comparison
-        if _is_sector_comparison(query):
-            return {"report": fund_run(ticker, query)}
     from rag.qa import answer as qa_answer
-    return {"report": qa_answer(query, ticker=ticker)}
+    return {"report": qa_answer(state.get("query", ""), ticker=state.get("ticker"))}
 
 
 # ── cache_save_node ───────────────────────────────────────────────────────────
@@ -503,6 +537,16 @@ def cache_save_node(state: AgentState) -> dict:
     if ck and report and not state.get("_cache_hit"):
         from core.cache import cache_set
         cache_set(ck, report)
+    try:
+        from tracing import get_tracer
+        get_tracer().turn_end(
+            intent=state.get("intent", ""),
+            ticker=state.get("ticker", ""),
+            report_len=len(report),
+            cache_hit=False,
+        )
+    except Exception:
+        pass
     return {}
 
 
@@ -516,9 +560,24 @@ def decompose_node(state: AgentState) -> dict:
     ticker = state.get("ticker", "")
     tickers = [ticker] if ticker else []
     sub_tasks = [{"intent": intent, "tickers": tickers, "question": q} for q in questions]
-    print(f"[decompose] {len(sub_tasks)} sub-tasks:")
-    for i, t in enumerate(sub_tasks, 1):
-        print(f"  {i}. [{t['intent']}] tickers={t['tickers']} | {t['question'][:80]}")
+    try:
+        print(f"[decompose] {len(sub_tasks)} sub-tasks:")
+        for i, t in enumerate(sub_tasks, 1):
+            print(f"  {i}. [{t['intent']}] tickers={t['tickers']} | {t['question'][:80]}")
+    except UnicodeEncodeError:
+        # stdout is a non-UTF8 console (e.g. cp1252) — debug print must not abort the turn.
+        pass
+    try:
+        from tracing import get_tracer
+        get_tracer().event("gate", {
+            "node": "decompose",
+            "sub_tasks": len(sub_tasks),
+            "questions": [q[:80] for q in questions],
+            "intent": intent,
+            "ticker": ticker,
+        })
+    except Exception:
+        pass
     return {"sub_tasks": sub_tasks, "iteration": 0}
 
 
@@ -528,10 +587,11 @@ _GATHER_MAP: dict[str, object] = {}  # populated lazily below
 def _get_gather_map() -> dict:
     if not _GATHER_MAP:
         from agents.intents import (
-            price_action, technical, news_sentiment,
+            price_action, technical, news_sentiment, fundamentals,
             macro_sector, investment_case, screening, breakout,
         )
         from rag import qa as _qa
+
         _GATHER_MAP.update({
             "price_action":       lambda t, q: price_action.gather_data(t, q),
             "technical_analysis": lambda t, q: technical.gather_data(t, q),
@@ -540,6 +600,7 @@ def _get_gather_map() -> dict:
             "investment_case":    lambda t, q: investment_case.gather_data(t, q),
             "screening":          lambda t, q: screening.gather_data(t, q),
             "rag_qa":             lambda t, q: _qa.retrieve_only(q, ticker=t),
+            "valuation":          lambda t, q: fundamentals.gather_data(t, q),
             "breakout_scan":      lambda t, q: breakout.gather_data(t, q),
             "market_brief":       lambda t, q: "[market_brief: xem riêng]",
             "conversation":       lambda t, q: "",
@@ -587,6 +648,17 @@ def run_subqueries_node(state: AgentState) -> dict:
         if data:
             tickers_label = "+".join(tickers) if tickers else "N/A"
             sub_results.append(f"[{intent.upper()} — {tickers_label}]\n{question}\n{data}")
+        try:
+            from tracing import get_tracer
+            get_tracer().event("tool", {
+                "tool": f"gather:{intent}",
+                "args": {"tickers": tickers, "question": question[:80]},
+                "status": "ok" if data else "empty",
+                "preview": (data or "")[:120],
+                "duration_ms": 0,
+            })
+        except Exception:
+            pass
 
     return {"sub_results": sub_results}
 
@@ -614,28 +686,53 @@ def synthesize_final(state: AgentState) -> dict:
         )
 
     strict_note = " TUYỆT ĐỐI không đưa khuyến nghị mua/bán/nắm giữ." if strict else ""
+    system_prompt = (
+        "Bạn là chuyên gia phân tích tài chính Việt Nam. "
+        "Trả lời bằng Markdown, trích dẫn số liệu cụ thể từ ngữ cảnh."
+        + strict_note
+    )
+    messages = [Message(role="user", content=user_prompt)]
     t0 = time.perf_counter()
     client = create_client()
-    resp = client.generate(
-        [Message(role="user", content=user_prompt)],
-        max_tokens=4000,
-        system=(
-            "Bạn là chuyên gia phân tích tài chính Việt Nam. "
-            "Trả lời bằng Markdown, trích dẫn số liệu cụ thể từ ngữ cảnh."
-            + strict_note
-        ),
-    )
+
+    # Stream final report token-by-token → SSE client (emit_llm_delta). Falls back to
+    # generate() if the provider stream fails OR yields nothing, so a turn never dies
+    # on stream errors and never returns an empty report.
+    report = ""
+    streamed = False
+    try:
+        from tracing import emit_llm_delta
+        parts: list[str] = []
+        for chunk in client.stream(messages, max_tokens=4000, system=system_prompt):
+            parts.append(chunk)
+            emit_llm_delta(chunk)
+        report = "".join(parts).strip()
+        streamed = bool(parts)
+    except Exception:
+        streamed = False
+
+    if not streamed:
+        resp = client.generate(messages, max_tokens=4000, system=system_prompt)
+        report = resp.text.strip()
+
     elapsed = time.perf_counter() - t0
 
+    # Token usage for streamed calls lives in usage.jsonl (written by instrument_llm).
+    # Estimate here only for the in-graph history ledger.
+    from llm.pricing import estimate_tokens
+    in_tokens = estimate_tokens(system_prompt) + estimate_tokens(user_prompt)
+    out_tokens = estimate_tokens(report)
+
     return {
-        "report": resp.text.strip(),
-        "summary": resp.text.strip()[:120],
+        "report": report,
+        "summary": report[:120],
         "step_count": state.get("step_count", 0) + 1,
         "history": state.get("history", []) + [{
             "step": "synthesize_final",
-            "input_tokens": resp.input_tokens,
-            "output_tokens": resp.output_tokens,
+            "input_tokens": in_tokens,
+            "output_tokens": out_tokens,
             "elapsed_seconds": round(elapsed, 2),
+            "streamed": streamed,
         }],
     }
 
@@ -646,13 +743,25 @@ def _route_after_clarify(state: AgentState) -> str:
     intent = state.get("intent", "")
     ticker = state.get("ticker", "")
     if intent == "market_brief":
-        return "market_brief"
-    if (intent
+        route = "market_brief"
+    elif (intent
             and intent not in _COMPLEX_INTENTS
             and intent != "conversation"
             and ticker):
-        return "simple"
-    return "decompose"
+        route = "simple"
+    else:
+        route = "decompose"
+    try:
+        from tracing import get_tracer
+        get_tracer().event("gate", {
+            "node": "route_after_clarify",
+            "route": route,
+            "intent": intent,
+            "ticker": ticker,
+        })
+    except Exception:
+        pass
+    return route
 
 
 def build_single_subtask_node(state: AgentState) -> dict:
@@ -660,6 +769,16 @@ def build_single_subtask_node(state: AgentState) -> dict:
     intent = state.get("intent", "macro_sector")
     ticker = state.get("ticker", "")
     query = state.get("query", "")
+    try:
+        from tracing import get_tracer
+        get_tracer().event("gate", {
+            "node": "fast_path",
+            "intent": intent,
+            "ticker": ticker,
+            "query": query[:80],
+        })
+    except Exception:
+        pass
     return {
         "sub_tasks": [{"intent": intent, "tickers": [ticker] if ticker else [], "question": query}],
         "iteration": 0,

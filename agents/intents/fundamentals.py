@@ -327,21 +327,21 @@ _FUND_STOPWORDS = frozenset({"VE", "VA", "LA", "CO", "DE", "VS", "ROE", "ROA", "
 
 
 def _extract_tickers_from_query(query: str) -> list[str]:
-    """Return VN tickers explicitly mentioned in query (uppercase, deduped, filtered)."""
+    """Return VN tickers explicitly mentioned in query (uppercase, deduped, filtered).
+
+    Validates candidates against the active securities universe so ordinary
+    Vietnamese words ("so", "trung", "bao", ...) are never mistaken for tickers.
+    """
+    try:
+        from core.tickers import get_tickers
+        known = set(get_tickers())
+    except Exception:
+        known = set()
     hits = list(dict.fromkeys(  # preserve order, dedupe
         t for t in _TICKER_RE_FUND.findall(query.upper())
-        if t not in _FUND_STOPWORDS
+        if t not in _FUND_STOPWORDS and (not known or t in known)
     ))
     return hits
-
-
-def _is_sector_comparison(query: str) -> bool:
-    q = query.lower()
-    return any(kw in q for kw in [
-        "so với ngành", "so với các ngân hàng", "so với peer", "ngành ngân hàng",
-        "toàn ngành", "so sánh", "trung bình ngành", "so với thị trường",
-        "so với", "vs ngành", "p/e", "p/b", "roe", "eps",
-    ])
 
 
 _SYSTEM = (
@@ -396,46 +396,29 @@ def _extract_data_table(analysis: str) -> str:
 
 
 def gather_data(ticker: str | None, query: str) -> str:
-    """Fetch valuation + peer comparison data — no LLM call."""
+    """Fetch valuation + peer comparison data — no LLM call.
+
+    Serves the `valuation` intent (and investment_case's gather). Cross-ticker when the
+    query names ≥2 real tickers, otherwise sector peers for the single ticker.
+    """
     if not ticker:
         return "[CƠ BẢN]\nKhông có mã cổ phiếu."
 
-    # Cross-ticker comparison: two or more explicit tickers in the query (e.g. "HPG so với VCB")
     explicit_tickers = _extract_tickers_from_query(query)
-    # Only treat as cross-ticker if ≥2 known tickers that differ from each other
-    compare_tickers = [t for t in explicit_tickers if t != ticker] if ticker else []
-    if _is_sector_comparison(query) and compare_tickers:
-        # Build peer list: primary ticker + all explicitly mentioned tickers
+    compare_tickers = [t for t in explicit_tickers if t != ticker]
+    if compare_tickers:
         peers = list(dict.fromkeys([ticker] + compare_tickers))
         rows = [_fetch_valuation(t) for t in peers]
         return f"[SO SÁNH {' & '.join(peers)}]\n{_build_analysis(ticker, rows)}"
 
-    if _is_sector_comparison(query):
-        peers = get_sector_peers(ticker)
-        rows = [_fetch_valuation(t) for t in peers]
-        return f"[CƠ BẢN & ĐỊNH GIÁ {ticker}]\n{_build_analysis(ticker, rows)}"
-
-    # Single ticker: just return key valuation metrics
-    row = _fetch_valuation(ticker)
-    lines = [f"[CƠ BẢN {ticker}]"]
-    metric_labels = {
-        "pe": "P/E", "pb": "P/B", "roe_pct": "ROE (%)", "roa_pct": "ROA (%)",
-        "eps": "EPS", "gross_margin_pct": "Biên lợi nhuận gộp (%)",
-        "net_margin_pct": "Biên lợi nhuận ròng (%)",
-        "revenue_growth_pct": "Tăng trưởng doanh thu YoY (%)",
-        "earnings_growth_pct": "Tăng trưởng LNST YoY (%)",
-        "de_ratio": "D/E ratio", "ev_ebitda": "EV/EBITDA",
-    }
-    for k, label in metric_labels.items():
-        v = row.get(k)
-        if v is not None and not (isinstance(v, float) and math.isnan(v)):
-            lines.append(f"  {label}: {v:.2f}" if isinstance(v, float) else f"  {label}: {v}")
-    return "\n".join(lines)
+    peers = get_sector_peers(ticker)
+    rows = [_fetch_valuation(t) for t in peers]
+    return f"[CƠ BẢN & ĐỊNH GIÁ {ticker}]\n{_build_analysis(ticker, rows)}"
 
 
 @observe(name="intent.fundamentals")
 def run(ticker: str | None, query: str) -> str:
-    if ticker and _is_sector_comparison(query):
+    if ticker:
         peers    = get_sector_peers(ticker)
         rows     = [_fetch_valuation(t) for t in peers]
         analysis = _build_analysis(ticker, rows)
