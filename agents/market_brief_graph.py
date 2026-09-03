@@ -711,18 +711,9 @@ def _strip_reasoning(text: str) -> str:
 
 # ── Node 2: compose_outlook ───────────────────────────────────────────────────
 
-# VN national holidays — used to add context about upcoming holiday sessions
-_VN_HOLIDAYS: dict[str, str] = {
-    "2026-01-01": "Tết Dương lịch (1/1)",
-    "2026-02-17": "Tết Nguyên Đán",
-    "2026-02-18": "Tết Nguyên Đán",
-    "2026-02-19": "Tết Nguyên Đán",
-    "2026-02-20": "Tết Nguyên Đán",
-    "2026-04-30": "Giải phóng miền Nam (30/4)",
-    "2026-05-01": "Quốc tế Lao động (1/5)",
-    "2026-09-02": "Quốc khánh 2/9",
-    "2026-09-03": "Quốc khánh 2/9 (bù)",
-}
+# VN national holidays — used to add context about upcoming holiday sessions.
+# Centralized in tools/vn_holidays.py (shared with tools/price.py freshness check).
+from tools.vn_holidays import VN_HOLIDAYS as _VN_HOLIDAYS
 
 
 def _upcoming_holiday(date_str: str, lookahead_days: int = 4) -> str:

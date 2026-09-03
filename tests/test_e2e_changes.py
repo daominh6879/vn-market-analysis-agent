@@ -304,9 +304,11 @@ def test_unit_previous_trading_day_skips_weekend():
     assert mon.weekday() == 0  # guard: is Monday
     assert _previous_trading_day(mon) == mon - timedelta(days=3)
     # mid-week → previous weekday
-    wed = date(2026, 9, 2)
+    wed = date(2026, 9, 9)  # Wednesday, not a VN holiday
     assert wed.weekday() == 2  # guard: is Wednesday
     assert _previous_trading_day(wed) == wed - timedelta(days=1)
+    # holiday mid-week → skip holiday, land on previous trading day
+    assert _previous_trading_day(date(2026, 9, 2)) == date(2026, 8, 31)  # 2/9 holiday
     # always a weekday
     assert _previous_trading_day(date(2026, 9, 6)).weekday() < 5  # Sunday input
 

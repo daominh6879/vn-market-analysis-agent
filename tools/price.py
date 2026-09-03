@@ -40,11 +40,12 @@ def set_provider(provider: PriceProvider) -> None:
 # ── DB freshness helpers ───────────────────────────────────────────────────────
 
 def _previous_trading_day(d: _date | None = None) -> _date:
-    """Most recent weekday before `d` (default today). Holidays not modeled — same
-    rough calendar check the breadth/top-movers tools already use."""
+    """Most recent trading day before `d` (default today). Skips weekends AND VN
+    stock-market holidays so a holiday-stale DB is not wrongly flagged stale."""
+    from tools.vn_holidays import is_vn_holiday
     d = d or _date.today()
     d = d - _timedelta(days=1)
-    while d.weekday() >= 5:  # Sat=5, Sun=6
+    while d.weekday() >= 5 or is_vn_holiday(d.isoformat()):  # Sat=5, Sun=6 + holidays
         d -= _timedelta(days=1)
     return d
 
@@ -1020,7 +1021,12 @@ def get_market_breadth(universe: str = "HOSE", as_of_date: Optional[str] = None)
         try:
             batch = provider.fetch_batch_latest(chunk, count_back=3)
         except Exception:
-            continue  # skip failed chunks, don't abort entire breadth
+            batch = {}
+        if not batch and i == 0:
+            # First chunk empty → VCI down/unreachable. Don't grind through the
+            # remaining ~400 tickers at 10s timeout each.
+            sys.stderr.write("[get_market_breadth] VCI first chunk empty — aborting live fallback\n")
+            break
         for sym, df in batch.items():
             if df.empty or len(df) < 2:
                 continue
@@ -1107,7 +1113,10 @@ def get_top_movers(by: str = "value", limit: int = 5, as_of_date: Optional[str] 
                 try:
                     batch = provider.fetch_batch_latest(chunk, count_back=3)
                 except Exception:
-                    continue
+                    batch = {}
+                if not batch and i == 0:
+                    sys.stderr.write("[get_top_movers] VCI first chunk empty — aborting live fallback\n")
+                    break
                 for sym, sdf in batch.items():
                     if sdf.empty or len(sdf) < 2:
                         continue
@@ -1241,9 +1250,17 @@ def _get_foreign_flows_live() -> ToolResult:
         all_rows: list[dict] = []
         for i in range(0, len(tickers), 50):
             try:
-                all_rows.extend(provider.fetch_foreign_batch(tickers[i:i + 50]))
+                rows = provider.fetch_foreign_batch(tickers[i:i + 50])
             except Exception as e:
                 sys.stderr.write(f"[get_foreign_flows live] chunk {i} failed: {e}\n")
+                if i == 0:
+                    # First chunk timed out → VCI down. Don't grind 405 more tickers.
+                    sys.stderr.write("[get_foreign_flows live] first chunk failed — aborting\n")
+                    break
+                continue
+            if not rows and i == 0:
+                break
+            all_rows.extend(rows)
     except Exception as e:
         return ToolResult(
             status="upstream_error",

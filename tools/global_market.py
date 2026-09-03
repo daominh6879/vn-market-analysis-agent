@@ -37,6 +37,32 @@ def _yf_filter_as_of(close, as_of_date: Optional[str]):
         return close
 
 
+_YF_TIMEOUT = 20  # seconds
+
+
+def _yf_call(fn, timeout: float = _YF_TIMEOUT):
+    """Run fn() (a yfinance call) in a daemon thread; raise TimeoutError if it
+    exceeds `timeout`. yfinance 1.6.0 exposes no timeout, so a network stall
+    would otherwise block the collector forever."""
+    import threading
+    box: dict = {}
+
+    def _target() -> None:
+        try:
+            box["result"] = fn()
+        except Exception as exc:  # noqa: BLE001
+            box["error"] = exc
+
+    t = threading.Thread(target=_target, daemon=True)
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        raise TimeoutError(f"yfinance call timed out after {timeout}s")
+    if "error" in box:
+        raise box["error"]
+    return box.get("result")
+
+
 # ── Tool: World equity indices ────────────────────────────────────────────────
 
 @instrument_tool("get_global_indices")
@@ -53,7 +79,7 @@ def get_global_indices(as_of_date: Optional[str] = None) -> ToolResult:
         from data.global_universe import WORLD_INDICES
 
         tickers_str = " ".join(WORLD_INDICES.keys())
-        raw = yf.download(tickers_str, period="7d", auto_adjust=True, progress=False)
+        raw = _yf_call(lambda: yf.download(tickers_str, period="7d", auto_adjust=True, progress=False))
 
         if raw.empty:
             return ToolResult(status="no_data", data=None,
@@ -118,7 +144,7 @@ def get_commodities(as_of_date: Optional[str] = None) -> ToolResult:
         from data.global_universe import COMMODITIES
 
         tickers_str = " ".join(COMMODITIES.keys())
-        raw = yf.download(tickers_str, period="7d", auto_adjust=True, progress=False)
+        raw = _yf_call(lambda: yf.download(tickers_str, period="7d", auto_adjust=True, progress=False))
 
         if raw.empty:
             return ToolResult(status="no_data", data=None,
@@ -355,7 +381,7 @@ def get_vn_gold() -> ToolResult:
         try:
             from data.fx_scraper import fetch_vcb_usdvnd
             import yfinance as yf
-            gold_hist = yf.Ticker("GC=F").history(period="2d")
+            gold_hist = _yf_call(lambda: yf.Ticker("GC=F").history(period="2d"))
             fx = fetch_vcb_usdvnd()
             if not gold_hist.empty and fx:
                 xau_usd = float(gold_hist["Close"].iloc[-1])
