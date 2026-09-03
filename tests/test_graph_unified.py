@@ -1,17 +1,15 @@
 """
-tests/test_graph_unified.py — End-to-end tests for unified agents/graph.py.
+tests/test_graph_unified.py — tests for agents/graph.py.
 
 Covers:
-  - verify_context: clarification detection (missing ticker, ambiguous intent)
-  - pick_branch: dispatch to each of 9 intent nodes + knowledge + data fallback
+  - _route_after_clarify: market_brief / simple / decompose dispatch
+  - route_after_subqueries + route_after_critique: bounded re-plan + self-critique loops
+  - _is_empty_result: empty/error sub-result detection
   - check_cache_node / cache_save_node: cache hit / miss paths
-  - All 9 intent nodes (real LLM + tools): price_action, technical_analysis,
-    rag_qa, macro_sector, news_sentiment, investment_case, screening,
-    market_brief, knowledge path (RAG-Fusion), data path (collect → synthesize)
-  - Clarification → pending_context → resume flow (via stream_turn)
+  - Full graph invoke + stream_turn across all intents (real LLM + tools)
 
 Run unit only (fast, no network):
-  pytest tests/test_graph_unified.py -v -k "unit"
+  pytest tests/test_graph_unified.py -v -k "RouteAfterClarify or LoopRouting or CacheNodes"
 
 Run integration (slow, hits LLM + external APIs):
   pytest tests/test_graph_unified.py -v -s -k "integration"
@@ -31,13 +29,13 @@ load_dotenv()
 import pytest
 
 from agents.graph import (
-    verify_context,
-    pick_branch,
     check_cache_node,
     check_cache_hit,
     cache_save_node,
-    _INTENT_NODE_MAP,
-    _INTENT_NODES,
+    _is_empty_result,
+    _route_after_clarify,
+    route_after_subqueries,
+    route_after_critique,
     build_graph,
 )
 from agents.state import make_initial_state, AgentState
@@ -152,88 +150,55 @@ def _new_conv():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# UNIT — verify_context (no LLM, no network)
+# UNIT — routing after clarify (no LLM, no network)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestUnitVerifyContext:
-    def test_unit_no_clarification_when_ticker_present(self):
-        state = _state("phân tích kỹ thuật HPG", intent="technical_analysis", ticker="HPG")
-        result = verify_context(state)
-        assert not result.get("needs_clarification")
-
-    def test_unit_clarification_when_ticker_missing(self):
-        state = _state("phân tích kỹ thuật", intent="technical_analysis", ticker=None)
-        result = verify_context(state)
-        assert result.get("needs_clarification")
-        assert result.get("clarification_message")
-        assert result.get("pending_context")
-
-    def test_unit_clarification_investment_no_ticker(self):
-        state = _state("có nên mua không?", intent="investment_case", ticker=None)
-        result = verify_context(state)
-        assert result.get("needs_clarification")
-
-    def test_unit_no_clarification_market_brief(self):
+class TestUnitRouteAfterClarify:
+    def test_market_brief(self):
         state = _state("thị trường hôm nay", intent="market_brief", ticker="")
-        result = verify_context(state)
-        assert not result.get("needs_clarification")
+        assert _route_after_clarify(state) == "market_brief"
 
-    def test_unit_no_clarification_screening(self):
-        state = _state("top 5 mã ROE cao nhất", intent="screening", ticker="")
-        result = verify_context(state)
-        assert not result.get("needs_clarification")
+    def test_simple_leaf_intent_with_ticker(self):
+        state = _state("RSI HPG", intent="technical_analysis", ticker="HPG")
+        assert _route_after_clarify(state) == "simple"
 
-    def test_unit_no_clarification_macro_no_ticker(self):
-        state = _state("tỷ giá USD/VND hôm nay", intent="macro_sector", ticker="")
-        result = verify_context(state)
-        assert not result.get("needs_clarification")
+    def test_complex_intent_always_decompose(self):
+        state = _state("mua HPG không", intent="investment_case", ticker="HPG")
+        assert _route_after_clarify(state) == "decompose"
+
+    def test_no_intent_decompose(self):
+        state = _state("HPG")
+        assert _route_after_clarify(state) == "decompose"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# UNIT — pick_branch routing (no LLM, no network)
+# UNIT — sub-query re-plan + report critique routing (no LLM, no network)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestUnitPickBranch:
-    def test_unit_all_intent_nodes_in_map(self):
-        for intent in _INTENT_NODES:
-            assert intent in _INTENT_NODE_MAP, f"intent '{intent}' missing from _INTENT_NODE_MAP"
+class TestUnitLoopRouting:
+    def test_is_empty_result(self):
+        assert _is_empty_result("") is True
+        assert _is_empty_result("[NEWS_SENTIMENT — lỗi: max recursion]") is True
+        assert _is_empty_result("ticker không được rỗng.") is True
+        assert _is_empty_result("Doanh thu HPG Q1: 100 tỷ") is False
 
-    def test_unit_pick_branch_price_action(self):
-        assert pick_branch(_state("giá HPG", intent="price_action", ticker="HPG")) == "price_action"
+    def test_replan_when_mostly_empty(self):
+        assert route_after_subqueries({"sub_results_empty_ratio": 0.9}) == "replan"
 
-    def test_unit_pick_branch_technical(self):
-        assert pick_branch(_state("RSI HPG", intent="technical_analysis", ticker="HPG")) == "technical_analysis"
+    def test_no_replan_after_attempt(self):
+        assert route_after_subqueries(
+            {"sub_results_empty_ratio": 0.9, "replan_attempted": True}
+        ) == "synthesize"
 
-    def test_unit_pick_branch_rag_qa(self):
-        assert pick_branch(_state("doanh thu HPG", intent="rag_qa", ticker="HPG")) == "rag_qa"
+    def test_synthesize_when_data_present(self):
+        assert route_after_subqueries({"sub_results_empty_ratio": 0.0}) == "synthesize"
 
-    def test_unit_pick_branch_macro_sector(self):
-        assert pick_branch(_state("tỷ giá", intent="macro_sector")) == "macro_sector"
+    def test_critique_save_on_pass(self):
+        assert route_after_critique({"critique_pass": True}) == "save"
 
-    def test_unit_pick_branch_news_sentiment(self):
-        assert pick_branch(_state("tin tức HPG", intent="news_sentiment", ticker="HPG")) == "news_sentiment"
-
-    def test_unit_pick_branch_investment_case(self):
-        assert pick_branch(_state("mua HPG không", intent="investment_case", ticker="HPG")) == "investment_case"
-
-    def test_unit_pick_branch_screening(self):
-        assert pick_branch(_state("lọc cổ phiếu", intent="screening")) == "screening"
-
-    def test_unit_pick_branch_market_brief(self):
-        assert pick_branch(_state("thị trường hôm nay", intent="market_brief")) == "market_brief"
-
-    def test_unit_pick_branch_knowledge_fallback_bctc(self):
-        state = _state("báo cáo tài chính HPG năm 2024", ticker="HPG")
-        assert pick_branch(state) == "knowledge"
-
-    def test_unit_pick_branch_data_fallback(self):
-        state = _state("HPG", ticker="HPG")
-        assert pick_branch(state) == "data"
-
-    def test_unit_pick_branch_market_query_data(self):
-        state = _state("VNINDEX hôm nay")
-        state["is_market_query"] = True
-        assert pick_branch(state) == "data"
+    def test_critique_retry_once(self):
+        assert route_after_critique({"critique_pass": False, "critique_attempts": 0}) == "retry"
+        assert route_after_critique({"critique_pass": False, "critique_attempts": 1}) == "save"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -273,21 +238,6 @@ class TestUnitCacheNodes:
         state["report"] = "cached report"
         result = cache_save_node(state)
         assert result == {}
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# UNIT — clarification stops at END (no LLM)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class TestUnitClarificationPath:
-    def test_unit_graph_returns_clarification_when_ticker_missing(self):
-        """verify_context must detect missing ticker and return clarification fields."""
-        state = _state("phân tích kỹ thuật", intent="technical_analysis", ticker=None)
-        result = verify_context(state)
-        assert result.get("needs_clarification")
-        assert result.get("clarification_message")
-        assert result.get("pending_context")
-        assert "report" not in result or not result.get("report")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -349,7 +299,7 @@ class TestIntegrationGraphInvoke:
         assert any(kw in report.lower() for kw in ["vnindex", "vn-index", "thị trường", "vn30", "hsx"])
 
     def test_integration_knowledge_path_bctc_keywords(self):
-        """BCTC keywords + no explicit intent → knowledge path → fusion_search → synthesize."""
+        """BCTC keywords + no explicit intent → classified rag_qa → RAG/SQL context → report."""
         final = _invoke("báo cáo tài chính HPG quý 1 2025")
         report = final.get("report", "")
         print(f"\n[knowledge] report[:300]: {report[:300]}")

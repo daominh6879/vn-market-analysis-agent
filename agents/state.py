@@ -62,6 +62,14 @@ class AgentState(TypedDict, total=False):
     _cache_hit: bool
     _cache_tier: str
     _cache_key: object       # CacheKey instance or None
+    # Self-critique loop (synthesize_final → critique_report_node)
+    critique_pass: bool      # verdict from critique_report_node
+    critique_feedback: str   # feedback folded into synthesize retry
+    critique_attempts: int   # retry counter, capped by MAX_CRITIQUE
+    # Sub-task re-plan guard (run_subqueries_node → decompose_node)
+    sub_results_empty_ratio: float  # fraction of sub-tasks returning empty/error data
+    replan_attempted: bool          # re-plan already tried once
+    replan_note: str                # failure note fed back into decompose
 
 
 def detect_query_type(query: str) -> tuple[str, bool]:

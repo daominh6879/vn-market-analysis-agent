@@ -86,7 +86,10 @@ def generate_sub_tasks(query: str, n: int = 4) -> list[dict]:
         f"Phân rã câu hỏi sau thành {n} truy vấn con, mỗi truy vấn một góc nhìn khác nhau.\n"
         f"Mỗi truy vấn con gán đúng 1 intent trong danh sách: {', '.join(_SUB_INTENTS)}.\n"
         f"Trả về đúng {n} dòng, mỗi dòng theo định dạng: `intent | câu hỏi con`. "
-        f"Không đánh số, không giải thích.\n\nCâu hỏi: {query}"
+        f"Không đánh số, không giải thích.\n"
+        f"Trong câu hỏi con, chỉ nêu TỐI ĐA 5 mã cổ phiếu tiêu biểu nhất "
+        f"(vốn hóa / thanh khoản lớn) của ngành/nhóm được hỏi — KHÔNG liệt kê toàn bộ.\n\n"
+        f"Câu hỏi: {query}"
     )
 
     try:
@@ -98,7 +101,8 @@ def generate_sub_tasks(query: str, n: int = 4) -> list[dict]:
                 "Bạn là chuyên gia phân tích tài chính. "
                 "Trả về đúng số dòng yêu cầu, mỗi dòng `intent | câu hỏi`. "
                 "Intent phải nằm trong danh sách cho trước. "
-                "Chỉ đề cập đúng các mã cổ phiếu/ngành/chỉ số có trong câu hỏi gốc."
+                "Chỉ đề cập đúng các mã cổ phiếu/ngành/chỉ số có trong câu hỏi gốc. "
+                "Mỗi câu hỏi con nêu tối đa 5 mã tiêu biểu nhất của ngành, không liệt kê toàn bộ."
             ),
         )
         raw = resp.text.strip()

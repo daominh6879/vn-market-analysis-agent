@@ -2,26 +2,28 @@
 agents/graph.py — LangGraph graph: single entry from raw query → report.
 
 Flow:
-  merge_pending_node → classify_node
+  classify_node → check_conversation
     └── "conversation" → END  (stream_turn handles LLM streaming)
-    └── check_cache_node
+    └── "verify" → check_cache_node
           ├── "hit"  → END  (cached report in state["report"])
-          └── "miss" → verify_context
-                ├── "clarify"  → END  (clarification_message in state; pending saved to Postgres)
-                └── "proceed"  → route_question
-                      ├── intent nodes (8)  → cache_save_node → END
-                      ├── "knowledge" → fusion_search → grade_or_critique
-                      │                                    ├── enough      → synthesize → cache_save_node → END
-                      │                                    ├── insufficient → run_web_search → synthesize → cache_save_node → END
-                      │                                    └── rewrite     → fusion_search (≤ MAX_ITER)
-                      └── "data"     → collect → analyze_technical → assess_risk → synthesize → cache_save_node → END
+          └── "miss" → clarify_node → _route_after_clarify
+                ├── "market_brief" → node_market_brief → cache_save_node → END
+                ├── "simple"      → build_single_subtask_node ─┐
+                └── "decompose"   → decompose_node ────────────┴→ run_subqueries_node
+    run_subqueries_node → route_after_subqueries
+          ├── "replan"     → decompose_node (≤ 1, on >50% empty sub_results)
+          └── "synthesize" → [request_approval] → synthesize_final
+    synthesize_final → critique_report_node → route_after_critique
+          ├── "save"  → cache_save_node → END
+          └── "retry" → synthesize_final (≤ MAX_CRITIQUE, folds critique_feedback)
 
 Design rules:
 - state stores only paths, never DataFrames
-- route_question / grade_or_critique: pure logic, no LLM
+- route_after_subqueries / route_after_critique: pure logic, no LLM
 - risk node: pure if/else, no model call
-- synthesize: LLM via create_client() factory
+- synthesize_final / critique_report_node: LLM via create_client() factory
 - classify_node owns Langfuse trace setup (was in _dispatch_intent)
+- every loop is capped (MAX_CRITIQUE, replan_attempted) so cost stays bounded
 """
 
 from __future__ import annotations
@@ -47,6 +49,8 @@ _VOLATILITY_THRESHOLD = 0.04  # 4% daily return std → HIGH_VOLATILITY
 _RAG_COLLECTION = os.environ.get("RAG_COLLECTION", "bctc_structural")
 _EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 MAX_ITER = 2  # max RAG rewrite loops before fallback to web_search
+MAX_CRITIQUE = 1  # max self-critique retries of the final report before returning best-effort
+MAX_FANOUT_TICKERS = 5  # cap per-sector fan-out to leading tickers (avoid 17-way fetch)
 
 # Lazy BM25 cache — avoid re-loading on every run
 _bm25_cache: dict[str, object] = {}
@@ -552,20 +556,55 @@ def cache_save_node(state: AgentState) -> dict:
 
 # ── New pipeline nodes ────────────────────────────────────────────────────────
 
+def _extract_query_tickers(query: str) -> list[str]:
+    """Extract ticker symbols explicitly named in the query, filtered by the VN universe.
+
+    Multi-ticker sector queries (e.g. "ngành Ngân hàng (VCB, BID, CTG, …)") list many
+    tickers the single-field classifier cannot carry. The universe filter alone drops
+    noise ("NH", "NG", "USD", "EUR") that a bare [A-Z]{2,5} regex would otherwise pick
+    up — currency codes are not VN tickers, so they never pass the gate. The one
+    ambiguous token is "VND" (đồng vs VNDirect); it's harmless because FX queries route
+    to macro_sector, which ignores the ticker.
+    """
+    import re
+    try:
+        from core.tickers import get_tickers
+        known = set(get_tickers())
+    except Exception:
+        known = set()
+    if not known:
+        return []
+    return [t for t in re.findall(r"\b[A-Z]{2,5}\b", (query or "").upper()) if t in known]
+
+
 def decompose_node(state: AgentState) -> dict:
-    """Decompose original query into structured sub-tasks, each with its own intent."""
+    """Decompose original query into structured sub-tasks, each with its own intent.
+
+    On re-plan (replan_note set after empty sub_results), folds the failure note into
+    the decompose prompt so a different set of sub-tasks is produced, and marks
+    replan_attempted so the loop runs at most once.
+    """
     from rag.multi_query import generate_sub_tasks
     parent_intent = state.get("intent", "macro_sector")
     ticker = state.get("ticker", "")
-    tickers = [ticker] if ticker else []
-    sub_tasks = [
-        {
+    query_tickers = (
+        _extract_query_tickers(state.get("original_query", ""))
+        or _extract_query_tickers(state.get("query", ""))
+    )
+    fallback_tickers = (query_tickers or ([ticker] if ticker else []))[:MAX_FANOUT_TICKERS]
+    replan_note = state.get("replan_note", "")
+    base_query = state.get("query", "")
+    decompose_query = f"{replan_note}\n\nCâu hỏi gốc: {base_query}" if replan_note else base_query
+    sub_tasks = []
+    for t in generate_sub_tasks(decompose_query, n=4):
+        # The LLM already names the notable tickers inside each sub-task question
+        # (prompt caps it at ≤5). Prefer those; fall back to query-level extraction.
+        task_tickers = (_extract_query_tickers(t.get("question", "")) or fallback_tickers)
+        sub_tasks.append({
             "intent": t.get("intent") or parent_intent,
-            "tickers": tickers,
+            "tickers": task_tickers[:MAX_FANOUT_TICKERS],
             "question": t.get("question", ""),
-        }
-        for t in generate_sub_tasks(state.get("query", ""), n=4)
-    ]
+        })
     try:
         print(f"[decompose] {len(sub_tasks)} sub-tasks:")
         for i, t in enumerate(sub_tasks, 1):
@@ -584,7 +623,12 @@ def decompose_node(state: AgentState) -> dict:
         })
     except Exception:
         pass
-    return {"sub_tasks": sub_tasks, "iteration": 0}
+    return {
+        "sub_tasks": sub_tasks,
+        "iteration": 0,
+        "replan_attempted": bool(replan_note),
+        "replan_note": "",
+    }
 
 
 _GATHER_MAP: dict[str, object] = {}  # populated lazily below
@@ -615,6 +659,16 @@ def _get_gather_map() -> dict:
 
 
 _FANOUT_INTENTS = frozenset({"price_action", "technical_analysis", "investment_case", "breakout_scan"})
+
+
+def _is_empty_result(data: str) -> bool:
+    """True when a gather result carries no usable data (empty, or an error string)."""
+    if not data or not data.strip():
+        return True
+    low = data.lower()
+    return any(m in low for m in (
+        "lỗi:", "không có dữ liệu", "no_data", "không thể lấy", "ticker không được rỗng",
+    ))
 
 
 def run_subqueries_node(state: AgentState) -> dict:
@@ -666,7 +720,19 @@ def run_subqueries_node(state: AgentState) -> dict:
         except Exception:
             pass
 
-    return {"sub_results": sub_results}
+    total = len(sub_tasks)
+    usable = sum(1 for r in sub_results if not _is_empty_result(r))
+    empty_ratio = (total - usable) / total if total else 1.0
+
+    updates: dict = {"sub_results": sub_results, "sub_results_empty_ratio": empty_ratio}
+    if empty_ratio > 0.5 and not state.get("replan_attempted", False):
+        failed = [t.get("question", "")[:60] for t in sub_tasks][:3]
+        updates["replan_note"] = (
+            "Lần phân rã trước không lấy được dữ liệu cho các truy vấn con (rỗng/lỗi): "
+            + "; ".join(failed)
+            + ". Hãy phân rã lại thành các câu hỏi con KHÁC, góc nhìn khác, cụ thể hơn."
+        )
+    return updates
 
 
 def synthesize_final(state: AgentState) -> dict:
@@ -697,6 +763,12 @@ def synthesize_final(state: AgentState) -> dict:
         "Trả lời bằng Markdown, trích dẫn số liệu cụ thể từ ngữ cảnh."
         + strict_note
     )
+    critique_feedback = state.get("critique_feedback", "")
+    if critique_feedback:
+        user_prompt += (
+            "\n\nLƯU Ý: báo cáo trước bị reviewer đánh fail với lý do sau, "
+            "bắt buộc khắc phục trong bản viết lại:\n" + critique_feedback
+        )
     messages = [Message(role="user", content=user_prompt)]
     t0 = time.perf_counter()
     client = create_client()
@@ -741,6 +813,91 @@ def synthesize_final(state: AgentState) -> dict:
             "streamed": streamed,
         }],
     }
+
+# ── Self-critique loop ────────────────────────────────────────────────────────
+
+def critique_report_node(state: AgentState) -> dict:
+    """LLM self-check of the synthesized report against the completion checklist.
+
+    Returns {critique_pass, critique_feedback, critique_attempts}. Feedback folds into
+    synthesize_final on retry (≤ MAX_CRITIQUE). Any parse/LLM error → pass=True, so a
+    broken critique never blocks the turn.
+    """
+    from llm.factory import create_client
+    from llm.types import Message
+
+    report = state.get("report") or ""
+    query = state.get("query", "")
+    attempts = state.get("critique_attempts", 0)
+
+    prompt = f"""Câu hỏi người dùng: {query}
+
+Báo cáo đã viết:
+---
+{report}
+---
+
+Đánh giá báo cáo theo checklist:
+1. Mọi số liệu / claim cụ thể phải có nguồn trích dẫn; không bịa số không có trong ngữ cảnh.
+2. Báo cáo đủ phần, không bị cắt ngang giữa chừng (không truncation).
+3. Trả lời đúng câu hỏi, không lan man.
+
+Chỉ trả về JSON: {{"pass": true|false, "feedback": "lý do ngắn gọn tiếng Việt nếu fail"}}."""
+
+    client = create_client()
+    passed = True
+    feedback = ""
+    try:
+        import json as _json
+        import re as _re
+        resp = client.generate(
+            [Message(role="user", content=prompt)],
+            max_tokens=300,
+            temperature=0,
+            system="Bạn là reviewer chất lượng báo cáo tài chính. Chỉ trả JSON, không giải thích.",
+        )
+        raw = _re.sub(r"<think>.*?</think>", "", resp.text.strip(), flags=_re.DOTALL).strip()
+        m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        data = _json.loads(m.group(0)) if m else {}
+        passed = bool(data.get("pass", True))
+        feedback = str(data.get("feedback", ""))
+    except Exception:
+        passed = True
+        feedback = ""
+
+    try:
+        from tracing import get_tracer
+        get_tracer().event("gate", {
+            "node": "critique_report",
+            "pass": passed,
+            "attempt": attempts + 1,
+        })
+    except Exception:
+        pass
+
+    return {
+        "critique_pass": passed,
+        "critique_feedback": feedback if not passed else "",
+        "critique_attempts": attempts + 1,
+    }
+
+
+def route_after_critique(state: AgentState) -> str:
+    """Retry synthesize once with feedback; otherwise save best-effort report."""
+    if state.get("critique_pass", True):
+        return "save"
+    if state.get("critique_attempts", 0) < MAX_CRITIQUE:
+        return "retry"
+    return "save"
+
+
+def route_after_subqueries(state: AgentState) -> str:
+    """Re-plan once if most sub-tasks returned no usable data; else synthesize."""
+    ratio = state.get("sub_results_empty_ratio", 0.0)
+    if ratio > 0.5 and not state.get("replan_attempted", False):
+        return "replan"
+    return "synthesize"
+
 
 # ── Fast-path routing ────────────────────────────────────────────────────────
 
@@ -833,6 +990,7 @@ def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGra
     g.add_node("decompose_node",           decompose_node)
     g.add_node("run_subqueries_node",      run_subqueries_node)
     g.add_node("synthesize_final",         synthesize_final)
+    g.add_node("critique_report_node",     critique_report_node)
     g.add_node("cache_save_node",          cache_save_node)
 
     if human_approval:
@@ -849,14 +1007,19 @@ def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGra
     g.add_edge("build_single_subtask_node", "run_subqueries_node")
     g.add_edge("decompose_node",            "run_subqueries_node")
 
+    # run_subqueries → re-plan once on mostly-empty results, else continue to synthesize.
+    next_after_subqueries = "request_approval" if human_approval else "synthesize_final"
+    g.add_conditional_edges("run_subqueries_node", route_after_subqueries,
+        {"replan": "decompose_node", "synthesize": next_after_subqueries})
+
     if human_approval:
-        g.add_edge("run_subqueries_node", "request_approval")
         g.add_conditional_edges("request_approval", _check_approval_decision,
             {"end": END, "synthesize_final": "synthesize_final"})
-    else:
-        g.add_edge("run_subqueries_node", "synthesize_final")
 
-    g.add_edge("synthesize_final",    "cache_save_node")
+    g.add_edge("synthesize_final", "critique_report_node")
+    g.add_conditional_edges("critique_report_node", route_after_critique,
+        {"save": "cache_save_node", "retry": "synthesize_final"})
+
     g.add_edge("cache_save_node",     END)
 
     return g.compile(checkpointer=checkpointer)

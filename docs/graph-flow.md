@@ -63,16 +63,28 @@ flowchart TD
     decompose_node["decompose_node\nLLM tool-call decomposition\n→ N sub_tasks [{intent, tickers, question}]\nintent + tickers pre-set in each task"]
     decompose_node --> run_subqueries_node
 
-    run_subqueries_node["run_subqueries_node\nFor each sub_task (intent pre-classified):\n  gather_data(ticker, question) — NO LLM\n  fan-out per ticker for price/technical intents\nCollect sub_results list"]
-    run_subqueries_node -->|human_approval=False| synthesize_final
-    run_subqueries_node -->|human_approval=True| request_approval
+    run_subqueries_node["run_subqueries_node\nFor each sub_task (intent pre-classified):\n  gather_data(ticker, question) — NO LLM\n  fan-out per ticker for price/technical intents\nCollect sub_results list\nset sub_results_empty_ratio"]
+    run_subqueries_node --> replan_check{">50% empty\nAND not replanned?"}
+
+    replan_check -->|"yes — replan (≤1)\nfolds replan_note"| decompose_node
+    replan_check -->|no| approval_check{human_approval?}
+
+    approval_check -->|True| request_approval
+    approval_check -->|False| synthesize_final
 
     request_approval["request_approval\ninterrupt() — human reviews\n{ticker, risk, signals, news}"]
     request_approval -->|approved| synthesize_final
     request_approval -->|rejected| END3([END — error: rejected_by_user])
 
-    synthesize_final["synthesize_final\nSingle LLM call over all sub_results\nMarkdown report (STRICT_NEUTRAL aware)"]
-    synthesize_final --> cache_save_node
+    synthesize_final["synthesize_final\nSingle LLM call over all sub_results\nMarkdown report (STRICT_NEUTRAL aware)\nfolds critique_feedback on retry"]
+    synthesize_final --> critique_report_node
+
+    critique_report_node["critique_report_node\nLLM self-check vs checklist\n(citation, no truncation)\n→ {pass, feedback}"]
+    critique_report_node --> critique_check{pass?}
+
+    critique_check -->|"pass"| cache_save_node
+    critique_check -->|"fail & attempts < MAX_CRITIQUE (1)"| synthesize_final
+    critique_check -->|"fail & attempts ≥ MAX_CRITIQUE"| cache_save_node
 
     cache_save_node["cache_save_node\nPersist report to Redis"]
     cache_save_node --> END4([END — report in state])
@@ -130,18 +142,36 @@ when a sub-task has multiple tickers, each ticker is fetched independently and r
 
 ## LLM call count per turn
 
+Base counts (critique passes on first try, no re-plan):
+
 | Path | LLM calls |
 |---|---|
 | Direct reply (social) | 1 (`llm_route`) |
-| Simple query (specific ticker, leaf intent) | 1 (`llm_route`) + 1 (`synthesize_final`) = **2** |
-| Complex query (no clarify) | 1 (`llm_route`) + 1 (`decompose_node`) + 1 (`synthesize_final`) = **3** |
-| Complex query (with clarify) | 1 (`llm_route`) + 1 (clarify re-classify) + 1 (`decompose_node`) + 1 (`synthesize_final`) = **4** |
+| Simple query (specific ticker, leaf intent) | 1 (`llm_route`) + 1 (`synthesize_final`) + 1 (`critique_report_node`) = **3** |
+| Complex query (no clarify) | 1 (`llm_route`) + 1 (`decompose_node`) + 1 (`synthesize_final`) + 1 (`critique_report_node`) = **4** |
+| Complex query (with clarify) | +1 (clarify re-classify) = **5** |
+
+Bounded extra calls (each capped at 1):
+
+- **Self-critique retry** — `critique_report_node` returns `pass=false` → re-run `synthesize_final` once with `critique_feedback` folded in (`MAX_CRITIQUE=1`).
+- **Re-plan** — `run_subqueries_node` reports >50% empty/error sub-results → re-run `decompose_node` once with a `replan_note` (`replan_attempted` guard).
 
 Simple path: `price_action`, `technical_analysis`, `news_sentiment`, `rag_qa`, `valuation`, `screening`, `breakout_scan` — only when a specific ticker is identified by `llm_route`.
 
 Complex path (always decompose): `market_brief`, `investment_case`, `macro_sector`, or any intent with no ticker.
 
 No per-sub-query classification — intent and tickers are pre-set by `decompose_node` tool calls (complex path) or by `llm_route` directly (simple path).
+
+## Agent-style loops (bounded)
+
+Two self-correcting loops added on top of the fixed DAG, both capped so cost stays bounded:
+
+| Loop | Trigger | Action | Cap |
+|---|---|---|---|
+| **Re-plan** | `sub_results_empty_ratio > 0.5` (gather returned empty/error strings, e.g. ticker miss, tool error) | back to `decompose_node` with a `replan_note` ("thử câu hỏi khác") so different sub-questions are produced | 1 (`replan_attempted`) |
+| **Self-critique** | `critique_report_node` flags report missing citation / truncated / off-topic | back to `synthesize_final` with `critique_feedback` folded into the prompt | 1 (`MAX_CRITIQUE`) |
+
+`_is_empty_result` treats an empty string **and** error stubs (`lỗi:`, `Không có dữ liệu`, `ticker không được rỗng`) as unusable — so an error string no longer counts as "data present".
 
 ## Key architecture decisions
 
@@ -158,3 +188,5 @@ No per-sub-query classification — intent and tickers are pre-set by `decompose
 | `conversation` intent exits graph immediately | No cache check, no decompose, no gather for pure chat turns. |
 | Fast path bypasses `decompose_node` | Single-ticker leaf-intent queries (price_action, technical_analysis, news_sentiment, rag_qa, valuation, screening, breakout_scan) skip decompose entirely — saves 1 LLM call + avoids 3 unnecessary data fetches. `macro_sector`, `investment_case`, `market_brief` always decompose (multi-component or no ticker). |
 | `valuation` split from `rag_qa` | LLM routes metric/peer queries (P/E, P/B, ROE, EPS, EV/EBITDA) to `valuation` → `fundamentals.gather_data` (vnstock/KBS peer table). Report-content queries (revenue, profit, balance sheet) stay `rag_qa` → `retrieve_only` (RAG/SQL). Removes the `_is_sector_comparison` keyword heuristic — routing decision lives in the LLM, not keywords. |
+| Re-plan loop capped at 1 | Re-decomposing identical input is usually deterministic; a second decompose rarely adds data. Cap 1 avoids infinite loop while still catching transient tool errors. |
+| Self-critique capped at 1 | Critiquing the report costs 1 LLM call/turn; 1 retry catches most citation/truncation failures without doubling latency. Best-effort report returned on final fail. |
