@@ -510,13 +510,12 @@ def cache_save_node(state: AgentState) -> dict:
 
 def decompose_node(state: AgentState) -> dict:
     """Decompose original query into structured sub-tasks via tool calling."""
-    from rag.multi_query import decompose_query
-    sub_tasks = decompose_query(
-        state.get("query", ""),
-        n=4,
-        ticker=state.get("ticker", ""),
-        intent=state.get("intent", ""),
-    )
+    from rag.multi_query import generate_sub_queries
+    questions = generate_sub_queries(state.get("query", ""), n=4)
+    intent = state.get("intent", "macro_sector")
+    ticker = state.get("ticker", "")
+    tickers = [ticker] if ticker else []
+    sub_tasks = [{"intent": intent, "tickers": tickers, "question": q} for q in questions]
     print(f"[decompose] {len(sub_tasks)} sub-tasks:")
     for i, t in enumerate(sub_tasks, 1):
         print(f"  {i}. [{t['intent']}] tickers={t['tickers']} | {t['question'][:80]}")
@@ -646,6 +645,8 @@ def _route_after_clarify(state: AgentState) -> str:
     """Skip decompose for single-ticker leaf-intent queries — saves 1 LLM call + 3 data fetches."""
     intent = state.get("intent", "")
     ticker = state.get("ticker", "")
+    if intent == "market_brief":
+        return "market_brief"
     if (intent
             and intent not in _COMPLEX_INTENTS
             and intent != "conversation"
@@ -702,6 +703,7 @@ def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGra
     g.add_node("classify_node",            classify_node)
     g.add_node("check_cache_node",         check_cache_node)
     g.add_node("clarify_node",             clarify_node)
+    g.add_node("node_market_brief",        node_market_brief)
     g.add_node("build_single_subtask_node", build_single_subtask_node)
     g.add_node("decompose_node",           decompose_node)
     g.add_node("run_subqueries_node",      run_subqueries_node)
@@ -717,7 +719,8 @@ def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGra
     g.add_conditional_edges("check_cache_node", check_cache_hit,
         {"hit": END, "miss": "clarify_node"})
     g.add_conditional_edges("clarify_node", _route_after_clarify,
-        {"simple": "build_single_subtask_node", "decompose": "decompose_node"})
+        {"market_brief": "node_market_brief", "simple": "build_single_subtask_node", "decompose": "decompose_node"})
+    g.add_edge("node_market_brief", "cache_save_node")
     g.add_edge("build_single_subtask_node", "run_subqueries_node")
     g.add_edge("decompose_node",            "run_subqueries_node")
 

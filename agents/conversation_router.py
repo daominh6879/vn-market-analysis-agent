@@ -157,8 +157,38 @@ def llm_route(
                         query=inp.get("query") or query,
                     )
             elif tc.name == "direct_reply":
+                # Verify with classifier — LLM sometimes misuses direct_reply for financial queries.
+                try:
+                    from agents.classifier import classify_hybrid
+                    r = classify_hybrid(query)
+                    if r.intent and r.intent != "conversation":
+                        return RouteResult(
+                            type="agent",
+                            intent=r.intent,
+                            ticker=(r.ticker or "").strip().upper(),
+                            query=query,
+                        )
+                except Exception:
+                    pass
                 return RouteResult(type="text", text=tc.input.get("text", "").strip())
-        # No tool call — LLM replied directly (social/conversational turn)
-        return RouteResult(type="text", text=resp.text.strip())
+        # No tool call — LLM bypassed tools; fail-safe: classify and route to agent.
+        # This prevents LLM hallucinating "I don't have data" answers for financial queries.
+        try:
+            from agents.classifier import classify_hybrid
+            r = classify_hybrid(query)
+            if r.intent and r.intent != "conversation":
+                return RouteResult(
+                    type="agent",
+                    intent=r.intent,
+                    ticker=(r.ticker or "").strip().upper(),
+                    query=query,
+                )
+        except Exception:
+            pass
+        # Genuine conversational turn (classifier says "conversation") or classifier failed
+        text = resp.text.strip()
+        if text:
+            return RouteResult(type="text", text=text)
+        return RouteResult(type="agent", intent="market_brief", query=query)
     except Exception:
         return RouteResult(type="agent", intent="market_brief", query=query)
