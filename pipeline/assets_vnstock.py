@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT))
 from dotenv import load_dotenv
 load_dotenv(ROOT / ".env")
 
-from dagster import AssetExecutionContext, Config, RetryPolicy, ScheduleDefinition, asset, define_asset_job
+from dagster import AssetExecutionContext, Config, DefaultScheduleStatus, RetryPolicy, ScheduleDefinition, asset, define_asset_job
 
 
 # ── Config ─────────────────────────────────────────────────────────────────────
@@ -240,16 +240,22 @@ vnstock_financials_schedule = ScheduleDefinition(
     job=vnstock_financials_job,
     cron_schedule="0 1 1 * *",           # 1st of month 01:00
     name="vnstock_financials_monthly",
+    default_status=DefaultScheduleStatus.RUNNING,
+    execution_timezone="Asia/Ho_Chi_Minh",
 )
 
 vnstock_prices_schedule = ScheduleDefinition(
     job=vnstock_prices_job,
     cron_schedule="0 18 * * 1-5",        # weekdays 18:00 after HoSE close
     name="vnstock_prices_daily",
+    default_status=DefaultScheduleStatus.RUNNING,
+    execution_timezone="Asia/Ho_Chi_Minh",
 )
 
 vnstock_ratios_schedule = ScheduleDefinition(
     job=vnstock_ratios_job,
     cron_schedule="30 18 * * 1-5",       # weekdays 18:30 after prices
     name="vnstock_ratios_daily",
+    default_status=DefaultScheduleStatus.RUNNING,
+    execution_timezone="Asia/Ho_Chi_Minh",
 )

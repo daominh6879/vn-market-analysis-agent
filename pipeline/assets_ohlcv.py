@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT))
 from dotenv import load_dotenv
 load_dotenv(ROOT / ".env")
 
-from dagster import AssetExecutionContext, Config, RetryPolicy, ScheduleDefinition, asset, define_asset_job
+from dagster import AssetExecutionContext, Config, DefaultScheduleStatus, RetryPolicy, ScheduleDefinition, asset, define_asset_job
 
 
 # Fallback: VN30 constituents used only when securities table is empty
@@ -112,4 +112,6 @@ ohlcv_ingest_schedule = ScheduleDefinition(
     job=ohlcv_ingest_job,
     cron_schedule="30 18 * * 1-5",   # weekdays 18:30 after HoSE close
     name="ohlcv_daily_1830",
+    default_status=DefaultScheduleStatus.RUNNING,
+    execution_timezone="Asia/Ho_Chi_Minh",
 )

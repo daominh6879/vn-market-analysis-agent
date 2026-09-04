@@ -18,6 +18,7 @@ from pathlib import Path
 from dagster import (
     AssetExecutionContext,
     Config,
+    DefaultScheduleStatus,
     Definitions,
     RunConfig,
     ScheduleDefinition,
@@ -459,6 +460,8 @@ daily_schedule = ScheduleDefinition(
     job=ingestion_job,
     cron_schedule="0 6 * * *",
     name="daily_ingestion_0600",
+    default_status=DefaultScheduleStatus.RUNNING,
+    execution_timezone="Asia/Ho_Chi_Minh",
 )
 
 news_job = define_asset_job(
@@ -475,12 +478,16 @@ news_schedule = ScheduleDefinition(
     job=news_job,
     cron_schedule="0 */6 * * *",   # every 6h
     name="news_6h",
+    default_status=DefaultScheduleStatus.RUNNING,
+    execution_timezone="Asia/Ho_Chi_Minh",
 )
 
 news_purge_schedule = ScheduleDefinition(
     job=news_purge_job,
     cron_schedule="0 2 * * 0",     # weekly Sunday 02:00
     name="news_purge_weekly",
+    default_status=DefaultScheduleStatus.RUNNING,
+    execution_timezone="Asia/Ho_Chi_Minh",
 )
 
 

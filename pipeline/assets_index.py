@@ -8,7 +8,7 @@ Assets:
 
 from typing import List
 
-from dagster import AssetExecutionContext, Config, ScheduleDefinition, asset, define_asset_job
+from dagster import AssetExecutionContext, Config, DefaultScheduleStatus, ScheduleDefinition, asset, define_asset_job
 
 _VN_INDICES = ["VNINDEX", "HNX", "UPCOM", "VN30", "HNX30"]
 
@@ -163,6 +163,8 @@ market_index_ingest_schedule = ScheduleDefinition(
     job=market_index_ingest_job,
     cron_schedule="0 18 * * 1-5",   # weekdays 18:00, before OHLCV at 18:30
     name="market_index_daily_1800",
+    default_status=DefaultScheduleStatus.RUNNING,
+    execution_timezone="Asia/Ho_Chi_Minh",
 )
 
 

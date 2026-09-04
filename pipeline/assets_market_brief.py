@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT))
 from dotenv import load_dotenv
 load_dotenv(ROOT / ".env")
 
-from dagster import AssetExecutionContext, Config, RetryPolicy, ScheduleDefinition, asset, define_asset_job
+from dagster import AssetExecutionContext, Config, DefaultScheduleStatus, RetryPolicy, ScheduleDefinition, asset, define_asset_job
 
 
 # ── Foreign flows ─────────────────────────────────────────────────────────────
@@ -184,16 +184,22 @@ foreign_flows_schedule = ScheduleDefinition(
     job=foreign_flows_job,
     cron_schedule="30 17 * * 1-5",   # weekdays 17:30 after HoSE close
     name="foreign_flows_1730",
+    default_status=DefaultScheduleStatus.RUNNING,
+    execution_timezone="Asia/Ho_Chi_Minh",
 )
 
 corporate_events_schedule = ScheduleDefinition(
     job=corporate_events_job,
     cron_schedule="0 7 * * 1-5",     # weekdays 07:00
     name="corporate_events_0700",
+    default_status=DefaultScheduleStatus.RUNNING,
+    execution_timezone="Asia/Ho_Chi_Minh",
 )
 
 daily_brief_schedule = ScheduleDefinition(
     job=daily_brief_job,
     cron_schedule="15 7 * * 1-5",    # weekdays 07:15 (after corporate_events at 07:00)
     name="daily_brief_0715",
+    default_status=DefaultScheduleStatus.RUNNING,
+    execution_timezone="Asia/Ho_Chi_Minh",
 )
