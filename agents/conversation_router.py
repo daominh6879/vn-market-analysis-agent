@@ -24,7 +24,13 @@ AGENT_RUN_TOOL: dict = {
         "This includes: new ticker analysis, sector update, market brief, screening, "
         "deeper analysis of previously discussed stocks, or any query that requires fresh market data. "
         "When a follow-up introduces a new subject (e.g., 'what about VCG?', 'còn ngân hàng?'), "
-        "treat it as a fresh analysis request for that subject."
+        "treat it as a fresh analysis request for that subject. "
+        "When a follow-up only asks to continue/deepen the SAME subject (e.g., 'phân tích sâu hơn', "
+        "'phân tích thêm', 'chi tiết hơn', 'more detail', 'elaborate') without naming a new one, "
+        "INHERIT the previous turn's subject AND intent. If the prior turn was about a sector or market "
+        "index (e.g., ngân hàng, chỉ số, VN30), keep intent=macro_sector or market_brief and write a "
+        "self-contained query that names that sector/index. Only use technical_analysis or price_action "
+        "when the prior subject was a single named stock."
     ),
     "input_schema": {
         "type": "object",
@@ -40,9 +46,14 @@ AGENT_RUN_TOOL: dict = {
                     "Use 'market_brief' for broad market overview (VNINDEX, HNX, overall session). "
                     "Use 'screening' for filter/scan queries (ROE > x, P/E < y). "
                     "Use 'investment_case' when asked buy/sell/hold recommendation for a stock. "
-                    "Use 'valuation' for a stock's valuation metric (P/E, P/B, ROE, EPS, EV/EBITDA) "
-                    "or comparing it against sector peers. "
-                    "Use 'rag_qa' for financial-report content (revenue, profit, balance sheet, period figures)."
+                    "Use 'valuation' for a stock's valuation metric (P/E, P/B, ROE, EPS, EV/EBITDA), "
+                    "comparing it against sector peers, or comparing two or more stocks against each other. "
+                    "For a comparison query (so sánh A và B, A vs B, 'giữa A, B'), set ticker to the FIRST "
+                    "ticker and KEEP ALL tickers verbatim in the query field — never drop the 2nd/3rd ticker. "
+                    "Use 'rag_qa' for financial-report content (revenue, profit, balance sheet, period figures). "
+                    "For continuation follow-ups ('phân tích sâu hơn', 'chi tiết hơn', 'more detail') "
+                    "that name no new subject, reuse the prior turn's intent — do NOT default to "
+                    "technical_analysis just because the word 'phân tích' appears."
                 ),
             },
             "ticker": {

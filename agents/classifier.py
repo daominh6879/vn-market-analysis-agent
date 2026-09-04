@@ -48,7 +48,7 @@ Classify the user's message into exactly one intent:
   price_action        — current price, foreign flow, volume, active buy/sell pressure
   technical_analysis  — RSI, MACD, moving averages, support/resistance, chart patterns, trend
   rag_qa              — factual questions about a company's financial report content: revenue, profit, balance sheet, cash flow, specific period figures (e.g. "doanh thu HPG 2024 là bao nhiêu")
-  valuation           — valuation metrics and peer comparison: P/E, P/B, ROE, EPS, EV/EBITDA, or comparing a stock's valuation against its sector peers (e.g. "VCB P/E so với ngành ngân hàng", "ROE của HPG")
+  valuation           — valuation metrics and peer comparison: P/E, P/B, ROE, EPS, EV/EBITDA, comparing a stock's valuation against its sector peers (e.g. "VCB P/E so với ngành ngân hàng", "ROE của HPG"), or comparing two or more stocks against each other (e.g. "so sánh BID và CTG", "HPG vs VCB")
   macro_sector        — FX rates, oil/steel/commodity prices, interest rates, or a pure sector overview with NO specific stock valuation metric (P/E, P/B, ROE, EPS)
   news_sentiment      — news, community sentiment, analyst commentary, market buzz around a stock
   investment_case     — buy/sell/hold recommendation, bull/bear thesis, comprehensive analysis
@@ -64,6 +64,7 @@ Rules:
 - A query asking for a valuation metric (P/E, P/B, ROE, EPS, EV/EBITDA) of a company, or comparing it against its sector → valuation
 - A query asking about financial-report content (revenue, profit, balance sheet, specific period figures) → rag_qa
 - A query asking a stock's valuation metric (P/E, P/B, ROE, EPS) versus its sector → valuation, NOT macro_sector. A sector word ("ngành ngân hàng") does not override a metric keyword ("P/E").
+- A query comparing two or more tickers/companies (e.g. "so sánh BID và CTG", "HPG vs VCB", "giữa A, B") → valuation, even when no specific metric is named.
 - English or mixed-language queries follow the same rules — look at meaning, not language
 - Time words do NOT change intent — classify by the financial action, not the time
 - If the query mentions a Vietnamese company by name (not ticker), use your knowledge of
@@ -88,7 +89,8 @@ _TOOL = {
                     "with no specific stock valuation metric. "
                     "If the query names a stock and a valuation metric (P/E, P/B, ROE, EPS) "
                     "against the sector, classify as 'valuation', not 'macro_sector'. "
-                    "Use 'valuation' for a stock's valuation metric (P/E, P/B, ROE, EPS) or comparing it to sector peers. "
+                    "Use 'valuation' for a stock's valuation metric (P/E, P/B, ROE, EPS), comparing it to sector peers, "
+                    "or comparing two or more stocks against each other (so sánh A và B, A vs B). "
                     "Use 'rag_qa' for financial-report content (revenue, profit, balance sheet). "
                     "Use 'price_action' only for a single stock's price/volume action. "
                     "Use 'market_brief' for broad market overview (VNINDEX, HNX, overall session). "

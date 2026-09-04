@@ -932,18 +932,30 @@ def build_single_subtask_node(state: AgentState) -> dict:
     intent = state.get("intent", "macro_sector")
     ticker = state.get("ticker", "")
     query = state.get("query", "")
+    original = state.get("original_query", "")
+
+    # Multi-ticker comparison: the LLM-expanded `query` may drop the 2nd/3rd ticker.
+    # original_query is verbatim — when it names ≥2 known tickers, prefer it so
+    # gather_data (e.g. valuation) can cross-compare both.
+    if len(_extract_query_tickers(query)) < 2:
+        if len(_extract_query_tickers(original)) >= 2:
+            query = original
+
+    tickers = _extract_query_tickers(query) or ([ticker] if ticker else [])
+
     try:
         from tracing import get_tracer
         get_tracer().event("gate", {
             "node": "fast_path",
             "intent": intent,
             "ticker": ticker,
+            "tickers": tickers,
             "query": query[:80],
         })
     except Exception:
         pass
     return {
-        "sub_tasks": [{"intent": intent, "tickers": [ticker] if ticker else [], "question": query}],
+        "sub_tasks": [{"intent": intent, "tickers": tickers, "question": query}],
         "iteration": 0,
     }
 
