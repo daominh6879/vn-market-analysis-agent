@@ -61,7 +61,7 @@ class AgentState(TypedDict, total=False):
     # Cache (set by check_cache_node / cache_save_node inside graph)
     _cache_hit: bool
     _cache_tier: str
-    _cache_key: object       # CacheKey instance or None
+    _cache_key: dict         # CacheKey.model_dump() or None — serializable, not the Pydantic object
     # Self-critique loop (synthesize_final → critique_report_node)
     critique_pass: bool      # verdict from critique_report_node
     critique_feedback: str   # feedback folded into synthesize retry

@@ -173,8 +173,8 @@ def check_cache_node(state: AgentState) -> dict:
             )
         except Exception:
             pass
-        return {"report": hit, "_cache_hit": True, "_cache_tier": tier, "_cache_key": ck}
-    return {"_cache_key": ck, "_cache_hit": False}
+        return {"report": hit, "_cache_hit": True, "_cache_tier": tier, "_cache_key": ck.model_dump()}
+    return {"_cache_key": ck.model_dump(), "_cache_hit": False}
 
 
 def check_cache_hit(state: AgentState) -> str:
@@ -539,8 +539,8 @@ def cache_save_node(state: AgentState) -> dict:
     ck = state.get("_cache_key")
     report = state.get("report") or ""
     if ck and report and not state.get("_cache_hit"):
-        from core.cache import cache_set
-        cache_set(ck, report)
+        from core.cache import CacheKey, cache_set
+        cache_set(CacheKey(**ck), report)
     try:
         from tracing import get_tracer
         get_tracer().turn_end(
