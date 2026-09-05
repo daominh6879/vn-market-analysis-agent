@@ -41,6 +41,12 @@ def _snapshot_ts(snap) -> datetime | None:
     """
     ts = getattr(snap, "created_at", None)
     if ts is not None:
+        # LangGraph >=0.3 returns created_at as an ISO string, not a datetime.
+        if isinstance(ts, str):
+            try:
+                return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except Exception:
+                return None
         if getattr(ts, "tzinfo", None) is None:
             ts = ts.replace(tzinfo=timezone.utc)
         return ts

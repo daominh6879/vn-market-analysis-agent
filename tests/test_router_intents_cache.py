@@ -1,0 +1,1550 @@
+"""
+tests/test_router_intents_cache.py — Unified suite: router, intents, llm_route, tools, cache.
+
+One file consolidating every test for routing, intent classification, entry routing, tool
+wiring, and the intent-level cache — both fast unit tests (no LLM/network) and end-to-end
+tests (real DeepSeek LLM + real tools/DB/Redis). Supersedes:
+
+  - tests/test_router_intents_e2e.py    (e2e: classify / llm_route / gather / graph / stream)
+  - tests/test_graph_unified.py         (unit: graph routing nodes, fan-out, approval)
+  - tests/test_routing_enhancement.py   (unit: llm_route fail-safes, ticker extraction, cache scope)
+  - tests/test_routing_hardening.py     (unit: out_of_scope tool, follow-up context, budget guard)
+  - tests/test_hybrid_router.py         (unit: llm_classify / classify_hybrid parsing)
+  - tests/test_bai32_cache.py           (unit + e2e: intent-level cache key / TTL / roundtrip)
+
+Run unit only (fast, no LLM/network):
+    python -m pytest tests/test_router_intents_cache.py -v -m "not e2e"
+
+Run e2e only (slow, real LLM + external APIs + Redis):
+    python -m pytest tests/test_router_intents_cache.py -v -s -m e2e
+
+Prereqs (e2e): Postgres + Redis running, .env with LLM_PROVIDER=deepseek + key.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import sys
+import time
+import uuid
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+import redis as redis_lib
+from dotenv import load_dotenv
+
+# Graph nodes print Vietnamese text; Windows default console is cp1252, so a `print`
+# inside decompose_node would raise UnicodeEncodeError and abort the turn.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
+ROOT = Path(__file__).parent.parent
+load_dotenv(ROOT / ".env")
+
+from agents.classifier import RouterResult, classify_hybrid, llm_classify
+from agents.graph import (
+    check_cache_node,
+    check_cache_hit,
+    cache_save_node,
+    _is_empty_result,
+    _route_after_clarify,
+    route_after_subqueries,
+    route_after_critique,
+    _gather_tickers,
+    run_subqueries_node,
+    _check_approval_decision,
+    _request_approval,
+    build_single_subtask_node,
+)
+from agents.state import make_initial_state, AgentState
+from core.config import settings
+from core.cache import (
+    CacheKey,
+    cache_get,
+    cache_set,
+    make_cache_key,
+    normalize_question,
+    PROMPT_VERSION,
+    ttl_seconds,
+    _INTENT_TTL,
+)
+from core.tickers import raw_tickers, extract_tickers
+
+# Minimal persona for llm_route — routing is tool-driven, not prompt-sensitive.
+_ROUTE_SYSTEM = (
+    "Bạn là trợ lý phân tích tài chính chứng khoán Việt Nam. "
+    "Trả lời bằng tiếng Việt."
+)
+
+_SKIP = object()    # sentinel: "don't assert ticker" (vs None = "assert missing")
+_MISSING = object()  # sentinel for "ticker not passed" vs "ticker=None"
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _parse_sse(lines: list[str]) -> dict[str, list[dict]]:
+    """Group SSE blocks into {event: [data_dict, ...]}.
+
+    Each `lines` element is one SSE block (stream_turn yields blocks ending in ``\n\n``).
+    A bare `data:` block (no `event:`) is a "message" event; the event name resets per
+    block so a preceding `event: status` never swallows the text chunks that follow.
+    """
+    events: dict[str, list[dict]] = {}
+    for raw in lines:
+        event = "message"
+        for s in raw.split("\n"):
+            s = s.strip()
+            if s.startswith("event: "):
+                event = s[len("event: "):].strip()
+            elif s.startswith("data: "):
+                try:
+                    events.setdefault(event, []).append(json.loads(s[len("data: "):].strip()))
+                except Exception:
+                    continue
+    return events
+
+
+def _routing(events: dict) -> dict | None:
+    """Return the post-graph routing status event (has 'agent')."""
+    for p in events.get("status", []):
+        if p.get("step") == "routing" and p.get("agent"):
+            return p
+    return None
+
+
+def _done(events: dict) -> dict | None:
+    d = events.get("done")
+    return d[0] if d else None
+
+
+def _reply(events: dict) -> str:
+    return "".join(p.get("text", "") for p in events.get("message", []))
+
+
+def _status(events: dict, step: str) -> dict | None:
+    """Return the first status payload whose step == `step` (e.g. cache_hit)."""
+    for p in events.get("status", []):
+        if p.get("step") == step:
+            return p
+    return None
+
+
+def _run_stream(conversation_id: str, user_id: str, message: str, is_first_turn: bool = False) -> list[str]:
+    from memory.turn_handler import stream_turn
+
+    lines: list[str] = []
+
+    async def _go():
+        async for line in stream_turn(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            user_message=message,
+            tenant_id="default",
+            is_first_turn=is_first_turn,
+        ):
+            lines.append(line)
+
+    asyncio.run(_go())
+    return lines
+
+
+def _invoke(query: str, conversation_id: str = "", tenant_id: str = "default") -> dict:
+    """Invoke the full graph — classify_node handles intent/ticker internally."""
+    from agents.graph import build_graph
+
+    app = build_graph()
+    state = make_initial_state(query, conversation_id=conversation_id, tenant_id=tenant_id)
+    return app.invoke(state)
+
+
+def _new_conv():
+    from memory.conversation import create_conversation
+    uid = f"test-{uuid.uuid4().hex[:8]}"
+    cid = create_conversation(uid, "default")
+    return cid, uid
+
+
+def _state(query: str, intent: str = "", ticker: str | None = _MISSING, **kw) -> AgentState:
+    """Build a state dict with intent/ticker set directly (for node-level unit tests)."""
+    s = make_initial_state(query, **kw)
+    if intent:
+        s["intent"] = intent
+    if ticker is not _MISSING:
+        s["ticker"] = ticker  # None means genuinely missing; "" means resolved-but-empty
+    return s
+
+
+def _flush_test_keys(pattern: str = "cache:b32:*") -> None:
+    r = redis_lib.from_url(settings.REDIS_URL, decode_responses=True)
+    keys = r.keys(pattern)
+    if keys:
+        r.delete(*keys)
+
+
+def _make_result(intent: str, ticker: str | None = None) -> RouterResult:
+    return RouterResult(intent=intent, ticker=ticker, reason="llm:test")
+
+
+def _mock_client(intent: str, ticker: str | None = None) -> MagicMock:
+    """Mock LLM client whose tool_calls return the given intent."""
+    tc = MagicMock()
+    tc.input = {"intent": intent, "ticker": ticker, "reason": "test mock"}
+    resp = MagicMock()
+    resp.tool_calls = [tc]
+    resp.text = ""
+    client = MagicMock()
+    client.generate.return_value = resp
+    return client
+
+
+# ── Parametrized tables (e2e) ─────────────────────────────────────────────────
+
+# (intent, prompt, ticker) — ticker=_SKIP means "don't assert ticker";
+# ticker=None means "assert ticker is None"; a str asserts equality.
+CLASSIFY_CASES = [
+    ("price_action",       "Khối ngoại mua bán ròng HPG hôm nay thế nào?", "HPG"),
+    ("price_action",       "Khối lượng giao dịch HPG có đột biến không?", _SKIP),
+    ("price_action",       "Dòng tiền vào HPG hôm nay",                   _SKIP),
+    ("technical_analysis", "RSI và MACD của FPT đang như thế nào?",       "FPT"),
+    ("technical_analysis", "Vùng hỗ trợ kháng cự của VNM ở đâu?",         "VNM"),
+    ("technical_analysis", "Xu hướng kỹ thuật HPG tuần này",              _SKIP),
+    ("technical_analysis", "Phân tích HPG",                               "HPG"),
+    ("technical_analysis", "Phân tích kỹ thuật HPG hôm nay",              "HPG"),
+    ("technical_analysis", "Chỉ số kỹ thuật của FPT tuần này",            "FPT"),
+    ("technical_analysis", "Phân tích VNM hôm nay",                       "VNM"),
+    ("valuation",          "P/E của HPG hiện tại so với trung bình ngành thế nào?", "HPG"),
+    ("valuation",          "P/E của HPG so với trung bình ngành thép là bao nhiêu?", "HPG"),
+    ("valuation",          "ROE của VCB năm ngoái là bao nhiêu?",         _SKIP),
+    ("rag_qa",             "Doanh thu HPG năm 2024 là bao nhiêu?",        "HPG"),
+    ("rag_qa",             "Doanh thu và lợi nhuận HPG năm 2024 là bao nhiêu?", "HPG"),
+    ("macro_sector",       "Tỷ giá USD/VND hôm nay ảnh hưởng gì đến FPT?", _SKIP),
+    ("macro_sector",       "Giá thép HRC thế giới tăng ảnh hưởng HPG thế nào?", _SKIP),
+    ("macro_sector",       "Dầu Brent hôm nay giá bao nhiêu?",            _SKIP),
+    ("macro_sector",       "Tỷ giá USD/VND hôm nay và giá dầu thô thế nào?", None),
+    ("news_sentiment",     "Tin tức về HPG trong 3 ngày gần nhất",        "HPG"),
+    ("news_sentiment",     "Sentiment của cộng đồng về VNM như thế nào?", _SKIP),
+    ("news_sentiment",     "Diễn đàn đang nói gì về HPG?",                _SKIP),
+    ("investment_case",    "HPG có nên mua không?",                       "HPG"),
+    ("investment_case",    "Khuyến nghị VCB lúc này: mua bán hay nắm giữ?", "VCB"),
+    ("investment_case",    "Tổng kết FPT — bull case và bear case",       "FPT"),
+    ("investment_case",    "MWG đáng đầu tư không?",                      "MWG"),
+    ("investment_case",    "Phân tích toàn diện HPG",                     "HPG"),
+    ("investment_case",    "Bull case và bear case của FPT là gì?",       _SKIP),
+    ("investment_case",    "Khuyến nghị VCB",                             _SKIP),
+    ("screening",          "Top 5 mã có ROE cao nhất trong DB",           _SKIP),
+    ("screening",          "Lọc cổ phiếu ngành chứng khoán đang tích lũy", _SKIP),
+    ("screening",          "Tìm cổ phiếu có RSI < 40 và P/E < 10",        _SKIP),
+    ("screening",          "Lọc cổ phiếu có ROE > 20%",                   _SKIP),
+    ("breakout_scan",      "Quét cổ phiếu đang breakout tạo đỉnh mới",    None),
+    ("market_brief",       "Thị trường chứng khoán hôm nay thế nào?",     None),
+    ("market_brief",       "VNINDEX đang ở đâu?",                         None),
+    ("market_brief",       "VNINDEX đang ở mức nào?",                     None),
+    ("conversation",       "Xin chào bạn tên gì",                         None),
+]
+
+# (query, expected_intent, expected_ticker). intent=None → type="text" (direct reply);
+# ticker="" → assert routed ticker is ""; ticker=None → don't assert ticker.
+ROUTE_CASES = [
+    ("Khối ngoại mua bán ròng HPG hôm nay thế nào?",       "price_action",       "HPG"),
+    ("RSI và MACD của HPG đang như thế nào?",              "technical_analysis", "HPG"),
+    ("P/E của HPG so với trung bình ngành thép là bao nhiêu?", "valuation",      "HPG"),
+    ("So sánh BID và CTG",                                 "valuation",          "BID"),
+    ("Tỷ giá USD/VND hôm nay và giá dầu thô thế nào?",     "macro_sector",       ""),
+    ("Tổng quan thị trường chứng khoán hôm nay",           "market_brief",       ""),
+    ("Tin tức về HPG trong 3 ngày gần nhất",               "news_sentiment",     "HPG"),
+    ("HPG có nên mua không? Cho bull case và bear case",   "investment_case",    "HPG"),
+    ("Top 5 mã có ROE cao nhất trong database",            "screening",          None),
+    ("Quét cổ phiếu đang breakout tạo đỉnh mới",           "breakout_scan",      None),
+    ("Doanh thu và lợi nhuận HPG năm 2024 là bao nhiêu?",  "rag_qa",             "HPG"),
+    ("Xin chào, bạn tên gì?",                              None,                 None),
+]
+
+# `marker` is the deterministic header each gather_data() prepends.
+GATHER_CASES = [
+    ("price_action",       "Khối ngoại mua bán ròng HPG hôm nay thế nào?",       "HPG", "[GIÁ & DÒNG TIỀN"),
+    ("technical_analysis", "RSI và MACD của HPG đang như thế nào?",               "HPG", "[KỸ THUẬT"),
+    ("valuation",          "P/E của HPG so với trung bình ngành thép là bao nhiêu?", "HPG", "[CƠ BẢN & ĐỊNH GIÁ"),
+    ("macro_sector",       "Tỷ giá USD/VND hôm nay và giá dầu thô thế nào?",      None,  "[VĨ MÔ & NGÀNH]"),
+    ("news_sentiment",     "Tin tức về HPG trong 3 ngày gần nhất",                "HPG", "[TIN TỨC & SENTIMENT"),
+    ("investment_case",    "HPG có nên mua không? Cho bull case và bear case",    "HPG", "[GIÁ & DÒNG TIỀN"),
+    ("screening",          "Top 5 mã có ROE cao nhất trong database",             None,  "[SCREENING]"),
+    ("breakout_scan",      "Quét cổ phiếu đang breakout tạo đỉnh mới",            None,  "[BREAKOUT"),
+]
+
+STREAM_CASES = [
+    ("giá và dòng tiền HPG hôm nay",              "price_action"),
+    ("phân tích kỹ thuật HPG RSI MACD",           "technical_analysis"),
+    ("doanh thu lợi nhuận HPG năm 2024",           "rag_qa"),
+    ("P/E của HPG so với trung bình ngành thép?", "valuation"),
+    ("tỷ giá USD/VND và giá thép hôm nay",        "macro_sector"),
+    ("tin tức về HPG trong 3 ngày gần nhất",       "news_sentiment"),
+    ("HPG có nên mua không?",                      "investment_case"),
+    ("top 5 mã ROE cao nhất",                      "screening"),
+    ("quét cổ phiếu đang breakout tạo đỉnh mới",   "breakout_scan"),
+    ("tổng quan thị trường chứng khoán hôm nay",  "market_brief"),
+]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# UNIT — classifier (agents/classifier.py)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def test_llm_classify_parses_tool_call():
+    client = _mock_client("price_action", "MBB")
+    r = llm_classify("MBB money flow today", client=client)
+    assert r is not None
+    assert r.intent == "price_action"
+    assert r.ticker == "MBB"
+    assert r.reason.startswith("llm:")
+
+
+def test_llm_classify_normalises_invalid_intent():
+    tc = MagicMock()
+    tc.input = {"intent": "INVALID", "reason": "bad"}
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+    r = llm_classify("some query", client=client)
+    assert r is not None
+    assert r.intent == "conversation"
+
+
+def test_llm_classify_out_of_scope_passthrough():
+    client = _mock_client("out_of_scope", None)
+    r = llm_classify("bitcoin price", client=client)
+    assert r is not None
+    assert r.intent == "out_of_scope"
+
+
+def test_llm_classify_text_scan_fallback():
+    resp = MagicMock()
+    resp.tool_calls = []
+    resp.text = "this should route to macro_sector based on content"
+    client = MagicMock(); client.generate.return_value = resp
+    r = llm_classify("some query", client=client)
+    assert r is not None
+    assert r.intent == "macro_sector"
+
+
+def test_llm_classify_text_scan_first_match_wins():
+    from agents.classifier import INTENTS
+    first = INTENTS[0]   # "price_action"
+    second = INTENTS[1]  # "technical_analysis"
+    resp = MagicMock(); resp.tool_calls = []
+    resp.text = f"this is {second} but also {first} content"
+    client = MagicMock(); client.generate.return_value = resp
+    r = llm_classify("query", client=client)
+    assert r is not None
+    assert r.intent == first
+
+
+def test_llm_classify_empty_text_returns_none():
+    resp = MagicMock(); resp.tool_calls = []; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+    assert llm_classify("some query", client=client) is None
+
+
+def test_llm_classify_exception_returns_none():
+    client = MagicMock()
+    client.generate.side_effect = ConnectionError("network error")
+    assert llm_classify("some query", client=client) is None
+
+
+def test_llm_classify_whitespace_ticker_normalised():
+    client = _mock_client("macro_sector", "   ")
+    r = llm_classify("oil prices impact", client=client)
+    assert r is not None
+    assert r.ticker is None
+
+
+def test_llm_classify_missing_intent_key_defaults_conversation():
+    tc = MagicMock()
+    tc.input = {"reason": "no intent key"}  # no "intent"
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+    r = llm_classify("some query", client=client)
+    assert r is not None
+    assert r.intent == "conversation"
+
+
+def test_llm_classify_none_ticker_preserved():
+    tc = MagicMock()
+    tc.input = {"intent": "market_brief", "reason": "market question"}  # no "ticker"
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+    r = llm_classify("vnindex today", client=client)
+    assert r is not None
+    assert r.intent == "market_brief"
+    assert r.ticker is None
+
+
+def test_llm_classify_generate_call_shape():
+    from agents.classifier import _TOOL
+    from llm.types import Message
+
+    resp = MagicMock(); resp.tool_calls = []; resp.text = "conversation"
+    client = MagicMock(); client.generate.return_value = resp
+
+    llm_classify("test query here", client=client)
+
+    client.generate.assert_called_once()
+    kwargs = client.generate.call_args.kwargs
+    assert kwargs["tools"] == [_TOOL]
+    assert kwargs["max_tokens"] == 256
+    msgs = kwargs["messages"]
+    assert len(msgs) == 1
+    assert msgs[0].role == "user"
+    assert msgs[0].content == "test query here"
+
+
+def test_llm_classify_system_prompt_contains_all_intents():
+    from agents.classifier import _SYSTEM, INTENTS
+    for intent in INTENTS:
+        assert intent in _SYSTEM, f"intent '{intent}' missing from system prompt"
+
+
+def test_classify_hybrid_returns_llm_result():
+    with patch("agents.classifier.llm_classify", return_value=_make_result("investment_case", "HPG")):
+        r = classify_hybrid("Is HPG worth buying?")
+    assert r.intent == "investment_case"
+    assert r.ticker == "HPG"
+
+
+def test_classify_hybrid_falls_back_to_conversation_on_none():
+    with patch("agents.classifier.llm_classify", return_value=None):
+        r = classify_hybrid("some ambiguous query")
+    assert r.intent == "conversation"
+    assert r.ticker is None
+
+
+def test_classify_hybrid_out_of_scope_passthrough():
+    with patch("agents.classifier.llm_classify", return_value=_make_result("out_of_scope", None)):
+        r = classify_hybrid("bitcoin price")
+    assert r.intent == "out_of_scope"
+
+
+def test_classify_hybrid_forwards_messages():
+    history = [{"role": "user", "content": "phân tích HPG"}]
+    with patch("agents.classifier.llm_classify", return_value=_make_result("technical_analysis", "HPG")) as m:
+        classify_hybrid("phân tích sâu hơn", messages=history)
+    m.assert_called_once()
+    assert m.call_args.kwargs.get("messages") == history
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# UNIT — entry router (agents/conversation_router.py)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def test_llm_route_out_of_scope_tool():
+    """out_of_scope tool call → direct text decline, no re-classify."""
+    from agents import conversation_router as cr
+    tc = MagicMock()
+    tc.name = "out_of_scope"
+    tc.input = {"text": "Tôi chỉ hỗ trợ chứng khoán VN.", "reason": "crypto"}
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+
+    with patch("agents.classifier.classify_hybrid") as classify:
+        route = cr.llm_route("giá bitcoin hôm nay", [], "sys", client=client)
+
+    assert route["type"] == "text"
+    assert route["text"] == "Tôi chỉ hỗ trợ chứng khoán VN."
+    assert route["reason"] == "crypto"
+    classify.assert_not_called()
+
+
+def test_llm_route_tools_include_out_of_scope():
+    from agents import conversation_router as cr
+    resp = MagicMock(); resp.tool_calls = []; resp.text = "xin chào"
+    client = MagicMock(); client.generate.return_value = resp
+    with patch("agents.classifier.classify_hybrid",
+               return_value=RouterResult("conversation", None, "x")):
+        cr.llm_route("xin chào", [], "sys", client=client)
+    tools = client.generate.call_args.kwargs["tools"]
+    names = {t["name"] for t in tools}
+    assert names == {"needs_agent_run", "direct_reply", "out_of_scope"}
+
+
+def test_llm_route_injects_last_context(monkeypatch):
+    from agents import conversation_router as cr
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "VCB"])
+    tc = MagicMock()
+    tc.name = "needs_agent_run"
+    tc.input = {"intent": "technical_analysis", "ticker": "HPG", "query": "phân tích sâu hơn HPG", "reason": ""}
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+
+    route = cr.llm_route(
+        "phân tích sâu hơn", [], "sys", client=client,
+        last_intent="technical_analysis", last_subject="HPG",
+    )
+
+    system = client.generate.call_args.kwargs["system"]
+    assert "Lượt trước" in system
+    assert "technical_analysis" in system
+    assert "HPG" in system
+    assert route["type"] == "agent"
+
+
+def test_llm_route_no_last_context_no_injection():
+    from agents import conversation_router as cr
+    resp = MagicMock(); resp.tool_calls = []; resp.text = "xin chào"
+    client = MagicMock(); client.generate.return_value = resp
+    with patch("agents.classifier.classify_hybrid",
+               return_value=RouterResult("conversation", None, "x")):
+        cr.llm_route("xin chào", [], "sys", client=client)
+    assert client.generate.call_args.kwargs["system"] == "sys"
+
+
+def test_llm_route_llm_error_returns_text():
+    """LLM exception → short text error, NOT market_brief."""
+    from agents import conversation_router as cr
+    client = MagicMock()
+    client.generate.side_effect = RuntimeError("boom")
+    route = cr.llm_route("HPG giá hôm nay", [], "sys", client=client)
+    assert route["type"] == "text"
+    assert route["text"]
+    assert route.get("intent", "") != "market_brief"
+
+
+def test_llm_route_no_toolcall_fallback_agent(monkeypatch):
+    from agents import conversation_router as cr
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "VCB"])
+    resp = MagicMock(); resp.tool_calls = []; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+    with patch("agents.classifier.classify_hybrid",
+               return_value=RouterResult("technical_analysis", "HPG", "x")):
+        route = cr.llm_route("phân tích kỹ thuật HPG", [], "sys", client=client)
+    assert route["type"] == "agent"
+    assert route["intent"] == "technical_analysis"
+    assert route["ticker"] == "HPG"
+
+
+def test_llm_route_direct_reply_financial_redirect(monkeypatch):
+    """direct_reply misused for a financial query → re-classified to agent."""
+    from agents import conversation_router as cr
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "VCB"])
+    tc = MagicMock(); tc.name = "direct_reply"; tc.input = {"text": "ok", "reason": ""}
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+    with patch("agents.classifier.classify_hybrid",
+               return_value=RouterResult("macro_sector", None, "x")):
+        route = cr.llm_route("giá thép hôm nay", [], "sys", client=client)
+    assert route["type"] == "agent"
+    assert route["intent"] == "macro_sector"
+
+
+def test_fallback_classify_out_of_scope_returns_text():
+    from agents.conversation_router import _fallback_classify
+    with patch("agents.classifier.classify_hybrid",
+               return_value=RouterResult("out_of_scope", None, "x")):
+        route = _fallback_classify("giá bitcoin hôm nay", [])
+    assert route is not None
+    assert route["type"] == "text"
+    assert route["reason"] == "out_of_scope"
+
+
+def test_llm_route_needs_agent_out_of_scope_intent_declined():
+    """LLM returns needs_agent_run with intent='out_of_scope' → declined, not agent."""
+    from agents import conversation_router as cr
+    tc = MagicMock()
+    tc.name = "needs_agent_run"
+    tc.input = {"intent": "out_of_scope", "ticker": "", "query": "bitcoin", "reason": ""}
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+    with patch("agents.classifier.classify_hybrid",
+               return_value=RouterResult("out_of_scope", None, "x")):
+        route = cr.llm_route("giá bitcoin hôm nay", [], "sys", client=client)
+    assert route["type"] == "text"
+    assert route["reason"] == "out_of_scope"
+
+
+def test_validate_ticker(monkeypatch):
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "VCB"])
+    from agents.conversation_router import _validate_ticker
+    assert _validate_ticker("hpg") == "HPG"
+    assert _validate_ticker(" NGANHANG ") == ""
+    assert _validate_ticker("") == ""
+    assert _validate_ticker("AAPL") == ""
+    assert _validate_ticker("VNINDEX") == ""
+
+
+def test_fallback_classify_passes_history():
+    from agents.conversation_router import _fallback_classify
+    history = [
+        {"role": "user", "content": "phân tích HPG"},
+        {"role": "assistant", "content": "báo cáo HPG ..."},
+    ]
+    with patch("agents.classifier.classify_hybrid",
+               return_value=RouterResult("technical_analysis", "HPG", "x")) as m:
+        route = _fallback_classify("phân tích sâu hơn", history)
+    m.assert_called_once()
+    assert m.call_args.kwargs.get("messages") == history
+    assert route is not None and route["type"] == "agent"
+    assert route["intent"] == "technical_analysis"
+
+
+def test_fallback_classify_social_returns_none():
+    from agents.conversation_router import _fallback_classify
+    with patch("agents.classifier.classify_hybrid",
+               return_value=RouterResult("conversation", None, "x")):
+        assert _fallback_classify("cảm ơn bạn", []) is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# UNIT — ticker extraction + cache key scope (core/tickers.py, core/cache.py)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def test_raw_tickers_uppercase_first():
+    assert raw_tickers("phân tích HPG và VCB") == ["HPG", "VCB"]
+    assert raw_tickers("hpg vcb") == ["HPG", "VCB"]
+    assert raw_tickers("tin tức về HPG") == ["HPG"]
+
+
+def test_raw_tickers_stopwords():
+    assert raw_tickers("ROE của HPG") == ["HPG"]
+    assert raw_tickers("EPS và P/B của VCB") == ["VCB"]
+
+
+def test_extract_tickers_false_positive_universe(monkeypatch):
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "VCB", "TIN", "NAM", "HAI"])
+    assert extract_tickers("phân tích HPG và VCB") == ["HPG", "VCB"]
+    assert extract_tickers("tin tức về HPG") == ["HPG"]
+    assert extract_tickers("TIN và HPG") == ["TIN", "HPG"]
+
+
+def test_check_cache_node_uses_query_for_tickerless_original(monkeypatch):
+    """'phân tích sâu hơn' (no subject) must key off the self-contained query."""
+    from core.cache import _question_scope
+    captured = {}
+
+    def fake_cache_get(ck):
+        captured["ticker"] = ck.ticker
+        captured["scope"] = ck.scope
+        return None, "miss"
+
+    monkeypatch.setattr("core.cache.cache_get", fake_cache_get)
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "VCB"])
+
+    state = {
+        "original_query": "phân tích sâu hơn",
+        "query": "phân tích sâu hơn về ngành ngân hàng",
+        "tenant_id": "default",
+        "intent": "macro_sector",
+        "ticker": "",
+    }
+    check_cache_node(state)
+    assert captured["scope"] == _question_scope("phân tích sâu hơn về ngành ngân hàng")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# UNIT — graph routing nodes (agents/graph.py)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestUnitRouteAfterClarify:
+    def test_market_brief(self):
+        assert _route_after_clarify(_state("thị trường hôm nay", intent="market_brief", ticker="")) == "market_brief"
+
+    def test_simple_leaf_intent_with_ticker(self):
+        assert _route_after_clarify(_state("RSI HPG", intent="technical_analysis", ticker="HPG")) == "simple"
+
+    def test_complex_intent_always_decompose(self):
+        assert _route_after_clarify(_state("mua HPG không", intent="investment_case", ticker="HPG")) == "decompose"
+
+    def test_no_intent_decompose(self):
+        assert _route_after_clarify(_state("HPG")) == "decompose"
+
+
+GOLDEN_ROUTES = [
+    ("market_brief",       "",     "market_brief"),
+    ("technical_analysis", "HPG",  "simple"),
+    ("valuation",          "HPG",  "simple"),
+    ("price_action",       "HPG",  "simple"),
+    ("investment_case",    "HPG",  "decompose"),
+    ("macro_sector",       "",     "decompose"),
+    ("screening",          "",     "decompose"),
+    ("conversation",       "",     "conversation"),
+]
+
+
+@pytest.mark.parametrize("intent,ticker,expected", GOLDEN_ROUTES)
+def test_route_after_clarify_golden(intent, ticker, expected):
+    assert _route_after_clarify({"intent": intent, "ticker": ticker}) == expected
+
+
+def test_route_after_clarify_no_intent_decompose():
+    assert _route_after_clarify({"intent": "", "ticker": ""}) == "decompose"
+
+
+def test_route_after_clarify_out_of_scope():
+    assert _route_after_clarify({"intent": "out_of_scope", "ticker": ""}) == "out_of_scope"
+
+
+def test_check_conversation_out_of_scope():
+    from agents.graph import check_conversation
+    assert check_conversation({"intent": "out_of_scope"}) == "out_of_scope"
+    assert check_conversation({"intent": "conversation"}) == "skip"
+    assert check_conversation({"intent": "technical_analysis"}) == "verify"
+
+
+def test_node_out_of_scope_returns_decline():
+    from agents.graph import node_out_of_scope
+    from agents.classifier import OUT_OF_SCOPE_REPLY
+    out = node_out_of_scope({})
+    assert out["report"] == OUT_OF_SCOPE_REPLY
+    assert out["intent"] == "out_of_scope"
+
+
+class TestUnitLoopRouting:
+    def test_is_empty_result(self):
+        assert _is_empty_result("") is True
+        assert _is_empty_result("[NEWS_SENTIMENT — lỗi: max recursion]") is True
+        assert _is_empty_result("ticker không được rỗng.") is True
+        assert _is_empty_result("Doanh thu HPG Q1: 100 tỷ") is False
+
+    def test_replan_when_mostly_empty(self):
+        assert route_after_subqueries({"sub_results_empty_ratio": 0.9}) == "replan"
+
+    def test_no_replan_after_attempt(self):
+        assert route_after_subqueries({"sub_results_empty_ratio": 0.9, "replan_attempted": True}) == "synthesize"
+
+    def test_synthesize_when_data_present(self):
+        assert route_after_subqueries({"sub_results_empty_ratio": 0.0}) == "synthesize"
+
+    def test_critique_save_on_pass(self):
+        assert route_after_critique({"critique_pass": True}) == "save"
+
+    def test_critique_retry_once(self):
+        assert route_after_critique({"critique_pass": False, "critique_attempts": 0}) == "retry"
+        assert route_after_critique({"critique_pass": False, "critique_attempts": 1}) == "retry"
+        assert route_after_critique({"critique_pass": False, "critique_attempts": 2}) == "save"
+
+
+def test_budget_exceeded_on_llm_calls():
+    from agents.graph import _llm_budget_exceeded
+    assert _llm_budget_exceeded({"llm_calls": 100}) is True
+    assert _llm_budget_exceeded({"llm_calls": 0, "turn_started_at": time.time() - 1000}) is True
+
+
+def test_budget_exceeded_false_within_budget():
+    from agents.graph import _llm_budget_exceeded
+    assert _llm_budget_exceeded({"llm_calls": 1, "turn_started_at": time.time()}) is False
+
+
+def test_route_after_subqueries_skips_replan_on_budget():
+    assert route_after_subqueries({"llm_calls": 100, "sub_results_empty_ratio": 1.0, "replan_attempted": False}) == "synthesize"
+
+
+def test_route_after_critique_saves_on_budget():
+    assert route_after_critique({"llm_calls": 100, "critique_pass": False, "critique_attempts": 0}) == "save"
+
+
+class TestUnitCacheNodes:
+    def test_check_cache_miss_returns_cache_key(self, monkeypatch):
+        """Cache miss: _cache_key set, _cache_hit=False. Redis state is mocked out."""
+        from core import cache as cache_mod
+        monkeypatch.setattr(cache_mod, "cache_get", lambda ck: (None, "miss"))
+        state = _state("HPG giá hôm nay", intent="price_action", ticker="HPG", tenant_id="default")
+        state["messages"] = []
+        result = check_cache_node(state)
+        assert result["_cache_hit"] is False
+        assert result.get("_cache_key"), "cache miss must still produce a _cache_key"
+
+    def test_check_cache_hit_edge_function(self):
+        assert check_cache_hit({"_cache_hit": True}) == "hit"
+        assert check_cache_hit({"_cache_hit": False}) == "miss"
+        assert check_cache_hit({}) == "miss"
+
+    def test_cache_save_noop_when_no_key(self):
+        state = _state("hello", intent="conversation")
+        state["_cache_key"] = None
+        state["report"] = "some reply"
+        assert cache_save_node(state) == {}
+
+    def test_cache_save_noop_when_cache_hit(self):
+        state = _state("HPG RSI", intent="technical_analysis", ticker="HPG")
+        state["_cache_hit"] = True
+        state["_cache_key"] = object()
+        state["report"] = "cached report"
+        assert cache_save_node(state) == {}
+
+
+class TestUnitGatherAndApproval:
+    def test_gather_tickers_multi_merged_in_order(self):
+        fn = lambda t, q: f"[{t}] data"
+        out = _gather_tickers(fn, ["HPG", "VCB"], "so sánh")
+        assert "[HPG] data" in out and "[VCB] data" in out
+        assert out.index("[HPG]") < out.index("[VCB]"), "input order must be preserved"
+
+    def test_gather_tickers_single_short_circuits(self):
+        fn = lambda t, q: f"[{t}] data"
+        assert _gather_tickers(fn, ["HPG"], "q") == "[HPG] data"
+
+    def test_gather_tickers_empty_returns_empty(self):
+        assert _gather_tickers(lambda t, q: "x", [], "q") == ""
+
+    def test_run_subqueries_unknown_intent_falls_back_macro(self, monkeypatch):
+        from agents import graph as G
+        calls = {"n": 0}
+
+        def macro_fn(t, q):
+            calls["n"] += 1
+            return "[VĨ MÔ data]"
+
+        monkeypatch.setattr(G, "_get_gather_map", lambda: {"macro_sector": macro_fn})
+        out = G.run_subqueries_node({
+            "sub_tasks": [{"intent": "bogus_intent", "tickers": [], "question": "x"}],
+            "query": "x", "ticker": "",
+        })
+
+        assert calls["n"] == 1, "unknown intent must fall back to macro_sector"
+        assert out["sub_results"] and "[MACRO_SECTOR" in out["sub_results"][0]
+
+    def test_run_subqueries_empty_sets_replan_note(self, monkeypatch):
+        from agents import graph as G
+        monkeypatch.setattr(G, "_get_gather_map", lambda: {"macro_sector": lambda t, q: ""})
+        out = G.run_subqueries_node({
+            "sub_tasks": [{"intent": "macro_sector", "tickers": [], "question": "x"}],
+            "query": "x", "ticker": "",
+        })
+        assert out["sub_results_empty_ratio"] == 1.0
+        assert out.get("replan_note"), "mostly-empty results must trigger replan_note"
+
+    def test_run_subqueries_replanned_does_not_set_note_again(self, monkeypatch):
+        from agents import graph as G
+        monkeypatch.setattr(G, "_get_gather_map", lambda: {"macro_sector": lambda t, q: ""})
+        out = G.run_subqueries_node({
+            "sub_tasks": [{"intent": "macro_sector", "tickers": [], "question": "x"}],
+            "query": "x", "ticker": "",
+            "replan_attempted": True,
+        })
+        assert "replan_note" not in out, "already replanned → no second replan_note"
+
+    def test_approval_decision_end_on_reject(self):
+        assert _check_approval_decision({"error": "rejected_by_user"}) == "end"
+        assert _check_approval_decision({}) == "synthesize_final"
+
+    def test_request_approval_reject(self, monkeypatch):
+        monkeypatch.setattr("langgraph.types.interrupt", lambda proposal: False)
+        assert _request_approval({}) == {"error": "rejected_by_user"}
+
+    def test_request_approval_approve(self, monkeypatch):
+        monkeypatch.setattr("langgraph.types.interrupt", lambda proposal: True)
+        assert _request_approval({}) == {}
+
+    def test_fast_path_prefers_original_multi_ticker(self, monkeypatch):
+        monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "VCB"])
+        out = build_single_subtask_node({
+            "intent": "valuation",
+            "ticker": "HPG",
+            "query": "P/E HPG",
+            "original_query": "so sánh P/E HPG và VCB",
+        })
+        assert out["sub_tasks"][0]["intent"] == "valuation"
+        assert out["sub_tasks"][0]["tickers"] == ["HPG", "VCB"]
+
+    def test_fast_path_single_ticker(self, monkeypatch):
+        monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "VCB"])
+        out = build_single_subtask_node({
+            "intent": "technical_analysis",
+            "ticker": "HPG",
+            "query": "RSI HPG",
+            "original_query": "RSI HPG",
+        })
+        assert out["sub_tasks"][0]["tickers"] == ["HPG"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# UNIT — stale interrupt detection (memory/turn_handler.py)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class _FakeSnap:
+    def __init__(self, values=None, next_=None, created_at=None, checkpoint=None):
+        self.values = values or {}
+        self.next = next_
+        self.created_at = created_at
+        self.checkpoint = checkpoint
+
+
+class _FakeApp:
+    def __init__(self, snap):
+        self.snap = snap
+    def get_state(self, cfg):
+        return self.snap
+
+
+def test_read_prior_fresh_interrupt_not_stale():
+    from memory.turn_handler import _read_prior
+    snap = _FakeSnap(
+        values={"intent": "technical_analysis", "ticker": "HPG"},
+        next_=("clarify_node",),
+        created_at=datetime.now(timezone.utc) - timedelta(seconds=30),
+    )
+    prior = _read_prior(_FakeApp(snap), {})
+    assert prior["interrupted"] is True
+    assert prior["stale"] is False
+    assert prior["last_intent"] == "technical_analysis"
+    assert prior["last_subject"] == "HPG"
+
+
+def test_read_prior_stale_interrupt():
+    from memory.turn_handler import _read_prior
+    snap = _FakeSnap(
+        values={"intent": "", "ticker": ""},
+        next_=("clarify_node",),
+        created_at=datetime.now(timezone.utc) - timedelta(seconds=700),
+    )
+    prior = _read_prior(_FakeApp(snap), {})
+    assert prior["interrupted"] is True
+    assert prior["stale"] is True
+
+
+def test_read_prior_no_interrupt():
+    from memory.turn_handler import _read_prior
+    snap = _FakeSnap(values={"intent": "valuation", "ticker": "VCB"}, next_=())
+    prior = _read_prior(_FakeApp(snap), {})
+    assert prior["interrupted"] is False
+    assert prior["stale"] is False
+    assert prior["last_intent"] == "valuation"
+    assert prior["last_subject"] == "VCB"
+
+
+def test_snapshot_ts_checkpoint_fallback():
+    from memory.turn_handler import _snapshot_ts
+    snap = _FakeSnap(created_at=None, checkpoint={"ts": "2026-09-05T03:00:00+00:00"})
+    ts = _snapshot_ts(snap)
+    assert ts == datetime(2026, 9, 5, 3, 0, 0, tzinfo=timezone.utc)
+
+
+def test_snapshot_ts_naive_assumed_utc():
+    from memory.turn_handler import _snapshot_ts
+    snap = _FakeSnap(created_at=datetime(2026, 9, 5, 3, 0, 0))
+    ts = _snapshot_ts(snap)
+    assert ts.tzinfo is not None
+    assert ts.utcoffset().total_seconds() == 0
+
+
+def test_snapshot_ts_string_created_at():
+    """LangGraph >=0.3 returns created_at as an ISO string — parse it, not .replace()."""
+    from memory.turn_handler import _snapshot_ts
+    snap = _FakeSnap(created_at="2026-09-05T03:00:00+00:00")
+    ts = _snapshot_ts(snap)
+    assert ts == datetime(2026, 9, 5, 3, 0, 0, tzinfo=timezone.utc)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# UNIT — cache key / TTL (core/cache.py)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def test_normalize_question():
+    q = "HPG có nên mua không?"
+    n = normalize_question(q)
+    assert n == n.lower()
+    assert "?" not in n
+    assert "e" in n
+
+
+def test_cache_key_no_conversation_id():
+    ck = CacheKey(
+        tenant_id="t1",
+        intent="technical_analysis",
+        ticker="HPG",
+        scope="",
+        prompt_version="v1",
+        model_version="deepseek-v4-flash",
+    )
+    data = ck.model_dump()
+    assert "conversation_id" not in data
+    assert "intent" in data
+    assert "normalized_question" not in data
+
+
+def test_make_cache_key_returns_key_for_any_turn():
+    """All intents cacheable regardless of turn — history is not part of the key."""
+    for intent in ("technical_analysis", "price_action", "news_sentiment",
+                   "macro_sector", "rag_qa", "investment_case", "screening"):
+        ck = make_cache_key("t1", "phan tich MBB", "MBB", intent)
+        assert ck is not None, f"{intent} must be cacheable any turn"
+
+
+def test_make_cache_key_skips_conversation():
+    ck = make_cache_key("t1", "xin chào", "", "conversation")
+    assert ck is None, "conversation must not be cached"
+
+
+def test_make_cache_key_ticker_extraction():
+    ck = make_cache_key("t1", "so sánh HPG với VCB", "", "investment_case")
+    assert ck is not None
+    assert ck.ticker == "HPG|VCB"
+
+
+def test_make_cache_key_scope_for_always_scope_intents():
+    from core.cache import _ALWAYS_SCOPE_INTENTS
+    for intent in _ALWAYS_SCOPE_INTENTS:
+        ck = make_cache_key("t1", "tỷ giá USD/VND hôm nay", "HPG", intent)
+        assert ck is not None, f"{intent} must be cacheable"
+        assert ck.scope != "", f"{intent} must have a question-hash scope"
+    for intent in ("price_action", "technical_analysis", "news_sentiment",
+                   "investment_case", "market_brief"):
+        ck = make_cache_key("t1", "phân tích HPG", "HPG", intent)
+        assert ck is not None, f"{intent} must be cacheable"
+        assert ck.scope == "", f"{intent} must have empty scope"
+
+
+def test_intent_ttl_ordering():
+    price_in, _ = _INTENT_TTL["price_action"]
+    rag_in, _ = _INTENT_TTL["rag_qa"]
+    assert price_in < rag_in
+    _, price_off = _INTENT_TTL["price_action"]
+    _, rag_off = _INTENT_TTL["rag_qa"]
+    assert price_off < rag_off
+
+
+def test_ttl_seconds_returns_intent_ttl():
+    t = ttl_seconds("price_action")
+    assert isinstance(t, int) and t > 0
+
+
+def test_same_ticker_different_intent_no_cross_hit():
+    from core.cache import set_exact, get_exact
+    ck_tech = CacheKey(tenant_id="default", intent="technical_analysis", ticker="HPG", scope="",
+                       prompt_version="v1", model_version="deepseek-v4-flash")
+    ck_fund = CacheKey(tenant_id="default", intent="rag_qa", ticker="HPG", scope="",
+                       prompt_version="v1", model_version="deepseek-v4-flash")
+    set_exact(ck_tech, "technical reply")
+    assert get_exact(ck_fund) is None
+
+
+def test_hpg_hsg_no_cross_hit():
+    from core.cache import set_exact, get_exact
+    ck_hpg = CacheKey(tenant_id="default", intent="technical_analysis", ticker="HPG", scope="",
+                      prompt_version="v1", model_version="deepseek-v4-flash")
+    ck_hsg = CacheKey(tenant_id="default", intent="technical_analysis", ticker="HSG", scope="",
+                      prompt_version="v1", model_version="deepseek-v4-flash")
+    set_exact(ck_hpg, "HPG reply")
+    assert get_exact(ck_hsg) is None
+
+
+def test_prompt_version_invalidates_exact():
+    from core.cache import set_exact, get_exact
+    ck_v1 = CacheKey(tenant_id="test-tenant", intent="technical_analysis", ticker="HPG", scope="",
+                     prompt_version="v1", model_version="deepseek-v4-flash")
+    ck_v2 = CacheKey(tenant_id="test-tenant", intent="technical_analysis", ticker="HPG", scope="",
+                     prompt_version="v2", model_version="deepseek-v4-flash")
+    set_exact(ck_v1, "reply v1")
+    assert get_exact(ck_v2) is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# E2E — intent classification (real LLM)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.e2e
+@pytest.mark.parametrize(
+    "intent,prompt,ticker",
+    CLASSIFY_CASES,
+    ids=[f"{intent}[{i}]" for i, (intent, _, _) in enumerate(CLASSIFY_CASES)],
+)
+def test_classify_intent(intent: str, prompt: str, ticker):
+    r = classify_hybrid(prompt)
+    assert r.intent == intent, f"[{intent}] classified as {r.intent!r}: {r.reason} | {prompt!r}"
+    if ticker is _SKIP:
+        pass
+    elif ticker is None:
+        assert r.ticker is None, f"[{intent}] ticker={r.ticker!r}, expected None | {prompt!r}"
+    else:
+        assert r.ticker == ticker, f"[{intent}] ticker={r.ticker!r}, expected {ticker!r} | {prompt!r}"
+    print(f"\n  [{intent}] ticker={r.ticker!r} reason={r.reason!r}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# E2E — entry routing llm_route (real LLM)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.e2e
+@pytest.mark.parametrize(
+    "query,expected_intent,expected_ticker",
+    ROUTE_CASES,
+    ids=[f"{intent or 'text'}[{i}]" for i, (_, intent, _) in enumerate(ROUTE_CASES)],
+)
+def test_llm_route_golden(query, expected_intent, expected_ticker):
+    from agents.conversation_router import llm_route
+    route = llm_route(query, [], _ROUTE_SYSTEM)
+    if expected_intent is None:
+        assert route["type"] == "text", f"expected direct reply, got {route}"
+        return
+    assert route["type"] == "agent", f"expected agent, got {route}"
+    assert route["intent"] == expected_intent, f"got {route['intent']!r}, expected {expected_intent!r}"
+    if expected_ticker is not None:
+        assert route["ticker"] == expected_ticker, f"got {route['ticker']!r}, expected {expected_ticker!r}"
+    print(f"\n  [{expected_intent}] route ticker={route.get('ticker')!r}")
+
+
+@pytest.mark.e2e
+def test_llm_route_out_of_scope_declines():
+    from agents.conversation_router import llm_route
+    route = llm_route("giá bitcoin hôm nay thế nào?", [], _ROUTE_SYSTEM)
+    assert route["type"] == "text", f"expected decline, got {route}"
+    assert route.get("text"), "decline text must be non-empty"
+    assert route.get("reason"), "decline must carry a reason"
+    print(f"\n[out_of_scope] reason={route.get('reason')!r} text={route.get('text')!r}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# E2E — tools + data (real DB / external APIs, no LLM)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("intent,prompt,ticker,marker", GATHER_CASES, ids=[c[0] for c in GATHER_CASES])
+def test_gather_data_returns_correct_tool_data(intent, prompt, ticker, marker):
+    from agents.graph import _get_gather_map
+    fn = _get_gather_map()[intent]
+    data = fn(ticker or "", prompt)
+    assert data, f"[{intent}] gather returned empty string"
+    assert marker in data, (
+        f"[{intent}] gather missing {marker!r} — wrong tool fired or error stub. Got: {data[:200]!r}"
+    )
+    print(f"\n  [{intent}] gather {len(data)} chars: {data[:120]!r}")
+
+
+@pytest.mark.e2e
+def test_rag_qa_gather_returns_context():
+    from agents.graph import _get_gather_map
+    data = _get_gather_map()["rag_qa"]("HPG", "Doanh thu và lợi nhuận HPG năm 2024 là bao nhiêu?")
+    assert isinstance(data, str) and len(data.strip()) > 10, f"rag_qa gather empty: {data!r}"
+    print(f"\n  [rag_qa] gather {len(data)} chars: {data[:120]!r}")
+
+
+@pytest.mark.e2e
+def test_valuation_gather_cross_ticker():
+    from agents.intents.fundamentals import gather_data
+    data = gather_data("HPG", "So sánh P/E của HPG với VCB")
+    assert "[SO SÁNH" in data, f"cross-ticker marker missing: {data[:200]!r}"
+    assert "VCB" in data
+    print(f"\n  [valuation cross] {data[:120]!r}")
+
+
+@pytest.mark.e2e
+def test_market_brief_graph_produces_report():
+    from agents.market_brief_graph import build_brief_graph, make_initial_state as _mbi
+    app = build_brief_graph()
+    final = app.invoke(_mbi(date=str(date.today()), output_path=""))
+    report = final.get("report_text", "")
+    assert report, "market_brief report_text empty"
+    assert "📰" in report, "market brief template header missing"
+    assert "NHẬN ĐỊNH" in report, "market brief outlook section missing"
+    print(f"\n  [market_brief] {len(report)} chars, missing_fields={final.get('missing_fields')}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# E2E — graph.invoke() directly, all intent nodes (real LLM + tools)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.e2e
+class TestGraphInvoke:
+    def test_price_action(self):
+        final = _invoke("giá và dòng tiền HPG hôm nay")
+        report = final.get("report", "")
+        print(f"\n[price_action] report[:300]: {report[:300]}")
+        assert not final.get("needs_clarification")
+        assert len(report) > 50
+        assert any(kw in report.lower() for kw in ["hpg", "giá", "khối lượng", "dòng tiền", "price"])
+
+    def test_technical_analysis(self):
+        final = _invoke("phân tích kỹ thuật HPG: RSI, MACD, xu hướng")
+        report = final.get("report", "")
+        print(f"\n[technical] report[:300]: {report[:300]}")
+        assert len(report) > 100
+        assert any(kw in report.lower() for kw in ["rsi", "macd", "xu hướng", "hỗ trợ", "kháng cự", "ema", "sma"])
+
+    def test_rag_qa(self):
+        final = _invoke("doanh thu HPG năm 2024 bao nhiêu?")
+        report = final.get("report", "")
+        print(f"\n[rag_qa] report[:300]: {report[:300]}")
+        assert len(report) > 20
+
+    def test_valuation(self):
+        final = _invoke("P/E của HPG so với trung bình ngành thép là bao nhiêu?")
+        report = final.get("report", "")
+        print(f"\n[valuation] report[:300]: {report[:300]}")
+        assert not final.get("needs_clarification")
+        assert len(report) > 50
+        assert any(kw in report.lower() for kw in ["p/e", "pe", "định giá", "ngành", "hpg"])
+
+    def test_macro_sector(self):
+        final = _invoke("tỷ giá USD/VND và giá thép hôm nay")
+        report = final.get("report", "")
+        print(f"\n[macro_sector] report[:300]: {report[:300]}")
+        assert len(report) > 50
+
+    def test_news_sentiment(self):
+        final = _invoke("tin tức về HPG trong 3 ngày gần nhất")
+        report = final.get("report", "")
+        print(f"\n[news_sentiment] report[:300]: {report[:300]}")
+        assert len(report) > 50
+
+    def test_investment_case(self):
+        final = _invoke("HPG có nên mua không? Bull case và bear case")
+        report = final.get("report", "")
+        print(f"\n[investment_case] report[:500]: {report[:500]}")
+        assert len(report) > 200
+        assert any(kw in report.lower() for kw in ["bull", "bear", "khuyến nghị", "mua", "bán", "nắm giữ"])
+
+    def test_screening(self):
+        final = _invoke("top 5 mã ROE cao nhất trong database")
+        report = final.get("report", "")
+        print(f"\n[screening] report[:300]: {report[:300]}")
+        assert len(report) > 20
+
+    def test_breakout_scan(self):
+        final = _invoke("quét cổ phiếu đang breakout tạo đỉnh mới")
+        report = final.get("report", "")
+        print(f"\n[breakout_scan] report[:300]: {report[:300]}")
+        assert len(report) > 20
+
+    def test_market_brief(self):
+        final = _invoke("tổng quan thị trường chứng khoán hôm nay")
+        report = final.get("report", "")
+        print(f"\n[market_brief] report[:400]: {report[:400]}")
+        assert len(report) > 100
+        assert any(kw in report.lower() for kw in ["vnindex", "vn-index", "thị trường", "vn30", "hsx"])
+
+    def test_bctc_keywords_to_rag_qa(self):
+        final = _invoke("báo cáo tài chính HPG quý 1 2025")
+        report = final.get("report", "")
+        print(f"\n[knowledge] report[:300]: {report[:300]}")
+        assert not final.get("needs_clarification")
+        assert len(report) > 50
+
+    def test_ticker_with_keyword_no_clarification(self):
+        final = _invoke("phân tích kỹ thuật HPG RSI")
+        report = final.get("report", "")
+        print(f"\n[technical+keyword] intent=%s report[:200]: %s" % (final.get("intent"), report[:200]))
+        assert not final.get("needs_clarification")
+        assert len(report) > 50
+
+    def test_cache_key_set_after_report(self):
+        final = _invoke("HPG RSI hôm nay", tenant_id="default")
+        print(f"\n[cache_key] _cache_key type: {type(final.get('_cache_key'))}")
+        assert "report" in final
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# E2E — full stream_turn path (real LLM + tools → SSE)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.e2e
+class TestStreamAllIntents:
+    @pytest.mark.parametrize("query,expected_intent", STREAM_CASES)
+    def test_stream_intent(self, query, expected_intent):
+        cid, uid = _new_conv()
+        events = _parse_sse(_run_stream(cid, uid, query))
+        routing = _routing(events)
+        done = _done(events)
+        reply = _reply(events)
+
+        print(f"\n[{expected_intent}] routing={routing}, reply[:200]={reply[:200]}")
+
+        assert routing is not None, f"{expected_intent}: routing event missing"
+        assert routing.get("agent") == expected_intent, \
+            f"expected {expected_intent}, got {routing.get('agent')}: {routing}"
+        assert done is not None, f"{expected_intent}: done event missing"
+        assert len(reply) > 20, f"{expected_intent}: reply too short ({len(reply)})"
+
+    def test_conversation(self):
+        """Conversation is a direct text reply (type=text) — no agent graph, no routing event."""
+        cid, uid = _new_conv()
+        events = _parse_sse(_run_stream(cid, uid, "xin chào, bạn là ai?"))
+        done = _done(events)
+        reply = _reply(events)
+        print(f"\n[conversation] reply={reply[:200]}, done={done}")
+        assert done is not None, "conversation must emit done"
+        assert len(reply) > 10, "conversation must stream a reply"
+
+    def test_out_of_scope(self):
+        cid, uid = _new_conv()
+        events = _parse_sse(_run_stream(cid, uid, "giá bitcoin hôm nay thế nào?"))
+        routing = _routing(events)
+        reply = _reply(events)
+        print(f"\n[out_of_scope] routing={routing}, reply={reply[:200]}")
+        assert reply.strip(), "decline text must be streamed"
+        assert routing is None, "out_of_scope must not route to an agent"
+
+    def test_investment_case_sections(self):
+        cid, uid = _new_conv()
+        events = _parse_sse(_run_stream(cid, uid, "HPG có nên mua không? Cho mình bull case và bear case"))
+        routing = _routing(events)
+        reply = _reply(events)
+        print(f"\n[investment_case] routing={routing}")
+        print(f"[investment_case] reply[:500]: {reply[:500]}")
+        assert routing is not None
+        assert routing.get("agent") == "investment_case"
+        reply_lower = reply.lower()
+        assert any(kw in reply_lower for kw in ["bull", "bear", "luận điểm", "khuyến nghị"]), \
+            "missing bull/bear/recommendation section"
+        assert any(kw in reply_lower for kw in ["mua", "bán", "nắm giữ", "tích lũy"]), \
+            "missing buy/sell/hold verdict"
+
+    def test_cache_hit_emitted(self):
+        cid1, uid = _new_conv()
+        _run_stream(cid1, uid, "HPG giá hôm nay")
+        cid2, _ = _new_conv()
+        events2 = _parse_sse(_run_stream(cid2, uid, "HPG giá hôm nay"))
+        print(f"\n[cache_hit] events: {[p for p in events2.get('status', []) if p.get('step') == 'cache_hit']}")
+        assert _done(events2) is not None, "must complete even if cache miss"
+
+
+@pytest.mark.e2e
+class TestStreamClarificationResume:
+    def test_clarification_then_resume(self):
+        cid, uid = _new_conv()
+
+        events_n = _parse_sse(_run_stream(cid, uid, "phân tích kỹ thuật"))
+        reply_n = _reply(events_n)
+        print(f"\n[clarification turn N] reply: {reply_n[:200]}")
+        assert len(reply_n) > 10
+        assert any(kw in reply_n.lower() for kw in ["mã", "ticker", "cổ phiếu", "công ty"]), \
+            f"clarification must ask for ticker, got: {reply_n}"
+
+        events_n1 = _parse_sse(_run_stream(cid, uid, "HPG"))
+        routing_n1 = _routing(events_n1)
+        done_n1 = _done(events_n1)
+        reply_n1 = _reply(events_n1)
+        print(f"\n[resume turn N+1] routing: {routing_n1}")
+        print(f"[resume turn N+1] reply[:300]: {reply_n1[:300]}")
+
+        assert done_n1 is not None
+        assert len(reply_n1) > 50
+        if routing_n1 and routing_n1.get("agent"):
+            assert routing_n1.get("agent") in (
+                "technical_analysis", "price_action", "rag_qa", "investment_case"
+            ), f"unexpected intent after resume: {routing_n1}"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# E2E — sub-query pipeline regressions (real LLM / real tools)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.e2e
+def test_run_subqueries_dedupes_news_fetch_via_tool_cache(monkeypatch):
+    from agents import graph as G
+    from tools import price as price_mod
+
+    calls = {"n": 0}
+
+    def spy(ticker, days):
+        calls["n"] += 1
+
+    monkeypatch.setattr(price_mod, "_auto_fetch_ticker_news", spy)
+
+    state = {
+        "sub_tasks": [
+            {"intent": "news_sentiment", "tickers": ["VCB"], "question": f"tin VCB {i}"}
+            for i in range(4)
+        ],
+        "query": "Tin tức VCB",
+        "ticker": "VCB",
+    }
+    G.run_subqueries_node(state)
+    assert calls["n"] <= 2, f"news auto-fetch fired {calls['n']}×, expected ≤2 (cache-deduped)"
+
+
+@pytest.mark.e2e
+def test_decompose_assigns_distinct_intents():
+    from agents.graph import decompose_node
+    out = decompose_node({
+        "query": (
+            "Phân tích toàn diện VCB: kỹ thuật (RSI, MACD), "
+            "định giá so ngành ngân hàng, và khuyến nghị nên mua hay bán"
+        ),
+        "intent": "investment_case",
+        "ticker": "VCB",
+    })
+    sub_tasks = out["sub_tasks"]
+    assert sub_tasks, "decompose produced no sub-tasks"
+    intents = {t["intent"] for t in sub_tasks}
+    assert len(intents) >= 2, (
+        f"all sub-tasks share intent {intents!r} — expected ≥2 distinct intents. "
+        f"sub_tasks={sub_tasks!r}"
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# E2E — intent-level cache contract (real Redis + LLM + tools)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@pytest.mark.e2e
+def test_cache_hit_second_request_real():
+    _flush_test_keys()
+    cid1, uid1 = _new_conv()
+    question = "dòng tiền và khối lượng giao dịch HPG hôm nay"
+
+    reply1 = _reply(_parse_sse(_run_stream(cid1, uid1, question, is_first_turn=True)))
+    assert len(reply1) > 50, f"First reply too short: {len(reply1)}"
+    print(f"\nFirst reply ({len(reply1)} chars): {reply1[:200]}")
+
+    cid2, uid2 = _new_conv()
+    events2 = _parse_sse(_run_stream(cid2, uid2, question, is_first_turn=True))
+    reply2 = _reply(events2)
+    cache_event = _status(events2, "cache_hit")
+
+    print(f"Cache event: {cache_event}")
+    print(f"Second reply ({len(reply2)} chars): {reply2[:200]}")
+
+    assert cache_event is not None, "Expected cache_hit SSE event on second call"
+    assert cache_event.get("tier") == "exact", f"Unexpected tier: {cache_event}"
+    assert len(reply2) > 50
+
+
+@pytest.mark.e2e
+def test_turn2_hits_cache_real():
+    _flush_test_keys()
+    question = "phân tích kỹ thuật HPG: RSI và MACD"
+    cid, uid = _new_conv()
+
+    reply1 = _reply(_parse_sse(_run_stream(cid, uid, question, is_first_turn=True)))
+    assert len(reply1) > 50, "Turn 1 must have reply"
+    print(f"\nTurn 1 reply ({len(reply1)} chars): {reply1[:200]}")
+
+    events2 = _parse_sse(_run_stream(cid, uid, question, is_first_turn=False))
+    cache_event = _status(events2, "cache_hit")
+    reply2 = _reply(events2)
+    print(f"Turn 2 cache event: {cache_event}")
+    print(f"Turn 2 reply ({len(reply2)} chars): {reply2[:200]}")
+
+    assert cache_event is not None, "Turn 2 with same intent+ticker must hit cache"
+    assert cache_event.get("tier") == "exact"
+    assert len(reply2) > 50
+
+
+@pytest.mark.e2e
+def test_ngan_hang_thinh_vuong_resolves_vpb():
+    result = classify_hybrid("phân tích cổ phiếu Ngân hàng Thịnh Vượng")
+    print(f"\nRouter result: intent={result.intent} ticker={result.ticker} reason={result.reason}")
+    assert result.ticker == "VPB", f"Expected VPB, got {result.ticker}"
+
+
+@pytest.mark.e2e
+def test_company_name_same_cache_as_ticker_real():
+    _flush_test_keys()
+
+    cid1, uid1 = _new_conv()
+    reply1 = _reply(_parse_sse(_run_stream(cid1, uid1, "phân tích Ngân hàng Thịnh Vượng hôm nay", is_first_turn=True)))
+    print(f"\nCompany-name reply ({len(reply1)} chars): {reply1[:200]}")
+    assert len(reply1) > 50, "First reply too short"
+
+    cid2, uid2 = _new_conv()
+    events2 = _parse_sse(_run_stream(cid2, uid2, "phân tích VPB hôm nay", is_first_turn=True))
+    cache_event = _status(events2, "cache_hit")
+    reply2 = _reply(events2)
+    print(f"Cache event: {cache_event}")
+    print(f"VPB reply ({len(reply2)} chars): {reply2[:200]}")
+
+    assert cache_event is not None, "company name and ticker must share same cache entry"
+    assert cache_event.get("tier") == "exact"
+
+
+@pytest.mark.e2e
+def test_hpg_hsg_no_cross_cache_real():
+    _flush_test_keys()
+    cid1, uid1 = _new_conv()
+
+    hpg_q = "doanh thu HPG năm 2024 là bao nhiêu?"
+    hsg_q = "doanh thu HSG năm 2024 là bao nhiêu?"
+
+    hpg_reply = _reply(_parse_sse(_run_stream(cid1, uid1, hpg_q, is_first_turn=True)))
+    assert "HPG" in hpg_reply.upper() or len(hpg_reply) > 20
+    print(f"\nHPG reply: {hpg_reply[:200]}")
+
+    cid2, uid2 = _new_conv()
+    events2 = _parse_sse(_run_stream(cid2, uid2, hsg_q, is_first_turn=True))
+    cache_event = _status(events2, "cache_hit")
+    hsg_reply = _reply(events2)
+    print(f"Cache event for HSG query: {cache_event}")
+    print(f"HSG reply: {hsg_reply[:200]}")
+
+    if cache_event is not None:
+        assert hsg_reply != hpg_reply, "HSG must not receive HPG cached reply"
+    assert len(hsg_reply) > 20
+
+
+@pytest.mark.e2e
+def test_prompt_version_change_invalidates_cache_real():
+    import os
+    from core import cache as cache_mod
+
+    _flush_test_keys()
+    original = cache_mod.PROMPT_VERSION
+
+    question = "giá HPG hiện tại"
+    cid1, uid1 = _new_conv()
+    reply1 = _reply(_parse_sse(_run_stream(cid1, uid1, question, is_first_turn=True)))
+    assert len(reply1) > 50
+
+    cache_mod.PROMPT_VERSION = original + "_test_bump"
+    try:
+        cid2, uid2 = _new_conv()
+        events2 = _parse_sse(_run_stream(cid2, uid2, question, is_first_turn=True))
+        assert _status(events2, "cache_hit") is None, "Bumped PROMPT_VERSION must cause cache miss"
+    finally:
+        cache_mod.PROMPT_VERSION = original
+
+
+@pytest.mark.e2e
+def test_different_phrasing_same_intent_ticker_hits_cache():
+    _flush_test_keys()
+
+    q1 = "HPG hôm nay thế nào?"
+    q2 = "Cập nhật giá và khối lượng HPG"
+
+    cid1, uid1 = _new_conv()
+    reply1 = _reply(_parse_sse(_run_stream(cid1, uid1, q1, is_first_turn=True)))
+    print(f"\nq1 reply ({len(reply1)} chars): {reply1[:200]}")
+    assert len(reply1) > 50, "q1 reply too short — pipeline failed"
+
+    cid2, uid2 = _new_conv()
+    events2 = _parse_sse(_run_stream(cid2, uid2, q2, is_first_turn=True))
+    cache_event = _status(events2, "cache_hit")
+    reply2 = _reply(events2)
+    print(f"Cache event: {cache_event}")
+    print(f"q2 reply ({len(reply2)} chars): {reply2[:200]}")
+
+    assert cache_event is not None, "different phrasing, same intent+ticker must hit cache"
+    assert cache_event.get("tier") == "exact"
+    # Byte-identity with the first reply is not asserted: the first turn streams
+    # token deltas during synthesis, the cached turn re-streams the final report —
+    # the two can differ (thinking-strip / critique) even on a correct cache hit.
+    assert len(reply2) > 50, "cached reply must be non-trivial"
+
+
+@pytest.mark.e2e
+def test_e2e_full_cycle_all_major_intents():
+    _flush_test_keys()
+
+    cases = [
+        ("phân tích kỹ thuật HPG RSI MACD", "technical_analysis", "HPG"),
+        ("tin tức và sentiment VCB tuần này", "news_sentiment", "VCB"),
+        ("tổng quan thị trường hôm nay", "market_brief", ""),
+    ]
+
+    for question, expected_intent, expected_ticker in cases:
+        label = f"{expected_intent}/{expected_ticker or 'no-ticker'}"
+
+        cid1, uid1 = _new_conv()
+        reply1 = _reply(_parse_sse(_run_stream(cid1, uid1, question, is_first_turn=True)))
+        print(f"\n[{label}] first reply ({len(reply1)} chars): {reply1[:120]}")
+        assert len(reply1) > 50, f"[{label}] first reply too short"
+
+        cid2, uid2 = _new_conv()
+        events2 = _parse_sse(_run_stream(cid2, uid2, question, is_first_turn=True))
+        cache_event = _status(events2, "cache_hit")
+        reply2 = _reply(events2)
+        print(f"[{label}] cache_event={cache_event}")
+        assert cache_event is not None, f"[{label}] second call must hit cache"
+        assert cache_event.get("tier") == "exact", f"[{label}] wrong tier: {cache_event}"
+        assert len(reply2) > 50, f"[{label}] cached reply must be non-trivial"

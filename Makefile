@@ -248,10 +248,10 @@ ui-react:
 
 # Bài 32 — Cache
 test-b32:
-	pytest tests/test_bai32_cache.py -v -s
+	pytest tests/test_router_intents_cache.py -v -s -m e2e
 
 test-b32-unit:
-	pytest tests/test_bai32_cache.py -v -k "not real"
+	pytest tests/test_router_intents_cache.py -v -m "not e2e"
 
 api-b32:
 	python -m uvicorn api.main:app --reload --port 8032
@@ -311,4 +311,4 @@ test-fireant-live:
 	pytest tests/test_fireant_ingest.py -v -m live -s
 
 test-intents:
-	pytest tests/test_e2e_intents.py -v -m e2e
+	pytest tests/test_router_intents_cache.py -v -m e2e
