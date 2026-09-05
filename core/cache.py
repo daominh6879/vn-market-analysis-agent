@@ -24,7 +24,6 @@ import hashlib
 import json
 import logging
 import os
-import re as _re
 import unicodedata
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -81,18 +80,14 @@ def normalize_question(text: str) -> str:
     return " ".join(cleaned.split())
 
 
-_TICKER_RE = _re.compile(r'\b([A-Z]{2,5})\b')
-_TICKER_STOPWORDS = frozenset({"VE", "VA", "LA", "CO", "DE", "VS", "ROE", "ROA", "EPS", "PE", "PB"})
-
-
 def _extract_all_tickers(question: str) -> str:
     """Extract all VN ticker mentions from query, sort + join for stable cache key.
 
     "HPG so với VCB" → "HPG|VCB" (same regardless of word order).
     Single ticker or none → unchanged.
     """
-    hits = sorted(t for t in set(_TICKER_RE.findall(question.upper()))
-                  if t not in _TICKER_STOPWORDS)
+    from core.tickers import raw_tickers
+    hits = sorted(set(raw_tickers(question)))
     return "|".join(hits) if len(hits) > 1 else (hits[0] if hits else "")
 
 

@@ -26,7 +26,15 @@ class RouterResult:
 INTENTS = (
     "price_action", "technical_analysis", "rag_qa", "valuation", "macro_sector",
     "news_sentiment", "investment_case", "screening", "market_brief",
-    "breakout_scan", "conversation",
+    "breakout_scan", "conversation", "out_of_scope",
+)
+
+# Fixed decline used when the classifier/router decides a subject is outside the VN
+# universe (crypto, US/foreign stocks, non-VND forex). Shared by conversation_router
+# fallback and the graph's out_of_scope node.
+OUT_OF_SCOPE_REPLY = (
+    "Xin lỗi, tôi chỉ hỗ trợ phân tích chứng khoán Việt Nam (HOSE/HNX/UPCOM). "
+    "Tôi chưa hỗ trợ chứng khoán nước ngoài, tiền mã hoá (crypto) hay ngoại hối ngoài VND."
 )
 
 
@@ -56,6 +64,7 @@ Classify the user's message into exactly one intent:
   market_brief        — overall market overview: VNINDEX/VN30 breadth, gainers/losers, session recap
   breakout_scan       — scan for stocks breaking out of a base or making new highs
   conversation        — general chat, greeting, or clearly non-financial question
+  out_of_scope        — crypto (Bitcoin/Ethereum), US/foreign stocks, or non-VND forex (EUR/USD, USD/JPY — no VND leg) — outside the Vietnamese equity universe
 
 Rules:
 - A ticker alone with no other signal → technical_analysis
@@ -64,6 +73,7 @@ Rules:
 - A query asking for a valuation metric (P/E, P/B, ROE, EPS, EV/EBITDA) of a company, or comparing it against its sector → valuation
 - A query asking about financial-report content (revenue, profit, balance sheet, specific period figures) → rag_qa
 - A query asking a stock's valuation metric (P/E, P/B, ROE, EPS) versus its sector → valuation, NOT macro_sector. A sector word ("ngành ngân hàng") does not override a metric keyword ("P/E").
+- A query about crypto, a US/foreign stock, or non-VND forex (EUR/USD, USD/JPY — no VND leg) → out_of_scope (not any VN intent). USD/VND and other VND-pegged FX → macro_sector.
 - A query comparing two or more tickers/companies (e.g. "so sánh BID và CTG", "HPG vs VCB", "giữa A, B") → valuation, even when no specific metric is named.
 - English or mixed-language queries follow the same rules — look at meaning, not language
 - Time words do NOT change intent — classify by the financial action, not the time
@@ -95,7 +105,9 @@ _TOOL = {
                     "Use 'price_action' only for a single stock's price/volume action. "
                     "Use 'market_brief' for broad market overview (VNINDEX, HNX, overall session). "
                     "Use 'screening' for filter/scan queries. "
-                    "Use 'investment_case' for buy/sell/hold on a specific stock."
+                    "Use 'investment_case' for buy/sell/hold on a specific stock. "
+                    "Use 'out_of_scope' for crypto, US/foreign stocks, or non-VND forex "
+                    "(EUR/USD, USD/JPY — no VND leg). USD/VND → macro_sector."
                 ),
             },
             "ticker": {

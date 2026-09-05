@@ -6,7 +6,7 @@ Usage:
     python -m agents.run_interactive HPG
 
 Workflow:
-  1. Run graph: collect → analyze_technical → assess_risk → [interrupt]
+  1. Run graph: classify → clarify → decompose → [interrupt]
   2. Save session to Postgres (agent_sessions)
   3. Print session_id — user approves/rejects via API or --approve / --reject flags
 
@@ -45,7 +45,7 @@ def run(query: str, auto_decision: str | None = None) -> None:
     ticker = initial["ticker"]
 
     print(f"[run_interactive] ticker={ticker}  session_id={session_id}")
-    print("Phase 1: collect -> analyze_technical -> assess_risk -> request_approval\n")
+    print("Phase 1: classify -> clarify -> decompose -> request_approval\n")
 
     checkpointer = PostgresCheckpointer()
     app = build_interactive_graph(checkpointer)

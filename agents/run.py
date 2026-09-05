@@ -58,7 +58,7 @@ def main() -> None:
 
     print(f"[agents.run] Phân tích: {initial['ticker']} "
           f"({'market query' if initial.get('is_market_query') else 'stock query'})")
-    print("Running graph: collect → analyze_technical → assess_risk → synthesize\n")
+    print("Running graph: classify → clarify → decompose → synthesize\n")
 
     t0 = time.perf_counter()
     final = app.invoke(initial)

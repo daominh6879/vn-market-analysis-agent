@@ -198,7 +198,10 @@ class TestUnitLoopRouting:
 
     def test_critique_retry_once(self):
         assert route_after_critique({"critique_pass": False, "critique_attempts": 0}) == "retry"
-        assert route_after_critique({"critique_pass": False, "critique_attempts": 1}) == "save"
+        # MAX_CRITIQUE=1 → one retry: first critique (attempts=1) still retries,
+        # second critique (attempts=2) is exhausted → save.
+        assert route_after_critique({"critique_pass": False, "critique_attempts": 1}) == "retry"
+        assert route_after_critique({"critique_pass": False, "critique_attempts": 2}) == "save"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

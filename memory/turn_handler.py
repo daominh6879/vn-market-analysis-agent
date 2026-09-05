@@ -22,10 +22,65 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import threading
+import time
+from datetime import datetime, timezone
 from typing import AsyncIterator
 
 log = logging.getLogger(__name__)
+
+INTERRUPT_STALE_SECONDS = float(os.environ.get("INTERRUPT_STALE_SECONDS", "600"))
+
+
+def _snapshot_ts(snap) -> datetime | None:
+    """Extract the checkpoint timestamp from a LangGraph StateSnapshot.
+
+    Prefers the `created_at` datetime; falls back to the raw checkpoint `ts` ISO string
+    (LangGraph >=0.2 keeps it in `checkpoint["ts"]`). Naive datetimes are assumed UTC.
+    """
+    ts = getattr(snap, "created_at", None)
+    if ts is not None:
+        if getattr(ts, "tzinfo", None) is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return ts
+    cp = getattr(snap, "checkpoint", None)
+    raw = cp.get("ts") if isinstance(cp, dict) else None
+    if raw:
+        try:
+            return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except Exception:
+            return None
+    return None
+
+
+def _read_prior(app, thread_config: dict) -> dict:
+    """Read last-turn context + interrupt status from the checkpointer.
+
+    Returns {interrupted, stale, last_intent, last_subject}. `stale` is True when the
+    graph is interrupted but the interrupt is older than INTERRUPT_STALE_SECONDS (user
+    abandoned the clarification) — such an interrupt must be dropped, not resumed.
+    """
+    empty = {"interrupted": False, "stale": False, "last_intent": "", "last_subject": ""}
+    try:
+        snap = app.get_state(thread_config)
+    except Exception:
+        return empty
+    if not snap:
+        return empty
+    values = getattr(snap, "values", {}) or {}
+    interrupted = bool(getattr(snap, "next", None))
+    stale = False
+    if interrupted:
+        ts = _snapshot_ts(snap)
+        if ts is not None:
+            stale = (datetime.now(timezone.utc) - ts).total_seconds() > INTERRUPT_STALE_SECONDS
+    return {
+        "interrupted": interrupted,
+        "stale": stale,
+        "last_intent": values.get("intent", ""),
+        "last_subject": values.get("ticker", ""),
+    }
 
 from llm.factory import create_client
 from llm.types import Message
@@ -100,17 +155,27 @@ def run_turn(
     client = create_client()
 
     from agents.conversation_router import llm_route
-    route = llm_route(user_message, history, system_prompt, client)
+    from agents.state import make_initial_state
+    from agents.graph import build_graph
+    from agents.checkpointer import PostgresCheckpointer
+
+    checkpointer = PostgresCheckpointer()
+    app = build_graph(checkpointer=checkpointer)
+    thread_config = {"configurable": {"thread_id": conversation_id}}
+
+    # Prior-turn context (last_intent/last_subject) + stuck-interrupt detection.
+    prior = _read_prior(app, thread_config)
+    if prior["stale"]:
+        # Abandon the stuck clarify interrupt: fresh thread orphans it so this turn
+        # routes + runs normally instead of being swallowed by the old interrupt.
+        thread_config = {"configurable": {"thread_id": f"{conversation_id}:stale:{int(time.time())}"}}
+
+    route = llm_route(
+        user_message, history, system_prompt, client,
+        last_intent=prior["last_intent"], last_subject=prior["last_subject"],
+    )
 
     if route.get("type") == "agent":
-        from agents.state import make_initial_state
-        from agents.graph import build_graph
-        from agents.checkpointer import PostgresCheckpointer
-
-        checkpointer = PostgresCheckpointer()
-        app = build_graph(checkpointer=checkpointer)
-        thread_config = {"configurable": {"thread_id": conversation_id}}
-
         query = route.get("query") or user_message
         agent_state = make_initial_state(
             query,
@@ -313,11 +378,15 @@ async def stream_turn(
     thread_config = {"configurable": {"thread_id": conversation_id}}
 
     # ── Clarification resume: graph is waiting for user answer ────────────────
-    try:
-        prior_state = await asyncio.to_thread(app.get_state, thread_config)
-        is_interrupted = bool(prior_state and prior_state.next)
-    except Exception:
-        is_interrupted = False
+    prior = await asyncio.to_thread(_read_prior, app, thread_config)
+    last_intent = prior["last_intent"]
+    last_subject = prior["last_subject"]
+    if prior["stale"]:
+        # Abandon the stuck clarify interrupt (older than INTERRUPT_STALE_SECONDS):
+        # a fresh thread orphans it, and this turn routes + runs normally instead
+        # of being swallowed by the old interrupt.
+        thread_config = {"configurable": {"thread_id": f"{conversation_id}:stale:{int(time.time())}"}}
+    is_interrupted = prior["interrupted"] and not prior["stale"]
 
     if is_interrupted:
         # Resume graph directly — skip llm_route, clarify_node owns this turn.
@@ -357,7 +426,10 @@ async def stream_turn(
     # ── LLM on top: single call decides route OR replies directly ─────────────
     yield _sse_status("routing")
     from agents.conversation_router import llm_route
-    route = llm_route(user_message, history, system_prompt, client)
+    route = llm_route(
+        user_message, history, system_prompt, client,
+        last_intent=last_intent, last_subject=last_subject,
+    )
 
     assistant_reply = ""
 

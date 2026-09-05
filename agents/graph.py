@@ -9,7 +9,8 @@ Flow:
           └── "miss" → clarify_node → _route_after_clarify
                 ├── "market_brief" → node_market_brief → cache_save_node → END
                 ├── "simple"      → build_single_subtask_node ─┐
-                └── "decompose"   → decompose_node ────────────┴→ run_subqueries_node
+                ├── "decompose"   → decompose_node ────────────┴→ run_subqueries_node
+                └── "conversation" → cache_save_node → END (clarify merged to non-financial)
     run_subqueries_node → route_after_subqueries
           ├── "replan"     → decompose_node (≤ 1, on >50% empty sub_results)
           └── "synthesize" → [request_approval] → synthesize_final
@@ -28,57 +29,42 @@ Design rules:
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import pandas as pd
 from langgraph.graph import END, StateGraph
 
+from agents.classifier import OUT_OF_SCOPE_REPLY
 from agents.state import AgentState
-from tools.price import (
-    analyze_market_sentiment,
-    calculate_indicators,
-    get_historical_ohlcv,
-    search_financial_news,
-)
+from core.tickers import extract_tickers
 
-_CACHE_DIR = Path("outputs/agent_cache")
-_VOLATILITY_THRESHOLD = 0.04  # 4% daily return std → HIGH_VOLATILITY
-_RAG_COLLECTION = os.environ.get("RAG_COLLECTION", "bctc_structural")
-_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
-MAX_ITER = 2  # max RAG rewrite loops before fallback to web_search
+log = logging.getLogger(__name__)
+
 MAX_CRITIQUE = 1  # max self-critique retries of the final report before returning best-effort
 MAX_FANOUT_TICKERS = 5  # cap per-sector fan-out to leading tickers (avoid 17-way fetch)
+GATHER_TIMEOUT_SECONDS = float(os.environ.get("GATHER_TIMEOUT_SECONDS", "30"))
+# Per-turn budget guard: cap total graph LLM calls + wall-clock so a pathological turn
+# cannot loop unbounded (router call in stream_turn is not counted — it is always 1).
+MAX_TURN_LLM_CALLS = int(os.environ.get("MAX_TURN_LLM_CALLS", "8"))
+MAX_TURN_SECONDS = float(os.environ.get("MAX_TURN_SECONDS", "180"))
 
-# Lazy BM25 cache — avoid re-loading on every run
-_bm25_cache: dict[str, object] = {}
 
-# Intents handled by dedicated nodes — dispatched directly from pick_branch
-_INTENT_NODES = frozenset({
-    "price_action", "technical_analysis", "rag_qa", "valuation",
-    "news_sentiment", "macro_sector", "investment_case", "screening",
-    "market_brief", "breakout_scan",
-})
+def _llm_budget_exceeded(state: AgentState) -> bool:
+    """True when the turn has exhausted its LLM-call or wall-clock budget."""
+    if state.get("llm_calls", 0) >= MAX_TURN_LLM_CALLS:
+        return True
+    started = state.get("turn_started_at")
+    return bool(started) and (time.time() - started) > MAX_TURN_SECONDS
 
 # Intents that require multi-angle decomposition — always go through decompose_node.
 # All others use the fast path (build_single_subtask_node) when a ticker is present.
 _COMPLEX_INTENTS = frozenset({"market_brief", "investment_case", "macro_sector"})
 
-# Keywords that signal a document/financial-report query → "knowledge" path
-_KNOWLEDGE_KEYWORDS = frozenset({
-    "bctc", "báo cáo tài chính", "p/e", "pe", "roe", "roa", "eps",
-    "doanh thu", "lợi nhuận", "tổng tài sản", "vốn chủ sở hữu",
-    "biên lợi nhuận", "định giá", "nợ vay", "ebitda",
-    "quý 1", "quý 2", "quý 3", "quý 4", "năm tài chính",
-    "tài chính", "kiểm toán", "hợp nhất",
-})
-
 
 # ── Node −1: classify_node ────────────────────────────────────────────────────
-
-_MARKET_TICKERS = frozenset({"VNINDEX", "VN-INDEX", "VN30", "VN100", "HOSE", "HNX30"})
 
 
 def classify_node(state: AgentState) -> dict:
@@ -119,8 +105,6 @@ def classify_node(state: AgentState) -> dict:
             messages=state.get("messages"),
         )
 
-    is_market = result.intent == "market_brief" or (result.ticker or "") in _MARKET_TICKERS
-
     try:
         from langfuse import get_client, observe  # noqa: F401
         get_client().update_current_trace(
@@ -135,14 +119,28 @@ def classify_node(state: AgentState) -> dict:
     return {
         "intent": result.intent,
         "ticker": result.ticker or "",
-        "is_market_query": is_market,
         "classify_reason": result.reason,
     }
 
 
 def check_conversation(state: AgentState) -> str:
-    """Skip cache/clarify for pure conversation turns — stream_turn handles streaming."""
-    return "skip" if state.get("intent") == "conversation" else "verify"
+    """Skip cache/clarify for conversation / out-of-scope turns — no graph work needed."""
+    intent = state.get("intent", "")
+    if intent == "conversation":
+        return "skip"
+    if intent == "out_of_scope":
+        return "out_of_scope"
+    return "verify"
+
+
+def node_out_of_scope(state: AgentState) -> dict:
+    """Fixed decline for out-of-scope subjects (crypto/foreign/forex) — no gather, no LLM."""
+    try:
+        from tracing import get_tracer
+        get_tracer().event("gate", {"node": "out_of_scope"})
+    except Exception:
+        pass
+    return {"report": OUT_OF_SCOPE_REPLY, "intent": "out_of_scope"}
 
 
 # ── Node 0: check_cache_node ─────────────────────────────────────────────────
@@ -152,7 +150,13 @@ def check_cache_node(state: AgentState) -> dict:
     from core.cache import make_cache_key, cache_get
     # Use original_query (verbatim user message) for cache key — query may be LLM-expanded
     # and differs each turn, causing cache misses for semantically identical requests.
+    # A follow-up like "phân tích sâu hơn" names no subject, so its verbatim text would
+    # collide across sectors/conversations (macro_sector + ticker="" → scope=hash). Trust
+    # original_query only when it names a concrete ticker; else use the router's
+    # self-contained `query` so the subject is part of the cache key.
     cache_question = state.get("original_query") or state.get("query", "")
+    if not extract_tickers(cache_question) and state.get("query"):
+        cache_question = state.get("query", "")
     ck = make_cache_key(
         state.get("tenant_id", "default"),
         cache_question,
@@ -224,282 +228,10 @@ def clarify_node(state: AgentState) -> dict:
         "intent": result.intent,
         "ticker": result.ticker or "",
         "classify_reason": result.reason,
+        # query/intent/ticker changed after clarify — the pre-clarify cache key is stale.
+        # Disable caching for this turn instead of storing under the ambiguous key.
+        "_cache_key": None,
     }
-
-
-# ── Node 0a: route_question (guide A5) ───────────────────────────────────────
-
-def route_question(state: AgentState) -> dict:
-    """Reset iteration counter. Routing handled by pick_branch conditional edge."""
-    return {"iteration": 0}
-
-
-# ── Conditional edge functions (guide A6) ────────────────────────────────────
-
-def pick_branch(state: AgentState) -> str:
-    """Dispatch by intent first; fall back to keyword-based knowledge/data routing."""
-    intent = state.get("intent", "")
-    if intent in _INTENT_NODES:
-        return intent
-    if state.get("is_market_query", False):
-        return "data"
-    if any(kw in state.get("query", "").lower() for kw in _KNOWLEDGE_KEYWORDS):
-        return "knowledge"
-    return "data"
-
-
-def decide_next(state: AgentState) -> str:
-    """Route after grade_or_critique based on verdict."""
-    v = state.get("grades", {}).get("verdict", "enough")
-    if v == "enough":
-        return "synthesize"
-    if state.get("iteration", 0) >= MAX_ITER or v == "insufficient":
-        return "web_search"
-    return "fusion_search"  # "rewrite" — retry with same query
-
-
-# ── Node 0b: fusion_search (RAG-Fusion) ──────────────────────────────────────
-
-def _get_bm25(collection: str):
-    if collection not in _bm25_cache:
-        from rag.retrieval_bm25 import BM25Retriever
-        _bm25_cache[collection] = BM25Retriever(collection=collection, use_vn_tokenize=True)
-    return _bm25_cache[collection]
-
-
-def fusion_search(state: AgentState) -> dict:
-    """RAG-Fusion: decompose query → multi-retrieve → RRF fuse → fused_chunks."""
-    from rag.rag_fusion_graph import run_rag_fusion
-
-    try:
-        bm25 = _get_bm25(_RAG_COLLECTION)
-        result = run_rag_fusion(
-            query=state["query"],
-            collection=_RAG_COLLECTION,
-            embed_model=_EMBED_MODEL,
-            bm25_retriever=bm25,
-            ticker=state.get("ticker", "HPG"),
-            n_sub_queries=4,
-        )
-        return {
-            "sub_queries": result.get("sub_queries", []),
-            "fused_chunks": result.get("fused_chunks", []),
-            "sources_used": result.get("sources_used", []),
-        }
-    except Exception as exc:
-        # RAG unavailable — continue without fused context
-        return {"sub_queries": [], "fused_chunks": [], "sources_used": []}
-
-
-# ── Node 0c: grade_or_critique (guide A5) ────────────────────────────────────
-
-def grade_or_critique(state: AgentState) -> dict:
-    """Evaluate fused_chunks sufficiency. No LLM call."""
-    fused = state.get("fused_chunks", [])
-    iteration = state.get("iteration", 0)
-    if len(fused) >= 3:
-        return {"grades": {"verdict": "enough"}}
-    if len(fused) == 0 and iteration < MAX_ITER:
-        return {"grades": {"verdict": "rewrite"}, "iteration": iteration + 1}
-    return {"grades": {"verdict": "insufficient"}}
-
-
-# ── Node 0d: run_web_search (guide A4 tool 3) ─────────────────────────────────
-
-def run_web_search(state: AgentState) -> dict:
-    """Web/news fallback when RAG context insufficient."""
-    result = search_financial_news(state.get("ticker", ""), days=7)
-    return {"news_data": result.message if result.status == "ok" else ""}
-
-
-# ── Node 1: collect ────────────────────────────────────────────────────────────
-
-def collect(state: AgentState) -> dict:
-    ticker = state["ticker"]
-    is_market = state.get("is_market_query", False)
-    ohlcv_days = 60 if is_market else 60
-    news_days = 1 if is_market else 7
-
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        fut_ohlcv = ex.submit(get_historical_ohlcv, ticker, ohlcv_days)
-        fut_news = ex.submit(search_financial_news, ticker, news_days)
-        ohlcv_result = fut_ohlcv.result()
-        news_result = fut_news.result()
-
-    updates: dict = {"step_count": state.get("step_count", 0) + 1}
-
-    if ohlcv_result.status == "ok":
-        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        path = str(_CACHE_DIR / f"{ticker}_ohlcv.csv")
-        ohlcv_result.data.to_csv(path, index=False)
-        updates["price_data_path"] = path
-    else:
-        updates["error"] = ohlcv_result.message
-
-    updates["news_data"] = (
-        news_result.message if news_result.status == "ok"
-        else f"[Không có tin tức: {news_result.message}]"
-    )
-    updates["history"] = state.get("history", []) + [
-        {"step": "collect", "ohlcv_status": ohlcv_result.status, "news_status": news_result.status}
-    ]
-    return updates
-
-
-# ── Node 2: analyze_technical ─────────────────────────────────────────────────
-
-def analyze_technical(state: AgentState) -> dict:
-    path = state.get("price_data_path", "")
-    updates: dict = {"step_count": state.get("step_count", 0) + 1}
-
-    if not path or not Path(path).exists():
-        updates["tech_signals"] = "Không có dữ liệu giá để tính chỉ báo kỹ thuật."
-        return updates
-
-    df = pd.read_csv(path)
-    result = calculate_indicators(df)
-    updates["tech_signals"] = result.message
-    return updates
-
-
-# ── Node 3: assess_risk ────────────────────────────────────────────────────────
-
-def assess_risk(state: AgentState) -> dict:
-    """Pure if/else — no model call."""
-    path = state.get("price_data_path", "")
-    updates: dict = {"step_count": state.get("step_count", 0) + 1}
-
-    if not path or not Path(path).exists():
-        updates["risk_verdict"] = "INSUFFICIENT_DATA"
-        return updates
-
-    df = pd.read_csv(path)
-    if len(df) < 14:
-        updates["risk_verdict"] = "INSUFFICIENT_DATA"
-        return updates
-
-    returns = df["close"].tail(14).pct_change().dropna()
-    volatility = float(returns.std())
-
-    if volatility > _VOLATILITY_THRESHOLD:
-        updates["risk_verdict"] = f"HIGH_VOLATILITY (14-session std={volatility:.2%})"
-    else:
-        updates["risk_verdict"] = f"OK (14-session std={volatility:.2%})"
-        sentiment_result = analyze_market_sentiment(state["ticker"], days=7)
-        updates["sentiment"] = (
-            sentiment_result.message if sentiment_result.status == "ok" else ""
-        )
-
-    return updates
-
-
-# ── Node 4: synthesize ────────────────────────────────────────────────────────
-
-def synthesize(state: AgentState) -> dict:
-    from llm.factory import create_client
-    from llm.types import Message
-
-    ticker = state.get("ticker", "")
-    is_market = state.get("is_market_query", False)
-    subject = "thị trường chứng khoán" if is_market else f"cổ phiếu {ticker}"
-    tech = state.get("tech_signals") or "Không có dữ liệu kỹ thuật."
-    risk = state.get("risk_verdict") or "Chưa đánh giá."
-    news = state.get("news_data") or "Không có tin tức."
-    sentiment = state.get("sentiment") or ""
-    data_source = "yfinance (^VN30 proxy)" if is_market else "VCI REST API"
-
-    high_vol_warning = (
-        "\n⚠️ **CẢNH BÁO:** Biến động cao trong 14 phiên gần nhất. Rủi ro tăng đáng kể.\n"
-        if "HIGH_VOLATILITY" in risk else ""
-    )
-
-    sentiment_block = f"\n## Sentiment thị trường:\n{sentiment}" if sentiment else ""
-
-    fused_chunks = state.get("fused_chunks", [])
-    sources_used = state.get("sources_used", [])
-    rag_block = ""
-    if fused_chunks:
-        rag_context = "\n\n---\n\n".join(fused_chunks[:5])
-        sources_label = ", ".join(sources_used) if sources_used else "RAG corpus"
-        rag_block = f"\n\n### Tài liệu tham khảo (RAG-Fusion — nguồn: {sources_label})\n{rag_context}"
-
-    prompt = f"""Dữ liệu phân tích {subject}:
-
-{high_vol_warning}
-### Chỉ báo kỹ thuật
-{tech}
-
-### Rủi ro
-{risk}
-
-### Tin tức
-{news}{sentiment_block}{rag_block}
-
-Viết ngay báo cáo Markdown (không có văn bản nào trước báo cáo). Cấu trúc:
-# Báo cáo phân tích {ticker}
-## Kết luận: [Tích cực / Trung tính / Tiêu cực]
-## Kỹ thuật
-## Rủi ro
-## Tin tức & Sentiment
-## Khuyến nghị
-
-Trích nguồn dạng [Nguồn: {data_source}] hoặc [Nguồn: CafeF/Tavily, <ngày>]."""
-
-    t0 = time.perf_counter()
-    client = create_client()
-    resp = client.generate(
-        [Message(role="user", content=prompt)],
-        max_tokens=4000,
-        system=(
-            "Bạn là chuyên gia phân tích tài chính Việt Nam. "
-            "Trả lời chỉ bằng báo cáo Markdown, không có văn bản nào trước hoặc sau."
-        ),
-    )
-    elapsed = time.perf_counter() - t0
-
-    return {
-        "report": resp.text.strip(),
-        "summary": resp.text.strip()[:120],
-        "step_count": state.get("step_count", 0) + 1,
-        "history": state.get("history", []) + [{
-            "step": "synthesize",
-            "input_tokens": resp.input_tokens,
-            "output_tokens": resp.output_tokens,
-            "elapsed_seconds": round(elapsed, 2),
-        }],
-    }
-
-
-# ── Intent nodes (thin wrappers — call agents/intents/*.run()) ────────────────
-
-def node_price_action(state: AgentState) -> dict:
-    from agents.intents.price_action import run
-    return {"report": run(state.get("ticker"), state.get("query", ""))}
-
-
-def node_technical(state: AgentState) -> dict:
-    from agents.intents.technical import run
-    return {"report": run(state.get("ticker"), state.get("query", ""))}
-
-
-def node_news_sentiment(state: AgentState) -> dict:
-    from agents.intents.news_sentiment import run
-    return {"report": run(state.get("ticker"), state.get("query", ""))}
-
-
-def node_macro_sector(state: AgentState) -> dict:
-    from agents.intents.macro_sector import run
-    return {"report": run(state.get("ticker"), state.get("query", ""))}
-
-
-def node_investment_case(state: AgentState) -> dict:
-    from agents.intents.investment_case import run
-    return {"report": run(state.get("ticker"), state.get("query", ""))}
-
-
-def node_screening(state: AgentState) -> dict:
-    from agents.intents.screening import run
-    return {"report": run(state.get("ticker"), state.get("query", ""))}
 
 
 def node_market_brief(state: AgentState) -> dict:
@@ -520,16 +252,6 @@ def node_market_brief(state: AgentState) -> dict:
     except Exception:
         pass
     return {"report": report}
-
-
-def node_breakout_scan(state: AgentState) -> dict:
-    from agents.intents.breakout import run
-    return {"report": run(state.get("ticker", ""), state.get("query", ""))}
-
-
-def node_rag_qa(state: AgentState) -> dict:
-    from rag.qa import answer as qa_answer
-    return {"report": qa_answer(state.get("query", ""), ticker=state.get("ticker"))}
 
 
 # ── cache_save_node ───────────────────────────────────────────────────────────
@@ -556,27 +278,6 @@ def cache_save_node(state: AgentState) -> dict:
 
 # ── New pipeline nodes ────────────────────────────────────────────────────────
 
-def _extract_query_tickers(query: str) -> list[str]:
-    """Extract ticker symbols explicitly named in the query, filtered by the VN universe.
-
-    Multi-ticker sector queries (e.g. "ngành Ngân hàng (VCB, BID, CTG, …)") list many
-    tickers the single-field classifier cannot carry. The universe filter alone drops
-    noise ("NH", "NG", "USD", "EUR") that a bare [A-Z]{2,5} regex would otherwise pick
-    up — currency codes are not VN tickers, so they never pass the gate. The one
-    ambiguous token is "VND" (đồng vs VNDirect); it's harmless because FX queries route
-    to macro_sector, which ignores the ticker.
-    """
-    import re
-    try:
-        from core.tickers import get_tickers
-        known = set(get_tickers())
-    except Exception:
-        known = set()
-    if not known:
-        return []
-    return [t for t in re.findall(r"\b[A-Z]{2,5}\b", (query or "").upper()) if t in known]
-
-
 def decompose_node(state: AgentState) -> dict:
     """Decompose original query into structured sub-tasks, each with its own intent.
 
@@ -588,8 +289,8 @@ def decompose_node(state: AgentState) -> dict:
     parent_intent = state.get("intent", "macro_sector")
     ticker = state.get("ticker", "")
     query_tickers = (
-        _extract_query_tickers(state.get("original_query", ""))
-        or _extract_query_tickers(state.get("query", ""))
+        extract_tickers(state.get("original_query", ""))
+        or extract_tickers(state.get("query", ""))
     )
     fallback_tickers = (query_tickers or ([ticker] if ticker else []))[:MAX_FANOUT_TICKERS]
     replan_note = state.get("replan_note", "")
@@ -599,7 +300,7 @@ def decompose_node(state: AgentState) -> dict:
     for t in generate_sub_tasks(decompose_query, n=4):
         # The LLM already names the notable tickers inside each sub-task question
         # (prompt caps it at ≤5). Prefer those; fall back to query-level extraction.
-        task_tickers = (_extract_query_tickers(t.get("question", "")) or fallback_tickers)
+        task_tickers = (extract_tickers(t.get("question", "")) or fallback_tickers)
         sub_tasks.append({
             "intent": t.get("intent") or parent_intent,
             "tickers": task_tickers[:MAX_FANOUT_TICKERS],
@@ -628,6 +329,7 @@ def decompose_node(state: AgentState) -> dict:
         "iteration": 0,
         "replan_attempted": bool(replan_note),
         "replan_note": "",
+        "llm_calls": state.get("llm_calls", 0) + 1,
     }
 
 
@@ -671,39 +373,81 @@ def _is_empty_result(data: str) -> bool:
     ))
 
 
+def _safe_gather(fn, ticker: str, question: str) -> str:
+    """Call a gather fn, converting any error to an inline error string (never raises)."""
+    try:
+        return fn(ticker, question) or ""
+    except Exception as exc:
+        return f"[{ticker} — lỗi: {exc}]"
+
+
+def _gather_tickers(fn, tickers: list[str], question: str) -> str:
+    """Fan-out a gather fn over multiple tickers in parallel, preserving input order.
+
+    Each future is awaited directly with a per-fetch timeout — `as_completed` would
+    never yield a future whose fn hangs, so the timeout would never fire for it.
+    """
+    if not tickers:
+        return ""
+    if len(tickers) == 1:
+        return _safe_gather(fn, tickers[0], question)
+    results: dict[str, str] = {}
+    ex = ThreadPoolExecutor(max_workers=min(len(tickers), MAX_FANOUT_TICKERS))
+    try:
+        futs = [(ex.submit(_safe_gather, fn, t, question), t) for t in tickers]
+        for fut, t in futs:
+            try:
+                results[t] = fut.result(timeout=GATHER_TIMEOUT_SECONDS) or ""
+            except Exception as exc:
+                results[t] = f"[{t} — lỗi: {exc}]"
+    finally:
+        # wait=False: a hung gather thread must not stall the turn at executor exit.
+        # The tool layer (VCI/yfinance) carries its own HTTP timeout as the real bound.
+        ex.shutdown(wait=False, cancel_futures=True)
+    return "\n\n".join(results[t] for t in tickers if results.get(t))
+
+
 def run_subqueries_node(state: AgentState) -> dict:
     """Gather data for each structured sub-task — no LLM, no re-classification.
 
-    Reads sub_tasks [{intent, tickers, question}] set by decompose_node.
-    Fan-out: price/technical intents fetch each ticker independently and merge.
+    Reads sub_tasks [{intent, tickers, question}] set by decompose_node. Fan-out intents
+    fetch each ticker in parallel (ThreadPoolExecutor) with a per-fetch timeout so one
+    hung source cannot stall the turn. Sub-tasks stay sequential: the in-memory tool TTL
+    cache (tools/cache.py) is not concurrency-safe, so parallelising sub-tasks would
+    re-introduce the duplicate-news-fetch regression this node is meant to avoid.
     """
     gather = _get_gather_map()
     sub_tasks = state.get("sub_tasks") or []
     fallback_ticker = state.get("ticker", "")
-    sub_results: list[str] = []
+    fallback_query = state.get("query", "")
 
+    sub_results: list[str] = []
     for task in sub_tasks:
         intent = task.get("intent", "macro_sector")
         tickers = task.get("tickers") or ([fallback_ticker] if fallback_ticker else [])
-        question = task.get("question", state.get("query", ""))
-        fn = gather.get(intent, lambda t, q: "")
+        question = task.get("question") or fallback_query
+        fn = gather.get(intent)
+        if fn is None:
+            # Unknown intent slipped through decompose — surface it, then fall back to
+            # macro_sector so the turn still produces data instead of a silent empty.
+            log.warning("gather_unknown_intent intent=%s question=%r", intent, question[:80])
+            try:
+                from tracing import get_tracer
+                get_tracer().event("gate", {
+                    "node": "gather_unknown_intent",
+                    "intent": intent,
+                    "question": question[:80],
+                })
+            except Exception:
+                pass
+            fn = gather.get("macro_sector")
+            intent = "macro_sector"
 
-        if intent in _FANOUT_INTENTS and len(tickers) > 1:
-            parts: list[str] = []
-            for t in tickers:
-                try:
-                    d = fn(t, question)
-                    if d:
-                        parts.append(d)
-                except Exception as exc:
-                    parts.append(f"[{t} — lỗi: {exc}]")
-            data = "\n\n".join(parts) if parts else ""
+        if intent in _FANOUT_INTENTS:
+            data = _gather_tickers(fn, tickers, question)
         else:
             primary = tickers[0] if tickers else fallback_ticker
-            try:
-                data = fn(primary, question)
-            except Exception as exc:
-                data = f"[{intent.upper()} — lỗi: {exc}]"
+            data = _safe_gather(fn, primary, question)
 
         if data:
             tickers_label = "+".join(tickers) if tickers else "N/A"
@@ -804,7 +548,9 @@ def synthesize_final(state: AgentState) -> dict:
     return {
         "report": report,
         "summary": report[:120],
+        "report_candidates": state.get("report_candidates", []) + [report],
         "step_count": state.get("step_count", 0) + 1,
+        "llm_calls": state.get("llm_calls", 0) + 1,
         "history": state.get("history", []) + [{
             "step": "synthesize_final",
             "input_tokens": in_tokens,
@@ -875,24 +621,52 @@ Chỉ trả về JSON: {{"pass": true|false, "feedback": "lý do ngắn gọn ti
     except Exception:
         pass
 
-    return {
+    attempts_after = attempts + 1
+    critique_results = list(state.get("critique_results", [])) + [passed]
+    updates: dict = {
         "critique_pass": passed,
         "critique_feedback": feedback if not passed else "",
-        "critique_attempts": attempts + 1,
+        "critique_attempts": attempts_after,
+        "critique_results": critique_results,
+        "llm_calls": state.get("llm_calls", 0) + 1,
     }
+    # Keep the best report: when retries are exhausted and this candidate also failed,
+    # prefer any candidate that passed critique; otherwise fall back to the first
+    # candidate so a worse retry never overwrites a better first draft.
+    if attempts_after > MAX_CRITIQUE and not passed:
+        candidates = list(state.get("report_candidates", []))
+        if any(critique_results):
+            updates["report"] = next(
+                (c for c, ok in zip(candidates, critique_results) if ok),
+                candidates[0] if candidates else report,
+            )
+        elif candidates:
+            updates["report"] = candidates[0]
+    return updates
 
 
 def route_after_critique(state: AgentState) -> str:
-    """Retry synthesize once with feedback; otherwise save best-effort report."""
+    """Retry synthesize once with feedback; otherwise save best-effort report.
+
+    Budget guard short-circuits first: once the turn's LLM/wall-clock budget is gone,
+    skip the retry (another synthesize + critique = 2 more LLM calls) and save.
+    """
+    if _llm_budget_exceeded(state):
+        return "save"
     if state.get("critique_pass", True):
         return "save"
-    if state.get("critique_attempts", 0) < MAX_CRITIQUE:
+    if state.get("critique_attempts", 0) <= MAX_CRITIQUE:
         return "retry"
     return "save"
 
 
 def route_after_subqueries(state: AgentState) -> str:
-    """Re-plan once if most sub-tasks returned no usable data; else synthesize."""
+    """Re-plan once if most sub-tasks returned no usable data; else synthesize.
+
+    Budget guard first: no re-plan (another decompose LLM call) when budget is gone.
+    """
+    if _llm_budget_exceeded(state):
+        return "synthesize"
     ratio = state.get("sub_results_empty_ratio", 0.0)
     if ratio > 0.5 and not state.get("replan_attempted", False):
         return "replan"
@@ -905,11 +679,19 @@ def _route_after_clarify(state: AgentState) -> str:
     """Skip decompose for single-ticker leaf-intent queries — saves 1 LLM call + 3 data fetches."""
     intent = state.get("intent", "")
     ticker = state.get("ticker", "")
-    if intent == "market_brief":
+    if intent == "out_of_scope":
+        # Clarify re-classified the merged answer as out-of-scope (e.g. user said "thôi
+        # tôi muốn hỏi bitcoin"). Decline directly — no decompose/fabrication.
+        route = "out_of_scope"
+    elif intent == "conversation":
+        # Clarify re-classified the merged answer as non-financial (e.g. user said "bỏ
+        # qua"). Exit — decompose would run with parent_intent="conversation" and gather
+        # empty, producing a fabricated report.
+        route = "conversation"
+    elif intent == "market_brief":
         route = "market_brief"
     elif (intent
             and intent not in _COMPLEX_INTENTS
-            and intent != "conversation"
             and ticker):
         route = "simple"
     else:
@@ -937,11 +719,11 @@ def build_single_subtask_node(state: AgentState) -> dict:
     # Multi-ticker comparison: the LLM-expanded `query` may drop the 2nd/3rd ticker.
     # original_query is verbatim — when it names ≥2 known tickers, prefer it so
     # gather_data (e.g. valuation) can cross-compare both.
-    if len(_extract_query_tickers(query)) < 2:
-        if len(_extract_query_tickers(original)) >= 2:
+    if len(extract_tickers(query)) < 2:
+        if len(extract_tickers(original)) >= 2:
             query = original
 
-    tickers = _extract_query_tickers(query) or ([ticker] if ticker else [])
+    tickers = extract_tickers(query) or ([ticker] if ticker else [])
 
     try:
         from tracing import get_tracer
@@ -998,6 +780,7 @@ def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGra
     g.add_node("check_cache_node",         check_cache_node)
     g.add_node("clarify_node",             clarify_node)
     g.add_node("node_market_brief",        node_market_brief)
+    g.add_node("node_out_of_scope",        node_out_of_scope)
     g.add_node("build_single_subtask_node", build_single_subtask_node)
     g.add_node("decompose_node",           decompose_node)
     g.add_node("run_subqueries_node",      run_subqueries_node)
@@ -1010,12 +793,17 @@ def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGra
 
     g.set_entry_point("classify_node")
     g.add_conditional_edges("classify_node", check_conversation,
-        {"skip": END, "verify": "check_cache_node"})
+        {"skip": END, "out_of_scope": "node_out_of_scope", "verify": "check_cache_node"})
     g.add_conditional_edges("check_cache_node", check_cache_hit,
         {"hit": END, "miss": "clarify_node"})
     g.add_conditional_edges("clarify_node", _route_after_clarify,
-        {"market_brief": "node_market_brief", "simple": "build_single_subtask_node", "decompose": "decompose_node"})
+        {"market_brief": "node_market_brief",
+         "simple": "build_single_subtask_node",
+         "decompose": "decompose_node",
+         "conversation": "cache_save_node",
+         "out_of_scope": "node_out_of_scope"})
     g.add_edge("node_market_brief", "cache_save_node")
+    g.add_edge("node_out_of_scope", END)
     g.add_edge("build_single_subtask_node", "run_subqueries_node")
     g.add_edge("decompose_node",            "run_subqueries_node")
 

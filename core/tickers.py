@@ -7,6 +7,7 @@ Fallback: TICKERS env var (comma-separated), then ["HPG"]
 from __future__ import annotations
 
 import os
+import re
 
 # Fallback hardcoded when securities table is unavailable
 _RATIO_FALLBACK = [
@@ -112,3 +113,45 @@ def get_sector_peers(ticker: str, max_peers: int = 10) -> list[str]:
         return peers
     except Exception:
         return _SECTOR_FALLBACK.get(ticker, [ticker])
+
+
+# ── Ticker extraction (shared by graph fan-out + cache key) ──────────────────
+
+_TICKER_RE = re.compile(r'\b([A-Z]{2,5})\b')
+_TICKER_STOPWORDS = frozenset({"VE", "VA", "LA", "CO", "DE", "VS", "ROE", "ROA", "EPS", "PE", "PB"})
+
+
+def raw_tickers(query: str) -> list[str]:
+    """Return [A-Z]{2,5} tokens from `query`, stopword-filtered.
+
+    Matches tokens already uppercase in the source text first; only falls back to a
+    case-insensitive scan when the source has no uppercase token. This keeps ordinary
+    Vietnamese words ("tin", "ban", "cho", "nam", "hai") — which all become candidate
+    codes once `.upper()` is applied to the whole sentence — from leaking in as tickers
+    when the sentence already carries real (uppercase) tickers.
+    """
+    if not query:
+        return []
+    hits = _TICKER_RE.findall(query)
+    if not hits:
+        hits = _TICKER_RE.findall(query.upper())
+    return [t for t in hits if t not in _TICKER_STOPWORDS]
+
+
+def extract_tickers(query: str) -> list[str]:
+    """VN-universe tickers named in `query`, order-preserved and deduped.
+
+    Universe filter drops currency codes and other non-VN uppercase tokens. Falls back
+    to raw_tickers() (no universe filter) when the securities table is unavailable, so
+    a degraded DB never silently drops valid tickers.
+    """
+    hits = raw_tickers(query)
+    if not hits:
+        return []
+    try:
+        known = set(get_tickers())
+    except Exception:
+        known = set()
+    if not known:
+        return list(dict.fromkeys(hits))
+    return list(dict.fromkeys(t for t in hits if t in known))

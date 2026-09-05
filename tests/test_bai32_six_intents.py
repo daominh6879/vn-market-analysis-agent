@@ -139,23 +139,23 @@ def test_classify_ticker_alone_defaults_technical():
     assert r.ticker == "HPG"
 
 
-# â”€â”€ NhÃ³m 3: fundamentals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# â”€â”€ NhÃ³m 3: valuation / rag_qaâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-def test_classify_fundamentals_pe():
+def test_classify_valuation_pe():
     r = classify("P/E cá»§a HPG hiá»‡n táº¡i so vá»›i trung bÃ¬nh ngÃ nh tháº¿ nÃ o?")
-    assert r.intent == "rag_qa", f"got {r.intent}: {r.reason}"
+    assert r.intent == "valuation", f"got {r.intent}: {r.reason}"
     assert r.ticker == "HPG"
 
 
-def test_classify_fundamentals_revenue():
+def test_classify_rag_qa_revenue():
     r = classify("doanh thu HPG nÄƒm 2024 lÃ  bao nhiÃªu?")
     assert r.intent == "rag_qa", f"got {r.intent}: {r.reason}"
 
 
-def test_classify_fundamentals_roe():
-    # ROE is in _VN_NOISE so won't be ticker; but "roe" keyword hits _FUNDAMENTALS_KW
+def test_classify_valuation_roe():
+    # ROE is a valuation metric; route to valuation (no ticker involved).
     r = classify("ROE cá»§a VCB nÄƒm ngoÃ¡i lÃ  bao nhiÃªu?")
-    assert r.intent == "rag_qa", f"got {r.intent}: {r.reason}"
+    assert r.intent == "valuation", f"got {r.intent}: {r.reason}"
 
 
 # â”€â”€ NhÃ³m 4: macro_sector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -300,7 +300,7 @@ def test_route_technical_analysis_real():
     assert len(reply) > 100, f"reply too short"
 
 
-def test_route_fundamentals_real():
+def test_route_rag_qa_real():
     """NhÃ³m 3: P/E, doanh thu query â†’ fundamentals â†’ rag/qa."""
     cid, uid = _new_conv()
     lines = _run_stream(cid, uid, "doanh thu vÃ  lá»£i nhuáº­n HPG nÄƒm 2024 lÃ  bao nhiÃªu?")

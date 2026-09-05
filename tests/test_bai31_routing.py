@@ -4,7 +4,7 @@ tests/test_bai31_routing.py â€” End-to-end routing tests hitting real LLM +
 Tests each intent route:
   ticker_analysis â†’ agents/graph.py (price data + technical indicators)
   market_brief    â†’ agents/market_brief_graph.py (global + VN market)
-  qa_document     â†’ rag/qa.py (SQL / RAG)
+  rag_qa     â†’ rag/qa.py (SQL / RAG)
   conversation    â†’ LLM stream direct
 
 Run: pytest tests/test_bai31_routing.py -v -s
@@ -114,15 +114,15 @@ def test_classify_market_brief_vnindex():
     assert r.intent == "market_brief"
 
 
-def test_classify_qa_document():
+def test_classify_rag_qa():
     r = classify("doanh thu HPG nÄƒm 2024 lÃ  bao nhiÃªu?")
     assert r.intent == "rag_qa"
     assert r.ticker == "HPG"
 
 
-def test_classify_qa_document_sql():
+def test_classify_rag_qa_sql():
     r = classify("top 5 mÃ£ cÃ³ ROE cao nháº¥t trong DB")
-    assert r.intent == "screening"  # qa_document split â†’ screening
+    assert r.intent == "screening"  # rag_qa split â†’ screening
 
 
 def test_classify_conversation():
@@ -189,8 +189,8 @@ def test_route_conversation_real():
     assert len(reply) > 10
 
 
-def test_route_qa_document_real():
-    """Financial doc question â†’ qa_document â†’ SQL or RAG path."""
+def test_route_rag_qa_real():
+    """Financial doc question â†’ rag_qa â†’ SQL or RAG path."""
     cid, uid = _new_conv()
     lines = _run(cid, uid, "doanh thu HPG nÄƒm 2024 lÃ  bao nhiÃªu?")
 
@@ -202,7 +202,7 @@ def test_route_qa_document_real():
     print(f"Reply: {reply[:300]}")
 
     assert routing is not None
-    assert routing.get("agent") == "qa_document"
+    assert routing.get("agent") == "rag_qa"
     assert done is not None
     assert len(reply) > 20
 

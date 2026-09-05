@@ -176,7 +176,7 @@ class TestConversationTurnCount:
 # â”€â”€ Fix 6: router investment_case priority â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class TestInvestmentCaseRouter:
-    """investment_case intent fires before screening/fundamentals."""
+    """investment_case intent fires before screening/valuation."""
 
     def test_buy_query_routes_investment_case(self):
         from agents.classifier import classify_hybrid as classify
