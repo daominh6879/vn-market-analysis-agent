@@ -210,10 +210,17 @@ def clarify_node(state: AgentState) -> dict:
         # Acknowledge so the turn always returns something.
         report = "Đã rõ. Tôi sẵn sàng hỗ trợ phân tích chứng khoán Việt Nam khi bạn cần."
 
+    tickers = extract_tickers(merged_query) or ([result.ticker] if result.ticker else [])
+    sector = ""
+    if not tickers:
+        from agents.focus import extract_focus_sector
+        sector = extract_focus_sector(merged_query)
     return {
         "query": merged_query,
         "intent": result.intent,
         "ticker": result.ticker or "",
+        "tickers": tickers,
+        "sector": sector,
         "classify_reason": result.reason,
         "report": report,
         # Resume reuses the checkpoint state from when the interrupt was created, which
@@ -787,14 +794,20 @@ def build_single_subtask_node(state: AgentState) -> dict:
     query = state.get("query", "")
     original = state.get("original_query", "")
 
-    # Multi-ticker comparison: the LLM-expanded `query` may drop the 2nd/3rd ticker.
-    # original_query is verbatim — when it names ≥2 known tickers, prefer it so
-    # gather_data (e.g. valuation) can cross-compare both.
-    if len(extract_tickers(query)) < 2:
-        if len(extract_tickers(original)) >= 2:
-            query = original
-
-    tickers = extract_tickers(query) or ([ticker] if ticker else [])
+    stored_tickers = state.get("tickers") or []
+    if stored_tickers:
+        # Router carried the full ticker list end-to-end (via Focus) — trust it, no
+        # second independent re-extraction (which would drop a comparison's 2nd/3rd ticker).
+        tickers = list(stored_tickers)
+    else:
+        # Direct-graph-invocation callers (tests) never went through the router: re-extract.
+        # Multi-ticker comparison: the LLM-expanded `query` may drop the 2nd/3rd ticker.
+        # original_query is verbatim — when it names ≥2 known tickers, prefer it so
+        # gather_data (e.g. valuation) can cross-compare both.
+        if len(extract_tickers(query)) < 2:
+            if len(extract_tickers(original)) >= 2:
+                query = original
+        tickers = extract_tickers(query) or ([ticker] if ticker else [])
 
     try:
         from tracing import get_tracer

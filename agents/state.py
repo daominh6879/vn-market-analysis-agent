@@ -11,7 +11,8 @@ from typing import TypedDict
 
 
 class AgentState(TypedDict, total=False):
-    ticker: str
+    ticker: str              # single primary ticker (tickers[0]); kept for backward compat
+    tickers: list[str]       # all tickers in scope — comparison-safe (set alongside `ticker`)
     query: str
     summary: str
     price_data_path: str     # path to saved OHLCV CSV — never store DataFrame here
@@ -33,6 +34,7 @@ class AgentState(TypedDict, total=False):
     sources_used: list[str]  # source labels (BCTC, TIN TỨC, WEB, …)
     # Intent routing (set by classify_node inside graph)
     intent: str              # "price_action" | "technical_analysis" | "rag_qa" | ...
+    sector: str              # sector/index subject when no ticker (macro_sector/market_brief)
     classify_reason: str     # reason string from RouterResult — e.g. "ticker HPG default"
     # Clarification (set by verify_context node; pending saved to Postgres by verify_context)
     needs_clarification: bool

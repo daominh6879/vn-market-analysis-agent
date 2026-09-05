@@ -12,13 +12,15 @@ flowchart TD
     IT -->|yes — stale (>10 min)| ORPHAN["orphan thread_id\n(abandon abandoned clarify)\nroute fresh"]
     ORPHAN --> LLM
 
-    IT -->|no| LLM["llm_route(query, history, system_prompt,\n  last_intent, last_subject)\nSingle LLM call with 3 tools:\n• needs_agent_run(intent, ticker, query, reason)\n• direct_reply(text, reason)\n• out_of_scope(text, reason)\nlast_intent/last_subject injected for follow-ups"]
+    IT -->|no| LLM["llm_route(query, history, system_prompt,\n  focus)\nSingle LLM call with 4 tools:\n• needs_agent_run(intent, ticker, query, reason)\n• direct_reply(text, reason)\n• out_of_scope(text, reason)\n• decompose(segments[{kind,text|intent,ticker,query}])\nfocus = prior turn's Focus (tickers+sector+intent)\ncarry-forward resolved via resolve_focus()"]
 
-    LLM -->|needs_agent_run (valid intent)| PRE["Build state\nintent + ticker pre-set\nticker validated vs VN universe\nclassify_node skips LLM"]
+    LLM -->|needs_agent_run (valid intent)| PRE["Build state\nintent + ticker + tickers (plural) pre-set\nticker validated vs VN universe\nclassify_node skips LLM"]
     LLM -->|direct_reply| VERIFY{"re-classify\nwith history"}
     VERIFY -->|financial| PRE
     VERIFY -->|social| TEXT([Stream tool text\nno graph invoked])
     LLM -->|out_of_scope| OOS([Stream decline text\ncrypto/foreign/forex — no graph])
+    LLM -->|decompose (mixed intent)| MIX["type=mixed, segments=[...]\n_mixed_parts loop:\n• agent seg → graph.invoke\n• general/out_of_scope → drafted text\njoin non-empty parts with blank line"]
+    MIX --> GRAPH
     LLM -->|no / invalid tool call| FALLBACK["re-classify\nwith history"]
     FALLBACK -->|agent| PRE
     FALLBACK -->|social / empty| TEXT2([Stream text or short error\nno graph invoked])
@@ -38,6 +40,7 @@ flowchart TD
 | calls `needs_agent_run` (valid intent) | Financial data needed | `type=agent` → graph |
 | calls `direct_reply` | Claimed social turn | re-classify w/ history; financial → agent, else text |
 | calls `out_of_scope` | crypto / foreign stock / non-VND forex | `type=text` → stream decline, no graph |
+| calls `decompose` (≥2 tasks) | Mixed: social + stock, or supported + unsupported | `type=mixed` → `_mixed_parts` runs agent segments through graph, streams drafted text for general/out_of_scope, joins in one reply |
 | no / invalid tool call | LLM bypassed tools | re-classify w/ history → agent / text / error |
 | exception | LLM failed | `type=text` short error — **never `market_brief`** |
 
@@ -46,9 +49,18 @@ before it enters the graph — company names, foreign codes, and market indices 
 graph's clarify/fan-out path re-resolves the subject. The router LLM handles market queries via
 `market_brief`/`macro_sector` intent, not via a hardcoded market-index whitelist.
 
-Follow-ups: `last_intent` / `last_subject` (read from the checkpointer state of the prior turn) are
-appended to the router system prompt, so a bare continuation ("phân tích sâu hơn") inherits the prior
-turn's subject instead of guessing from truncated history.
+Follow-ups: a `Focus` object (built by `_read_prior` from the checkpointer state of the prior turn) is
+passed to the router. `resolve_focus(query, focus)` decides deterministically — new ticker → fresh (no
+injection), bare continuation → inherit the whole prior focus (all tickers + intent), otherwise
+ambiguous → inject subject only. A message naming a new ticker can never be misread as "inherit old
+subject", and a continuation after a comparison keeps every ticker.
+
+Mixed intent: a message carrying ≥2 distinct tasks (social + stock, or a supported analysis +
+trade execution) is decomposed by the router into `segments`. `turn_handler._mixed_parts` runs
+each `agent` segment through the graph and joins the drafted `general`/`out_of_scope` text into
+one reply, so an unsupported sub-request never blocks a supported one (§14.3). The first agent
+segment runs on the main thread (focus carry-forward preserved); any extra agent segment runs on
+an isolated thread.
 
 ## Graph internals
 
@@ -173,12 +185,12 @@ draft if any, else the first draft) so a worse retry never overwrites a better f
 
 | Decision | Reason |
 |---|---|
-| Three tools (`needs_agent_run` + `direct_reply` + `out_of_scope`) | No free-form escape hatch — LLM makes explicit structured choice. `out_of_scope` gives foreign/crypto/forex a clean decline instead of a fabricated VN-intent report. |
+| Four tools (`needs_agent_run` + `direct_reply` + `out_of_scope` + `decompose`) | No free-form escape hatch — LLM makes explicit structured choice. `out_of_scope` gives foreign/crypto/forex a clean decline; `decompose` splits a multi-task message into segments so a supported task runs even alongside an unsupported one. |
 | `tool_choice="auto"` not `"required"` | `required` forces tool call for pure social turns → LLM calls `needs_agent_run` with reconstructed context → wrong. `auto` lets LLM reply freely for social, which we treat as `type=text`. |
 | No/invalid-tool-call fallback → re-classify with history | The classifier re-resolves intent + ticker with conversation history, so an implicit follow-up still resolves its subject. A social turn returns its free text; a failed classify returns a short error. |
 | Exception fallback → `type=text` short error | LLM failure yields a short Vietnamese apology, never a full `market_brief` run (a greeting during a provider outage must not trigger the whole market graph). |
 | `needs_agent_run` ticker validated vs VN universe | LLM ticker field can be a company name, "NGANHANG", or a foreign code. Universe-only validation drops those to `""`; the graph re-resolves. No hardcoded market-index whitelist — the router LLM handles market queries via intent. |
-| `last_intent` / `last_subject` injected into router prompt | Bare follow-ups ("phân tích sâu hơn") need the prior turn's subject; 120-char truncated assistant history can't guarantee it. Explicit signal beats prompt-engineering around truncation. |
+| `Focus` object + `resolve_focus` carry-forward rule | Bare follow-ups ("phân tích sâu hơn") need the prior turn's subject; 120-char truncated assistant history can't guarantee it. A deterministic entity check (not marker substrings) decides fresh-vs-carry so a new ticker alongside "phân tích thêm" is never inherited, and a comparison's 2nd/3rd ticker survives the next turn. |
 | Assistant history truncated to 120 chars in `llm_route` | Full reports in history let LLM answer new ticker queries from stale data. 120 chars = header only (confirms topic, not data). |
 | Stale interrupt orphaned (thread_id swap) | A clarify interrupt left >10 min (user abandoned it) must not swallow every later message. A fresh `thread_id` orphans it and the turn routes normally. |
 | No per-sub-query `classify_hybrid` | `decompose_node` uses tool calling — LLM returns structured `{intent, tickers, question}` directly. Saves N LLM calls per turn. |

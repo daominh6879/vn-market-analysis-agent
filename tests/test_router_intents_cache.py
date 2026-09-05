@@ -61,6 +61,7 @@ from agents.graph import (
     _strip_subresult_labels,
 )
 from agents.state import make_initial_state, AgentState
+from agents.focus import Focus, resolve_focus
 from core.tickers import raw_tickers, extract_tickers
 
 # Minimal persona for llm_route — routing is tool-driven, not prompt-sensitive.
@@ -447,7 +448,7 @@ def test_llm_route_tools_include_out_of_scope():
         cr.llm_route("xin chào", [], "sys", client=client)
     tools = client.generate.call_args.kwargs["tools"]
     names = {t["name"] for t in tools}
-    assert names == {"needs_agent_run", "direct_reply", "out_of_scope"}
+    assert names == {"needs_agent_run", "direct_reply", "out_of_scope", "decompose"}
 
 
 def test_llm_route_injects_last_context(monkeypatch):
@@ -461,7 +462,7 @@ def test_llm_route_injects_last_context(monkeypatch):
 
     route = cr.llm_route(
         "phân tích sâu hơn", [], "sys", client=client,
-        last_intent="technical_analysis", last_subject="HPG",
+        focus=Focus(tickers=["HPG"], intent="technical_analysis", query="phân tích kỹ thuật HPG"),
     )
 
     system = client.generate.call_args.kwargs["system"]
@@ -469,15 +470,6 @@ def test_llm_route_injects_last_context(monkeypatch):
     assert "technical_analysis" in system
     assert "HPG" in system
     assert route["type"] == "agent"
-
-
-def test_is_bare_continuation():
-    from agents.conversation_router import _is_bare_continuation
-    assert _is_bare_continuation("phân tích sâu hơn") is True
-    assert _is_bare_continuation("phân tích thêm") is True
-    assert _is_bare_continuation("chi tiết hơn") is True
-    assert _is_bare_continuation("giá cổ phiếu vietcombank?") is False
-    assert _is_bare_continuation("P/E của VCB là bao nhiêu?") is False
 
 
 def test_llm_route_nonbare_followup_suppresses_intent(monkeypatch):
@@ -492,13 +484,92 @@ def test_llm_route_nonbare_followup_suppresses_intent(monkeypatch):
 
     route = cr.llm_route(
         "giá cổ phiếu vietcombank?", [], "sys", client=client,
-        last_intent="valuation", last_subject="VCB",
+        focus=Focus(tickers=["VCB"], intent="valuation", query="P/E của VCB"),
     )
 
     system = client.generate.call_args.kwargs["system"]
     assert "chủ thể 'VCB'" in system
     assert "intent 'valuation'" not in system, "prior intent must be suppressed for a non-bare follow-up"
     assert route["type"] == "agent"
+
+
+def test_llm_route_fresh_ticker_not_inherited(monkeypatch):
+    """Continuation phrase + NEW ticker → fresh, prior intent/subject must NOT leak in."""
+    from agents import conversation_router as cr
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "VCB"])
+    tc = MagicMock()
+    tc.name = "needs_agent_run"
+    tc.input = {"intent": "technical_analysis", "ticker": "HPG", "query": "phân tích thêm HPG", "reason": ""}
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+
+    route = cr.llm_route(
+        "phân tích thêm HPG", [], "sys", client=client,
+        focus=Focus(tickers=["VCB"], intent="valuation", query="P/E của VCB"),
+    )
+
+    system = client.generate.call_args.kwargs["system"]
+    assert "Lượt trước" not in system, "a fresh-ticker message must not inject prior context"
+    assert route["type"] == "agent"
+    assert route["intent"] != "valuation", "prior valuation intent must not leak to HPG"
+    assert route["ticker"] == "HPG"
+    assert route["tickers"] == ["HPG"]
+
+
+def test_llm_route_continue_carries_all_tickers(monkeypatch):
+    """Bare continuation after a comparison keeps BOTH tickers, not just the first."""
+    from agents import conversation_router as cr
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["BID", "CTG"])
+    tc = MagicMock()
+    tc.name = "needs_agent_run"
+    tc.input = {"intent": "valuation", "ticker": "BID", "query": "phân tích sâu hơn BID", "reason": ""}
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+
+    route = cr.llm_route(
+        "phân tích sâu hơn", [], "sys", client=client,
+        focus=Focus(tickers=["BID", "CTG"], intent="valuation", query="so sánh BID và CTG"),
+    )
+
+    system = client.generate.call_args.kwargs["system"]
+    assert "BID, CTG" in system, "both prior tickers must be injected"
+    assert route["type"] == "agent"
+    assert route["intent"] == "valuation"
+    assert route["tickers"] == ["BID", "CTG"], "continuation must carry the full ticker list"
+
+
+def test_llm_route_sector_continuation_injects_subject(monkeypatch):
+    """Bare continuation after a sector turn injects the sector subject (not just intent)."""
+    from agents import conversation_router as cr
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "VCB"])
+    tc = MagicMock()
+    tc.name = "needs_agent_run"
+    tc.input = {"intent": "macro_sector", "ticker": "", "query": "phân tích sâu hơn ngành ngân hàng", "reason": ""}
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+
+    route = cr.llm_route(
+        "phân tích sâu hơn", [], "sys", client=client,
+        focus=Focus(tickers=[], sector="ngân hàng", intent="macro_sector", query="phân tích ngành ngân hàng"),
+    )
+
+    system = client.generate.call_args.kwargs["system"]
+    assert "chủ thể 'ngân hàng'" in system, "sector subject must be injected for a sector continuation"
+    assert "macro_sector" in system
+    assert route["type"] == "agent"
+    assert route["sector"] == "ngân hàng"
+
+
+def test_fallback_classify_continue_inherits(monkeypatch):
+    """_fallback_classify on a bare continuation with focus → inherits intent + tickers."""
+    from agents.conversation_router import _fallback_classify
+    focus = Focus(tickers=["BID", "CTG"], intent="valuation", query="so sánh BID và CTG")
+    route = _fallback_classify("phân tích sâu hơn", [], focus=focus)
+    assert route is not None
+    assert route["type"] == "agent"
+    assert route["intent"] == "valuation"
+    assert route["tickers"] == ["BID", "CTG"]
+    assert route["ticker"] == "BID"
 
 
 def test_llm_route_no_last_context_no_injection():
@@ -628,6 +699,120 @@ def test_llm_route_direct_reply_empty_text_not_blank():
         route = cr.llm_route("cảm ơn bạn", [], "sys", client=client)
     assert route["type"] == "text"
     assert route["text"], "empty direct_reply text must not escape as blank"
+
+
+# ── Mixed-intent decomposition (decompose tool) ───────────────────────────────
+
+def _decompose_client(segments):
+    tc = MagicMock(); tc.name = "decompose"
+    tc.input = {"segments": segments, "reason": "mixed test"}
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+    return client
+
+
+def test_llm_route_decompose_general_plus_agent(monkeypatch):
+    from agents import conversation_router as cr
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["FPT"])
+    client = _decompose_client([
+        {"kind": "general", "text": "Mình vẫn khỏe, cảm ơn bạn!"},
+        {"kind": "agent", "intent": "investment_case", "ticker": "FPT",
+         "query": "FPT có nên mua không?", "reason": ""},
+    ])
+    route = cr.llm_route("hôm nay bạn thế nào? À, FPT có nên mua không?", [], "sys", client=client)
+
+    assert route["type"] == "mixed"
+    segs = route["segments"]
+    assert [s["kind"] for s in segs] == ["general", "agent"]
+    assert segs[0]["text"] == "Mình vẫn khỏe, cảm ơn bạn!"
+    assert segs[1]["intent"] == "investment_case"
+    assert segs[1]["ticker"] == "FPT"
+    assert segs[1]["tickers"] == ["FPT"]
+    assert segs[1]["query"] == "FPT có nên mua không?"
+
+
+def test_llm_route_decompose_supported_plus_out_of_scope(monkeypatch):
+    from agents import conversation_router as cr
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["FPT"])
+    client = _decompose_client([
+        {"kind": "agent", "intent": "investment_case", "ticker": "FPT",
+         "query": "phân tích FPT", "reason": ""},
+        {"kind": "out_of_scope", "text": "Tôi không hỗ trợ đặt lệnh mua/bán.",
+         "reason": "trade_execution"},
+    ])
+    route = cr.llm_route("phân tích FPT và đặt lệnh mua giúp tôi", [], "sys", client=client)
+
+    assert route["type"] == "mixed"
+    segs = route["segments"]
+    assert [s["kind"] for s in segs] == ["agent", "out_of_scope"]
+    assert segs[1]["text"] == "Tôi không hỗ trợ đặt lệnh mua/bán."
+
+
+def test_llm_route_decompose_out_of_scope_empty_text_falls_back():
+    from agents import conversation_router as cr
+    from agents.classifier import OUT_OF_SCOPE_REPLY
+    client = _decompose_client([
+        {"kind": "out_of_scope", "text": "", "reason": "trade_execution"},
+    ])
+    route = cr.llm_route("đặt lệnh mua bitcoin giúp tôi", [], "sys", client=client)
+
+    assert route["type"] == "mixed"
+    assert route["segments"][0]["text"] == OUT_OF_SCOPE_REPLY
+
+
+def test_llm_route_decompose_general_empty_skipped():
+    from agents import conversation_router as cr
+    client = _decompose_client([
+        {"kind": "general", "text": "", "reason": ""},
+        {"kind": "out_of_scope", "text": "decline", "reason": ""},
+    ])
+    route = cr.llm_route("...", [], "sys", client=client)
+
+    assert route["type"] == "mixed"
+    assert [s["kind"] for s in route["segments"]] == ["out_of_scope"]
+
+
+def test_llm_route_decompose_agent_bad_ticker_dropped(monkeypatch):
+    from agents import conversation_router as cr
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["VCB"])
+    client = _decompose_client([
+        {"kind": "agent", "intent": "price_action", "ticker": "AAPL",
+         "query": "giá AAPL", "reason": ""},
+    ])
+    route = cr.llm_route("giá AAPL thế nào?", [], "sys", client=client)
+
+    assert route["type"] == "mixed"
+    seg = route["segments"][0]
+    assert seg["ticker"] == ""
+    assert "ticker_dropped=AAPL" in seg["reason"]
+
+
+def test_llm_route_decompose_no_usable_segments_falls_back():
+    from agents import conversation_router as cr
+    client = _decompose_client([])
+    with patch("agents.classifier.classify_hybrid",
+               return_value=RouterResult("conversation", None, "x")):
+        route = cr.llm_route("hôm nay bạn thế nào?", [], "sys", client=client)
+    assert route["type"] == "text"
+
+
+def test_parse_agent_fields_needs_agent_run_unchanged(monkeypatch):
+    """Regression guard: extracting _parse_agent_fields must not change needs_agent_run."""
+    from agents import conversation_router as cr
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "VCB"])
+    tc = MagicMock(); tc.name = "needs_agent_run"
+    tc.input = {"intent": "technical_analysis", "ticker": "HPG",
+                "query": "phân tích HPG", "reason": ""}
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+
+    route = cr.llm_route("phân tích HPG", [], "sys", client=client)
+
+    assert route["type"] == "agent"
+    assert route["intent"] == "technical_analysis"
+    assert route["ticker"] == "HPG"
+    assert route["tickers"] == ["HPG"]
+    assert route["query"] == "phân tích HPG"
 
 
 def test_validate_ticker(monkeypatch):
@@ -954,8 +1139,8 @@ def test_read_prior_fresh_interrupt_not_stale():
     prior = _read_prior(_FakeApp(snap), {})
     assert prior["interrupted"] is True
     assert prior["stale"] is False
-    assert prior["last_intent"] == "technical_analysis"
-    assert prior["last_subject"] == "HPG"
+    assert prior["focus"].intent == "technical_analysis"
+    assert prior["focus"].tickers == ["HPG"]
 
 
 def test_read_prior_stale_interrupt():
@@ -968,6 +1153,7 @@ def test_read_prior_stale_interrupt():
     prior = _read_prior(_FakeApp(snap), {})
     assert prior["interrupted"] is True
     assert prior["stale"] is True
+    assert prior["focus"] is None
 
 
 def test_read_prior_no_interrupt():
@@ -976,8 +1162,21 @@ def test_read_prior_no_interrupt():
     prior = _read_prior(_FakeApp(snap), {})
     assert prior["interrupted"] is False
     assert prior["stale"] is False
-    assert prior["last_intent"] == "valuation"
-    assert prior["last_subject"] == "VCB"
+    assert prior["focus"].intent == "valuation"
+    assert prior["focus"].tickers == ["VCB"]
+
+
+def test_read_prior_comparison_tickers_survive(monkeypatch):
+    """A comparison turn's 2nd/3rd ticker survives via original_query, even though the
+    top-level `ticker` only stored the first one."""
+    from memory.turn_handler import _read_prior
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["BID", "CTG"])
+    snap = _FakeSnap(
+        values={"intent": "valuation", "ticker": "BID", "original_query": "so sánh BID và CTG"},
+        next_=(),
+    )
+    prior = _read_prior(_FakeApp(snap), {})
+    assert prior["focus"].tickers == ["BID", "CTG"]
 
 
 def test_snapshot_ts_checkpoint_fallback():
@@ -1056,6 +1255,30 @@ def test_llm_route_out_of_scope_declines():
     assert route.get("text"), "decline text must be non-empty"
     assert route.get("reason"), "decline must carry a reason"
     print(f"\n[out_of_scope] reason={route.get('reason')!r} text={route.get('text')!r}")
+
+
+@pytest.mark.e2e
+def test_llm_route_e2e_prior_fpt_new_vcb_is_fresh():
+    """Prior turn = FPT; user now names VCB → FRESH. VCB must not inherit FPT's focus."""
+    from agents.conversation_router import llm_route
+    focus = Focus(tickers=["FPT"], intent="technical_analysis", query="phân tích kỹ thuật FPT")
+    route = llm_route("giá VCB hôm nay thế nào?", [], _ROUTE_SYSTEM, focus=focus)
+    assert route["type"] == "agent", f"expected agent, got {route}"
+    assert route["ticker"] == "VCB", f"expected fresh VCB, got {route.get('ticker')!r}"
+    assert route["tickers"] == ["VCB"], f"prior FPT must be replaced: {route.get('tickers')!r}"
+    print(f"\n[prior FPT → ask VCB] ticker={route.get('ticker')!r} tickers={route.get('tickers')!r}")
+
+
+@pytest.mark.e2e
+def test_llm_route_e2e_prior_fpt_bare_continuation_inherits():
+    """Prior turn = FPT; bare continuation → inherit FPT (contrast to the fresh case above)."""
+    from agents.conversation_router import llm_route
+    focus = Focus(tickers=["FPT"], intent="technical_analysis", query="phân tích kỹ thuật FPT")
+    route = llm_route("phân tích sâu hơn", [], _ROUTE_SYSTEM, focus=focus)
+    assert route["type"] == "agent", f"expected agent, got {route}"
+    assert route["ticker"] == "FPT", f"bare continuation must inherit FPT, got {route.get('ticker')!r}"
+    assert route["tickers"] == ["FPT"], f"got {route.get('tickers')!r}"
+    print(f"\n[prior FPT → 'sâu hơn'] ticker={route.get('ticker')!r}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

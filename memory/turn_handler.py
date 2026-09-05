@@ -60,14 +60,48 @@ def _snapshot_ts(snap) -> datetime | None:
     return None
 
 
-def _read_prior(app, thread_config: dict) -> dict:
-    """Read last-turn context + interrupt status from the checkpointer.
+def _build_focus(values: dict):
+    """Build a Focus from a checkpoint's state values.
 
-    Returns {interrupted, stale, last_intent, last_subject}. `stale` is True when the
-    graph is interrupted but the interrupt is older than INTERRUPT_STALE_SECONDS (user
-    abandoned the clarification) — such an interrupt must be dropped, not resumed.
+    Reconstructs the full ticker list from `state["tickers"]` (plural) plus
+    `extract_focus_entities(state["original_query"])`, so a comparison turn's 2nd/3rd
+    ticker survives even though the graph's top-level `state["ticker"]` only ever stored
+    one. Returns None when the checkpoint has no dialogue state worth carrying forward.
     """
-    empty = {"interrupted": False, "stale": False, "last_intent": "", "last_subject": ""}
+    from agents.focus import Focus, extract_focus_entities, extract_focus_sector
+
+    intent = values.get("intent", "")
+    tickers: list[str] = list(values.get("tickers") or [])
+    single = values.get("ticker", "")
+    if not tickers and single:
+        tickers = [single]
+    for t in extract_focus_entities(values.get("original_query", "")):
+        if t not in tickers:
+            tickers.append(t)
+    sector = values.get("sector", "")
+    if not sector and not tickers:
+        # Sector-only focus (macro_sector/market_brief): derive the subject from the prior
+        # self-contained query when the checkpoint predates sector tracking.
+        sector = extract_focus_sector(values.get("query", ""))
+    if not intent and not tickers and not sector:
+        return None
+    return Focus(
+        tickers=tickers,
+        sector=sector,
+        intent=intent,
+        query=values.get("query") or values.get("original_query", ""),
+        updated_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+def _read_prior(app, thread_config: dict) -> dict:
+    """Read last-turn focus + interrupt status from the checkpointer.
+
+    Returns {interrupted, stale, focus}. `stale` is True when the graph is interrupted
+    but the interrupt is older than INTERRUPT_STALE_SECONDS (user abandoned the
+    clarification) — such an interrupt must be dropped, not resumed.
+    """
+    empty = {"interrupted": False, "stale": False, "focus": None}
     try:
         snap = app.get_state(thread_config)
     except Exception:
@@ -84,8 +118,7 @@ def _read_prior(app, thread_config: dict) -> dict:
     return {
         "interrupted": interrupted,
         "stale": stale,
-        "last_intent": values.get("intent", ""),
-        "last_subject": values.get("ticker", ""),
+        "focus": _build_focus(values),
     }
 
 from llm.factory import create_client
@@ -103,15 +136,39 @@ def _build_system(
     user_memory: list[dict],
     episodes: list[dict] | None = None,
     chroma_turns: list[str] | None = None,
+    user_id: str = "",
+    tenant_id: str = "default",
 ) -> str:
     parts = [_BASE_SYSTEM]
+
+    typed_keys: tuple = ()
+    if user_id:
+        # Typed long-term profile (doc §6.2) — machine-readable fields, rendered structured
+        # so the LLM sees them as a profile, not a generic key/value blob.
+        try:
+            from memory.reader import TYPED_KEYS, load_typed_preferences
+            typed_keys = TYPED_KEYS
+            typed = load_typed_preferences(user_id, tenant_id)
+            typed_lines = []
+            if typed.get("preferred_market"):
+                typed_lines.append(f"- preferred_market: {typed['preferred_market']}")
+            if typed.get("favorite_tickers"):
+                typed_lines.append(f"- favorite_tickers: {', '.join(typed['favorite_tickers'])}")
+            if typed.get("preferred_analysis"):
+                typed_lines.append(f"- preferred_analysis: {typed['preferred_analysis']}")
+            if typed_lines:
+                parts.append("\nHồ sơ người dùng (đã gõ):\n" + "\n".join(typed_lines))
+        except Exception:
+            typed_keys = ()
 
     if user_memory:
         memory_lines = "\n".join(
             f"- {m['key']}: {m['value']} (confidence={m['confidence']:.2f})"
             for m in user_memory
+            if m.get("key") not in typed_keys
         )
-        parts.append(f"\nSở thích đã biết của người dùng:\n{memory_lines}")
+        if memory_lines:
+            parts.append(f"\nSở thích đã biết của người dùng:\n{memory_lines}")
 
     if episodes:
         ep_lines = []
@@ -125,6 +182,85 @@ def _build_system(
         parts.append("\nCác lượt hội thoại liên quan:\n" + "\n---\n".join(chroma_turns))
 
     return "\n".join(parts)
+
+
+def _build_agent_state(
+    route: dict,
+    user_message: str,
+    conversation_id: str,
+    user_id: str,
+    tenant_id: str,
+    history: list[dict],
+):
+    """Build an AgentState from a route (or a mixed agent segment).
+
+    Shared by run_turn / stream_turn so the agent path stays consistent — including
+    time_context, which run_turn previously dropped (harmless, but now unified).
+    """
+    from agents.state import make_initial_state
+
+    query = route.get("query") or user_message
+    state = make_initial_state(
+        query,
+        conversation_id=conversation_id,
+        user_id=user_id,
+        tenant_id=tenant_id,
+        messages=history,
+    )
+    state["intent"] = route.get("intent", "")
+    state["ticker"] = route.get("ticker", "")
+    state["tickers"] = route.get("tickers") or ([state["ticker"]] if state["ticker"] else [])
+    state["sector"] = route.get("sector", "")
+    state["original_query"] = user_message
+    state["time_context"] = route.get("time_context")
+    return state
+
+
+def _invoke_agent(app, state, thread_config) -> str:
+    """Invoke the agent graph synchronously and return the report text ('' if none)."""
+    final = app.invoke(state, thread_config)
+    return final.get("report") or ""
+
+
+def _mixed_parts(
+    app,
+    segments,
+    user_message: str,
+    conversation_id: str,
+    user_id: str,
+    tenant_id: str,
+    history: list[dict],
+    thread_config: dict,
+) -> list[str]:
+    """Execute a mixed route's segments, returning ordered reply parts.
+
+    agent segments run the graph; general/out_of_scope segments are pre-drafted text. The
+    first agent segment runs on the main thread (preserves focus carry-forward); any extra
+    agent segment (rare) runs on an isolated thread so a clarify interrupt can't swallow it.
+    """
+    from agents.classifier import OUT_OF_SCOPE_REPLY
+
+    parts: list[str] = []
+    agent_i = 0
+    for seg in segments or []:
+        kind = seg.get("kind", "")
+        if kind == "agent":
+            cfg = thread_config
+            if agent_i > 0:
+                base_tid = thread_config.get("configurable", {}).get("thread_id", "conv")
+                cfg = {"configurable": {"thread_id": f"{base_tid}:mix{agent_i}"}}
+            agent_i += 1
+            state = _build_agent_state(seg, user_message, conversation_id, user_id, tenant_id, history)
+            report = _invoke_agent(app, state, cfg)
+            if report:
+                parts.append(report)
+        elif kind == "out_of_scope":
+            parts.append(seg.get("text") or OUT_OF_SCOPE_REPLY)
+        elif kind == "general":
+            text = (seg.get("text") or "").strip()
+            if text:
+                parts.append(text)
+    return parts
 
 
 def run_turn(
@@ -157,11 +293,10 @@ def run_turn(
         except Exception:
             pass
 
-    system_prompt = _build_system(user_memory, episodes, chroma_turns=chroma_turns)
+    system_prompt = _build_system(user_memory, episodes, chroma_turns=chroma_turns, user_id=user_id, tenant_id=tenant_id)
     client = create_client()
 
     from agents.conversation_router import llm_route
-    from agents.state import make_initial_state
     from agents.graph import build_graph
     from agents.checkpointer import PostgresCheckpointer
 
@@ -169,7 +304,7 @@ def run_turn(
     app = build_graph(checkpointer=checkpointer)
     thread_config = {"configurable": {"thread_id": conversation_id}}
 
-    # Prior-turn context (last_intent/last_subject) + stuck-interrupt detection.
+    # Prior-turn focus + stuck-interrupt detection.
     prior = _read_prior(app, thread_config)
     if prior["stale"]:
         # Abandon the stuck clarify interrupt: fresh thread orphans it so this turn
@@ -178,24 +313,15 @@ def run_turn(
 
     route = llm_route(
         user_message, history, system_prompt, client,
-        last_intent=prior["last_intent"], last_subject=prior["last_subject"],
+        focus=prior["focus"],
     )
 
     if route.get("type") == "agent":
-        query = route.get("query") or user_message
-        agent_state = make_initial_state(
-            query,
-            conversation_id=conversation_id,
-            user_id=user_id,
-            tenant_id=tenant_id,
-            messages=history,
-        )
-        agent_state["intent"] = route["intent"]
-        agent_state["ticker"] = route.get("ticker", "")
-        agent_state["original_query"] = user_message
-
-        final = app.invoke(agent_state, thread_config)
-        assistant_reply = final.get("report") or ""
+        agent_state = _build_agent_state(route, user_message, conversation_id, user_id, tenant_id, history)
+        assistant_reply = _invoke_agent(app, agent_state, thread_config)
+    elif route.get("type") == "mixed":
+        parts = _mixed_parts(app, route.get("segments"), user_message, conversation_id, user_id, tenant_id, history, thread_config)
+        assistant_reply = "\n\n".join(p for p in parts if p)
     else:
         text = route.get("text") or ""
         if text:
@@ -371,10 +497,9 @@ async def stream_turn(
         except Exception:
             pass
 
-    system_prompt = _build_system(user_memory, episodes, chroma_turns=chroma_turns)
+    system_prompt = _build_system(user_memory, episodes, chroma_turns=chroma_turns, user_id=user_id, tenant_id=tenant_id)
     client = create_client()
 
-    from agents.state import make_initial_state
     from agents.graph import build_graph
     from agents.checkpointer import PostgresCheckpointer
     from langgraph.types import Command
@@ -385,8 +510,6 @@ async def stream_turn(
 
     # ── Clarification resume: graph is waiting for user answer ────────────────
     prior = await asyncio.to_thread(_read_prior, app, thread_config)
-    last_intent = prior["last_intent"]
-    last_subject = prior["last_subject"]
     if prior["stale"]:
         # Abandon the stuck clarify interrupt (older than INTERRUPT_STALE_SECONDS):
         # a fresh thread orphans it, and this turn routes + runs normally instead
@@ -434,7 +557,7 @@ async def stream_turn(
     from agents.conversation_router import llm_route
     route = llm_route(
         user_message, history, system_prompt, client,
-        last_intent=last_intent, last_subject=last_subject,
+        focus=prior["focus"],
     )
 
     assistant_reply = ""
@@ -443,22 +566,11 @@ async def stream_turn(
         # ── Agent path: invoke graph with pre-classified intent/ticker ────────
         intent   = route["intent"]
         ticker   = route.get("ticker", "")
-        query    = route.get("query") or user_message
 
         log.info("llm_route.agent conv=%s intent=%s ticker=%s", conversation_id[:8], intent, ticker)
         yield _sse_status("routing", agent=intent, ticker=ticker or None)
 
-        agent_state = make_initial_state(
-            query,
-            conversation_id=conversation_id,
-            user_id=user_id,
-            tenant_id=tenant_id,
-            messages=history,
-        )
-        agent_state["intent"] = intent
-        agent_state["ticker"] = ticker
-        agent_state["original_query"] = user_message
-        agent_state["time_context"] = route.get("time_context")
+        agent_state = _build_agent_state(route, user_message, conversation_id, user_id, tenant_id, history)
 
         # Invoke graph in a thread with current_observer set, so synthesize_final's
         # emit_llm_delta flows out as SSE in real time. Falls back to line-chunking
@@ -547,6 +659,13 @@ async def stream_turn(
             for line in report.split("\n"):
                 yield _sse_chunk(line + "\n")
             assistant_reply = report
+
+    elif route.get("type") == "mixed":
+        parts = _mixed_parts(app, route.get("segments"), user_message, conversation_id, user_id, tenant_id, history, thread_config)
+        assistant_reply = "\n\n".join(p for p in parts if p)
+        yield _sse_status("streaming", agent="mixed")
+        for line in assistant_reply.split("\n"):
+            yield _sse_chunk(line + "\n")
 
     else:
         # ── Direct reply: tool or free-text response ──────────────────────────

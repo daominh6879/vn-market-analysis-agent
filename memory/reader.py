@@ -68,6 +68,59 @@ def load_user_memory(
     return [dict(r) for r in rows]
 
 
+TYPED_KEYS = ("preferred_market", "favorite_tickers", "preferred_analysis")
+
+
+def _parse_typed(rows: list[dict]) -> dict:
+    """Parse active user_memory rows into a typed preference dict.
+
+    `save_memory_item` JSON-encodes every value, so each value here is a JSON string (a list
+    for favorite_tickers). json.loads recovers the original type. Tickers are uppercased and
+    deduped. Pure — unit-testable without a DB.
+    """
+    out = {"preferred_market": "", "favorite_tickers": [], "preferred_analysis": ""}
+    for r in rows:
+        key = r.get("key", "")
+        if key not in out:
+            continue
+        raw = r.get("value")
+        try:
+            val = json.loads(raw) if isinstance(raw, str) else raw
+        except Exception:
+            val = raw
+        if key == "favorite_tickers":
+            if isinstance(val, list):
+                seen: list[str] = []
+                for t in val:
+                    t = str(t).strip().upper()
+                    if t and t not in seen:
+                        seen.append(t)
+                out[key] = seen
+            else:
+                out[key] = []
+        else:
+            out[key] = str(val) if val is not None else ""
+    return out
+
+
+def load_typed_preferences(user_id: str, tenant_id: str = "default") -> dict:
+    """Return {preferred_market, favorite_tickers, preferred_analysis} for a user.
+
+    Reads active (non-superseded) user_memory rows with reserved TYPED_KEYS and parses them.
+    """
+    with _conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT key, value FROM user_memory
+                WHERE user_id = %s AND tenant_id = %s AND superseded_by IS NULL AND key = ANY(%s)
+                """,
+                (user_id, tenant_id, list(TYPED_KEYS)),
+            )
+            rows = cur.fetchall()
+    return _parse_typed([dict(r) for r in rows])
+
+
 def save_memory_item(
     user_id: str,
     tenant_id: str,

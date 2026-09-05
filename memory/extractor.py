@@ -26,9 +26,15 @@ Rules:
 - Assign confidence 0.0–1.0. Assign < 0.7 for vague/uncertain statements ("chắc là", "có thể", "nếu như").
 - Output ONLY a JSON array. Each item: {"key": str, "value": str, "confidence": float, "source_message": str}
 - key: short snake_case label (e.g. "preferred_sector", "risk_tolerance", "preferred_ticker")
-- value: extracted preference as a string
+- value: extracted preference as a string (or a JSON array of ticker strings for "favorite_tickers")
 - source_message: the exact user sentence that expressed this preference
 - If no preferences found, return []
+
+Typed fields (use these EXACT keys when the preference matches, same confidence rule):
+- "preferred_market": value is "VN" | "US" | "crypto" (or "" if none stated)
+- "favorite_tickers": value is a JSON array of Vietnamese ticker symbols, uppercase (e.g. ["FPT", "VCB"])
+- "preferred_analysis": value is "technical" | "fundamental" | "macro" (or "" if none stated)
+Emit a typed field ONLY when the user clearly states it — do not guess.
 
 Examples of LOW confidence (< 0.7):
 - "chắc là tôi hơi thích ngành thép" → confidence 0.4
@@ -91,9 +97,14 @@ def extract_preferences(turn_messages: list[dict]) -> list[MemoryItem]:
         if not isinstance(item, dict):
             continue
         try:
+            raw_value = item.get("value", "")
+            if isinstance(raw_value, list):
+                value = [str(v).strip() for v in raw_value]
+            else:
+                value = str(raw_value).strip()
             mi = MemoryItem(
                 key=str(item.get("key", "")).strip(),
-                value=str(item.get("value", "")).strip(),
+                value=value,
                 confidence=float(item.get("confidence", 0.0)),
                 source_message=str(item.get("source_message", "")).strip(),
             )
