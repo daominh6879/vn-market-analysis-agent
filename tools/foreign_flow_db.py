@@ -49,7 +49,8 @@ def query_ticker_foreign_net(ticker: str, as_of_date: Optional[str] = None) -> O
     """Return latest foreign-flow row for a ticker <= as_of_date, or None.
 
     as_of_date: ISO string 'YYYY-MM-DD'. None = absolute latest.
-    Values are raw VND (buy_value/sell_value/net_value); divide by 1e9 for "tỷ".
+    Values are in tỷ đồng (buy_value/sell_value/net_value) — ingest already
+    converts from raw VND. Do not divide by 1e9 again.
     """
     try:
         from core.db import get_conn

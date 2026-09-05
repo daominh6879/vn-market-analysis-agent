@@ -491,14 +491,51 @@ def run_subqueries_node(state: AgentState) -> dict:
     return updates
 
 
+def _is_label_line(line: str) -> bool:
+    """True for a bare `[...]` line — the internal markers the pipeline wraps data in."""
+    s = line.strip()
+    return (
+        s.startswith("[") and s.endswith("]")
+        and s.count("[") == 1 and s.count("]") == 1
+    )
+
+
+def _strip_subresult_labels(sub_results: list[str]) -> str:
+    """Join gather results into synthesis context, dropping only the outer wrapper.
+
+    Each sub_result is "[{INTENT} — {TICKER}]\n{question}\n{data}" (run_subqueries_node);
+    `data` itself opens with a "[MARKER TICKER]" header (gather_data). Drop the outer
+    "[{INTENT} — {TICKER}]" label (pure plumbing) and, for a single sub-task, the
+    redundant question line (it may be the router's rewritten query). KEEP the inner
+    "[MARKER]" headers — they name the data source (price / technical / valuation / news)
+    and the LLM needs them to synthesize a decomposed multi-source context; the system
+    prompt instructs the LLM not to quote them or add a "Lưu ý" disclaimer.
+    """
+    single = len(sub_results) == 1
+    cleaned: list[str] = []
+    for block in sub_results:
+        lines = block.splitlines()
+        if lines and _is_label_line(lines[0]):
+            lines = lines[1:]  # outer "[INTENT — TICKER]" label
+        if single and lines and not _is_label_line(lines[0]):
+            lines = lines[1:]  # redundant question line (single sub-task)
+        while lines and not lines[0].strip():
+            lines.pop(0)
+        if lines:
+            cleaned.append("\n".join(lines))
+    return "\n\n---\n\n".join(cleaned)
+
+
 def synthesize_final(state: AgentState) -> dict:
     """Single LLM call over all gathered sub-results. Respects STRICT_NEUTRAL env flag."""
     from llm.factory import create_client
     from llm.types import Message
 
     sub_results = state.get("sub_results") or []
-    query = state.get("query", "")
-    context = "\n\n---\n\n".join(sub_results)
+    # Answer the user's verbatim question, not the router's rewritten "self-contained"
+    # query — otherwise a simple "giá cổ phiếu X?" echoes as "cho tôi phân tích tổng hợp...".
+    query = state.get("original_query") or state.get("query", "")
+    context = _strip_subresult_labels(sub_results)
 
     # Date-aware synthesis: anchor the report to the resolved time window.
     tc = state.get("time_context") or {}
@@ -527,7 +564,13 @@ def synthesize_final(state: AgentState) -> dict:
     strict_note = " TUYỆT ĐỐI không đưa khuyến nghị mua/bán/nắm giữ." if strict else ""
     system_prompt = (
         "Bạn là chuyên gia phân tích tài chính Việt Nam. "
-        "Trả lời bằng Markdown, trích dẫn số liệu cụ thể từ ngữ cảnh."
+        "Trả lời bằng Markdown, trích dẫn số liệu cụ thể từ ngữ cảnh. "
+        "Ngữ cảnh chứa NHIỀU khối dữ liệu từ nhiều nguồn khác nhau "
+        "(giá, kỹ thuật, định giá, tin tức, vĩ mô...). "
+        "Hãy tổng hợp ĐẦY ĐỦ TẤT CẢ các khối — mỗi khối thành một phần riêng trong câu trả lời — "
+        "không bỏ sót khối nào, không chỉ trả lời về giá. "
+        "KHÔNG thêm phần 'Lưu ý quan trọng' hay disclaimer về nguồn trích xuất. "
+        "KHÔNG nhắc lại các nhãn nội bộ trong ngoặc vuông."
         + strict_note
     )
     critique_feedback = state.get("critique_feedback", "")

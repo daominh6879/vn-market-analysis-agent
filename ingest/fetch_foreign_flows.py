@@ -98,10 +98,12 @@ def _fireant_rows_for_range(ticker: str, start: date, end: date) -> list[tuple]:
         buy_vol = int(row.get("foreign_buy_vol", 0))
         sell_vol = int(row.get("foreign_sell_vol", 0))
         net_vol = buy_vol - sell_vol
+        # Fireant `close` is in nghìn đồng (HPG 21.7 = 21,700 VND), so
+        # volume x close is already in nghìn đồng → /1e6 gives tỷ đồng.
         close_price = float(row.get("close", 0))
-        buy_val = round(buy_vol * close_price / 1e9, 4)
-        sell_val = round(sell_vol * close_price / 1e9, 4)
-        net_val = round(net_vol * close_price / 1e9, 4)
+        buy_val = round(buy_vol * close_price / 1e6, 4)
+        sell_val = round(sell_vol * close_price / 1e6, 4)
+        net_val = round(net_vol * close_price / 1e6, 4)
         rows.append((
             ticker,
             str(row["time"])[:10],
@@ -127,11 +129,63 @@ def fetch_incremental(ticker: str, end: date) -> int:
     return _upsert_rows(rows)
 
 
+def _latest_stored_session(before: date) -> tuple[date | None, dict[str, tuple[int, int]]]:
+    """Return (date, {ticker: (buy_volume, sell_volume)}) for the newest date < `before`."""
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT MAX(date) FROM foreign_flows WHERE date < %s", (before,))
+                row = cur.fetchone()
+                prev = row[0] if row and row[0] else None
+                if prev is None:
+                    return None, {}
+                cur.execute(
+                    "SELECT ticker, buy_volume, sell_volume FROM foreign_flows WHERE date = %s",
+                    (prev,),
+                )
+                return prev, {r[0]: (r[1], r[2]) for r in cur.fetchall()}
+    except Exception as e:
+        sys.stderr.write(f"[foreign_flows] _latest_stored_session failed: {e}\n")
+        return None, {}
+
+
+def _is_stale_board(rows: list[tuple], prev_volumes: dict[str, tuple[int, int]]) -> bool:
+    """True if the fetched board just repeats the previous stored session.
+
+    The VCI price board carries no session date of its own: on a weekend or
+    public holiday it keeps serving the last session's numbers, which then get
+    stamped with target_date and written as a phantom session. Comparing
+    volumes against the previous stored session catches that without needing a
+    holiday calendar — VN has irregular bridge days around Tết and 2/9.
+    """
+    if not rows or not prev_volumes:
+        return False
+    compared = matched = 0
+    for r in rows:
+        ticker, buy_vol, sell_vol = r[0], r[5], r[6]
+        prev = prev_volumes.get(ticker)
+        if prev is None:
+            continue
+        compared += 1
+        if prev == (buy_vol, sell_vol):
+            matched += 1
+    if compared < 10:
+        return False
+    return matched / compared >= 0.9
+
+
 def fetch_live_today(target_date: date) -> int:
     """
     Fetch today's foreign flows via VCI live price board → foreign_flows.
-    Falls back to Fireant historical if VCI fails.
+
+    Skips non-trading days: the board serves the previous session's numbers on
+    weekends and holidays, which would otherwise be written as a phantom
+    session dated target_date.
     """
+    if target_date.weekday() >= 5:
+        sys.stderr.write(f"[foreign_flows] {target_date} is a weekend — skipping live fetch\n")
+        return 0
+
     tickers = _active_tickers()
     if not tickers:
         return 0
@@ -156,6 +210,14 @@ def fetch_live_today(target_date: date) -> int:
                                    buy_vol, sell_vol, net_vol))
         except Exception as e:
             sys.stderr.write(f"[foreign_flows] VCI chunk {i} failed: {e}\n")
+
+    prev_date, prev_volumes = _latest_stored_session(target_date)
+    if _is_stale_board(live_rows, prev_volumes):
+        sys.stderr.write(
+            f"[foreign_flows] board for {target_date} repeats session {prev_date} "
+            f"— likely a holiday, skipping write\n"
+        )
+        return 0
 
     return _upsert_rows(live_rows)
 

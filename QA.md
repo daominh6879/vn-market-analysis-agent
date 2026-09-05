@@ -745,3 +745,59 @@ cache_set(ck, reply)
 
 ---
 
+**Q: Nguồn cung cấp thông tin khối ngoại là gì, và tại sao ròng luôn bằng 0?**
+
+**A:** Hai nguồn, hai path ghi:
+
+| Path | Provider | Endpoint | Value |
+|---|---|---|---|
+| Daily live | `VciDirectProvider.fetch_foreign_batch` | `POST trading.vietcap.com.vn/api/price/symbols/getList` → `matchPrice.foreignBuyValue` | thật (VND) |
+| Historical | `FireantProvider.fetch_history_range` | `{FIREANT_BASE}/symbols/{sym}/historical-quotes` → `buyForeignQuantity` | suy ra (`volume × close`) — Fireant chỉ có volume |
+
+Ròng = 0 do ba bug xếp tầng: `close` của Fireant là nghìn đồng nên `/1e9` sai 1000x; `_build_foreign_result` chia `/1e9` lần nữa trên value đã là tỷ; và Dagster job `ohlcv_ingest_schedule` (18:30) `DO UPDATE` đè lên value thật của `foreign_flows_1730` (17:30). Chi tiết: `docs/notes/bai-daily-brief-p2.md`.
+
+---
+
+**Q: Tại sao chọn `DO NOTHING` cho Fireant path thay vì đổi cron cho job chạy sớm hơn?**
+
+**A:** Đổi cron sửa được triệu chứng nhưng phụ thuộc timing — job retry, chạy tay, hoặc backfill là đè lại ngay. `DO NOTHING` mã hoá thứ bậc nguồn vào chính câu SQL: VCI (value thật) được `DO UPDATE`, Fireant (value suy ra) chỉ lấp lỗ trống. Đúng bất kể chạy lúc nào, bao nhiêu lần.
+
+---
+
+**Q: `--migrate` đã backfill 36,300 rows, sao vẫn còn data rác?**
+
+**A:** Upsert chỉ đè được `(ticker, date)` mà nguồn trả về. Row nào Fireant không có data thì sống sót nguyên scale cũ: ngày không phải phiên (`2026-08-29` là thứ Bảy), ticker ngoài `securities.is_active`, date ngoài window 365 ngày, và `VNINDEX` — chỉ số lẫn vào bảng per-ticker, làm `SUM(net_value)` toàn thị trường cộng trùng. Phải cleanup bằng DELETE/UPDATE riêng, và verify bằng invariant check (`abs(net_value) > 10000`, `volume=0 AND value<>0`) chứ không chỉ đếm rows upserted.
+
+---
+
+**Q: Test fixture dùng `close = 20_000.0` — có phải data thật không?**
+
+**A:** Không. Đó là giả định của người viết test rằng Fireant trả VND. Data thật: `HPG close = 21.7`, `VPB = 27.8`, `VCB = 58.9` — nghìn đồng. Fixture sai premise nên "xác nhận" luôn công thức sai, và test vẫn xanh suốt. Bài học: fixture cho external API phải copy từ response thật, không tự bịa số cho tròn.
+
+---
+**Q: `ohlcv_daily` thiếu ngày 2026-08-31, sao lấp gap lại ra 0 rows?**
+
+**A:** Vì không phải gap. 2026-08-31 không phải phiên giao dịch — Fireant nhảy từ 2026-08-28 sang 2026-09-03, và 143/147 rows `foreign_flows` ngày đó trùng khít volume của 2026-08-28. Row foreign đến từ VCI price board: endpoint đó trả trạng thái hiện tại chứ không trả ngày của phiên đang hiển thị, nên ngày nghỉ vẫn serve số phiên cũ, `fetch_live_today()` đóng dấu `today()` rồi ghi thành phantom session. Bảng thiếu data không phải `ohlcv_daily` — bảng **thừa** data là `foreign_flows`.
+
+---
+
+**Q: Sao không dùng holiday calendar để chặn ngày nghỉ?**
+
+**A:** VN có bridge day bất quy tắc quanh Tết và 2/9, công bố từng năm — calendar phải maintain tay và sẽ lệch. `_is_stale_board()` so `(buy_volume, sell_volume)` với phiên đã lưu gần nhất, ≥90% trùng thì skip. Tự đúng với mọi ngày nghỉ kể cả nghỉ đột xuất. Chọn volume vì đó là số nguyên đếm khớp lệnh — hai phiên thật gần như không thể trùng khít trên hàng trăm mã; giá trị tiền có thể trùng do làm tròn.
+
+---
+
+**Q: Tại sao test xanh suốt rồi tự fail dù không ai sửa code?**
+
+**A:** Fixture hard-code `date(2026, 8, 1)` nhưng code dùng window tương đối `today - 30 days`. Còn trong 30 ngày thì trùng, qua 2026-08-31 thì window trượt khỏi fixture → fallback path clip hết rows → `ohlcv = 0`. Khó tìm vì chỉ fallback path clip theo range (Fireant path không), nên cùng fixture đó 37 test xanh và đúng 1 test đỏ. Fix: truyền `start_date`/`end_date` tường minh. Nguyên tắc: fixture và code phải cùng hệ quy chiếu thời gian — trộn ngày cố định với logic ngày tương đối là bom hẹn giờ.
+
+---
+**Q: `scripts/migrate.py` có populate hết data không, và Dagster job có lo hết phần daily?**
+
+**A:** Gần đủ, thiếu một chỗ đã bổ sung. `migrate.py` không bao giờ gọi `ingest/fetch_foreign_flows.py` — step 5 (`fetch_ohlcv.py --migrate`) populate `foreign_flows` từ Fireant, nhưng Fireant chỉ có foreign *volume* nên value là suy ra (`volume × close`). Đã thêm step 6 chạy `fetch_foreign_flows.py --all-securities --live` để nâng phiên gần nhất lên value thật của VCI; lịch sử vẫn phải dùng value suy ra vì VCI chỉ có phiên hiện tại. Step 6 non-fatal: VCI là provider foreign duy nhất còn sống, và ngày nghỉ nó cố ý không ghi gì.
+
+Dagster phủ đủ daily: `foreign_flows_1730` (VCI, value thật) → `market_index_daily_1800` → `ohlcv_daily_1830` (Fireant, gap-fill). Sau khi đổi sang `DO NOTHING`, thứ tự 17:30 → 18:30 không còn phá data.
+
+Hai hạn chế còn lại: (1) incremental `MAX(date)+1` không lấp được lỗ ở giữa — phải dùng `--start-date/--end-date`; (2) không có sensor/alert, job fail thì im lặng, `RetryPolicy(max_retries=3, delay=120)` chỉ che lỗi transient.
+
+---

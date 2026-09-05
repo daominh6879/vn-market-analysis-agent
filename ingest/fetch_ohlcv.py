@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
@@ -82,7 +82,16 @@ def _upsert_ohlcv(rows: list[tuple]) -> int:
 
 
 def _upsert_foreign(rows: list[tuple]) -> int:
-    """Upsert foreign_flows rows. Row = (ticker, date, buy_val, sell_val, net_val, buy_vol, sell_vol, net_vol)."""
+    """Insert foreign_flows rows, never overwriting existing ones.
+
+    Row = (ticker, date, buy_val, sell_val, net_val, buy_vol, sell_vol, net_vol).
+
+    DO NOTHING (not DO UPDATE) on purpose: values here are *derived*
+    (foreign volume x close price) because Fireant only exposes foreign
+    volume. VCI's price board (ingest/fetch_foreign_flows.py) reports the
+    real traded value, so this path only fills gaps and must not clobber
+    a row VCI already wrote.
+    """
     if not rows:
         return 0
     with get_conn() as conn:
@@ -92,15 +101,14 @@ def _upsert_foreign(rows: list[tuple]) -> int:
                 INSERT INTO foreign_flows
                     (ticker, date, buy_value, sell_value, net_value, buy_volume, sell_volume, net_volume)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (ticker, date) DO UPDATE
-                    SET buy_value=EXCLUDED.buy_value, sell_value=EXCLUDED.sell_value,
-                        net_value=EXCLUDED.net_value, buy_volume=EXCLUDED.buy_volume,
-                        sell_volume=EXCLUDED.sell_volume, net_volume=EXCLUDED.net_volume,
-                        fetched_at=NOW()
+                ON CONFLICT (ticker, date) DO NOTHING
                 """,
                 rows,
             )
-    return len(rows)
+            # DO NOTHING means existing rows are skipped, so report what was
+            # actually inserted rather than the number of candidate rows.
+            inserted = cur.rowcount
+    return inserted if inserted is not None and inserted >= 0 else len(rows)
 
 
 def fetch_and_upsert(
@@ -194,10 +202,12 @@ def fetch_and_upsert(
             sell_vol = int(row.get("foreign_sell_vol", 0))
             net_vol = buy_vol - sell_vol
             close_price = float(row.get("close", 0))
-            # derive value in tỷ đồng: shares × price / 1e9
-            buy_val = round(buy_vol * close_price / 1e9, 4)
-            sell_val = round(sell_vol * close_price / 1e9, 4)
-            net_val = round(net_vol * close_price / 1e9, 4)
+            # derive value in tỷ đồng. Fireant `close` is in nghìn đồng
+            # (HPG 21.7 = 21,700 VND), so shares × close is already in
+            # nghìn đồng → /1e6 gives tỷ đồng.
+            buy_val = round(buy_vol * close_price / 1e6, 4)
+            sell_val = round(sell_vol * close_price / 1e6, 4)
+            net_val = round(net_vol * close_price / 1e6, 4)
             foreign_rows.append((
                 ticker,
                 str(row["time"])[:10],
@@ -209,6 +219,20 @@ def fetch_and_upsert(
     return {"ohlcv": n_ohlcv, "foreign": n_foreign}
 
 
+def _explicit_range(args) -> tuple[date | None, date | None]:
+    """Parse --start-date/--end-date, or (None, None) for incremental mode.
+
+    Incremental mode starts at `MAX(date) + 1`, so it can never revisit a hole
+    in the middle of the series. An explicit range is the only way to refill one.
+    """
+    if not args.start_date:
+        return None, None
+    return (
+        datetime.strptime(args.start_date, "%Y-%m-%d").date(),
+        datetime.strptime(args.end_date, "%Y-%m-%d").date(),
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch OHLCV (+ foreign via Fireant) → Postgres")
     parser.add_argument("--tickers", default="", help="Comma-separated tickers")
@@ -218,7 +242,17 @@ def main() -> None:
                         help=f"Backfill {MIGRATE_DAYS} days for all active securities")
     parser.add_argument("--days", type=int, default=30,
                         help="Days to fetch (non-migrate incremental, default 30)")
+    parser.add_argument("--start-date", default=None,
+                        help="Explicit range start YYYY-MM-DD (use with --end-date to fill a gap)")
+    parser.add_argument("--end-date", default=None,
+                        help="Explicit range end YYYY-MM-DD")
     args = parser.parse_args()
+
+    if bool(args.start_date) != bool(args.end_date):
+        parser.error("--start-date and --end-date must be given together")
+        return
+
+    explicit_range = bool(args.start_date)
 
     if args.migrate:
         tickers = _active_tickers()
@@ -227,11 +261,14 @@ def main() -> None:
         print(f"MIGRATE: {len(tickers)} tickers, {MIGRATE_DAYS} days ({start} → {end})")
     elif args.all_securities:
         tickers = _active_tickers()
-        start = end = None
-        print(f"INCREMENTAL: {len(tickers)} active tickers")
+        start, end = _explicit_range(args)
+        if explicit_range:
+            print(f"RANGE: {len(tickers)} active tickers ({start} → {end})")
+        else:
+            print(f"INCREMENTAL: {len(tickers)} active tickers")
     elif args.tickers:
         tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
-        start = end = None
+        start, end = _explicit_range(args)
     else:
         parser.error("Provide --tickers, --all-securities, or --migrate")
         return
@@ -245,7 +282,7 @@ def main() -> None:
 
     for t in tickers:
         try:
-            if args.migrate:
+            if args.migrate or explicit_range:
                 result = fetch_and_upsert(t, start_date=start, end_date=end, backfill=True)
             else:
                 result = fetch_and_upsert(t, days=args.days)

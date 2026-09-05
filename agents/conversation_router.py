@@ -31,7 +31,11 @@ AGENT_RUN_TOOL: dict = {
         "treat it as a fresh analysis request for that subject. "
         "When a follow-up only asks to continue/deepen the SAME subject (e.g., 'phân tích sâu hơn', "
         "'phân tích thêm', 'chi tiết hơn', 'more detail', 'elaborate') without naming a new one, "
-        "INHERIT the previous turn's subject AND intent. If the prior turn was about a sector or market "
+        "INHERIT the previous turn's subject AND intent. "
+        "BUT when the follow-up names the same subject yet a DIFFERENT financial action than the prior "
+        "turn (e.g., prior was P/E valuation, now 'giá cổ phiếu' / price), classify the NEW intent from "
+        "the current query — do NOT inherit the old intent; use prior context only to fill the ticker. "
+        "If the prior turn was about a sector or market "
         "index (e.g., ngân hàng, chỉ số, VN30), keep intent=macro_sector or market_brief and write a "
         "self-contained query that names that sector/index. Only use technical_analysis or price_action "
         "when the prior subject was a single named stock."
@@ -171,26 +175,52 @@ _ROUTE_ERROR_TEXT = (
 )
 
 
-def _inject_last_context(system_prompt: str, last_intent: str, last_subject: str) -> str:
-    """Append the prior turn's intent/subject so the router can resolve follow-ups.
+# Bare follow-ups that carry no financial action of their own — the router must inherit
+# the prior intent for these. Everything else classifies fresh (only the subject/ticker
+# is inherited), so "giá cổ phiếu X?" after a P/E turn is NOT wrongly inherited as valuation.
+_BARE_CONTINUATION_MARKERS = (
+    "sâu hơn", "chi tiết hơn", "cụ thể hơn", "rõ hơn",
+    "phân tích thêm", "more detail", "elaborate",
+)
 
-    Replaces the reliance on truncated assistant history (120 chars) with an explicit
-    signal. When the current message is a bare continuation ("phân tích sâu hơn"), the
-    router inherits this intent/subject instead of guessing.
+
+def _is_bare_continuation(query: str) -> bool:
+    q = (query or "").lower()
+    return any(m in q for m in _BARE_CONTINUATION_MARKERS)
+
+
+def _inject_last_context(system_prompt: str, last_intent: str, last_subject: str, inherit_intent: bool = True) -> str:
+    """Append the prior turn's subject (and intent, only for bare continuations).
+
+    inherit_intent=True  → bare continuation ("phân tích sâu hơn"): the router inherits
+                           the prior intent AND subject.
+    inherit_intent=False → the current query names its own financial action: inject ONLY
+                           the subject (ticker) for resolution, and let the router classify
+                           the intent fresh. This is the deterministic guard that prevents
+                           a follow-up like "giá cổ phiếu X?" after a P/E turn from being
+                           inherited as `valuation` — prompt hints alone were not enough.
     """
     parts = []
     if last_subject:
         parts.append(f"chủ thể '{last_subject}'")
-    if last_intent:
+    if inherit_intent and last_intent:
         parts.append(f"intent '{last_intent}'")
     if not parts:
         return system_prompt
-    note = (
-        "\n\nLượt trước: " + ", ".join(parts) + ".\n"
-        "Nếu tin nhắn hiện tại là follow-up chỉ yêu cầu tiếp tục/đào sâu chủ thể cũ "
-        "(ví dụ 'phân tích sâu hơn', 'phân tích thêm', 'chi tiết hơn') mà không nêu chủ thể mới, "
-        "hãy kế thừa intent và chủ thể của lượt trước."
-    )
+    if inherit_intent:
+        note = (
+            "\n\nLượt trước: " + ", ".join(parts) + ".\n"
+            "Nếu tin nhắn hiện tại là follow-up chỉ yêu cầu tiếp tục/đào sâu chủ thể cũ "
+            "(ví dụ 'phân tích sâu hơn', 'phân tích thêm', 'chi tiết hơn') mà không nêu chủ thể mới, "
+            "hãy kế thừa intent và chủ thể của lượt trước."
+        )
+    else:
+        note = (
+            "\n\nLượt trước chủ thể: " + ", ".join(parts) + ".\n"
+            "Câu hiện tại nêu một hành động tài chính riêng — hãy phân loại intent MỚI từ chính câu "
+            "hiện tại, KHÔNG kế thừa intent lượt trước. Chỉ dùng chủ thể lượt trước để điền ticker khi "
+            "câu hiện tại không nêu mã."
+        )
     return system_prompt + note
 
 
@@ -311,7 +341,13 @@ def llm_route(
         RouteResult with type="agent" (needs_agent_run called) or type="text" (direct_reply called).
     """
     if last_intent or last_subject:
-        system_prompt = _inject_last_context(system_prompt, last_intent, last_subject)
+        # Follow-up: inherit intent ONLY for bare continuations ("phân tích sâu hơn").
+        # A query naming its own action ("giá cổ phiếu X?") gets subject-only injection so
+        # the router classifies its intent fresh instead of reusing the prior turn's.
+        system_prompt = _inject_last_context(
+            system_prompt, last_intent, last_subject,
+            inherit_intent=_is_bare_continuation(query),
+        )
 
     # Anchor time resolution to today so the router can map relative phrases to dates.
     from datetime import date as _date

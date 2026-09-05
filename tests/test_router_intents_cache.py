@@ -57,6 +57,8 @@ from agents.graph import (
     _check_approval_decision,
     _request_approval,
     build_single_subtask_node,
+    _is_label_line,
+    _strip_subresult_labels,
 )
 from agents.state import make_initial_state, AgentState
 from core.tickers import raw_tickers, extract_tickers
@@ -469,6 +471,36 @@ def test_llm_route_injects_last_context(monkeypatch):
     assert route["type"] == "agent"
 
 
+def test_is_bare_continuation():
+    from agents.conversation_router import _is_bare_continuation
+    assert _is_bare_continuation("phân tích sâu hơn") is True
+    assert _is_bare_continuation("phân tích thêm") is True
+    assert _is_bare_continuation("chi tiết hơn") is True
+    assert _is_bare_continuation("giá cổ phiếu vietcombank?") is False
+    assert _is_bare_continuation("P/E của VCB là bao nhiêu?") is False
+
+
+def test_llm_route_nonbare_followup_suppresses_intent(monkeypatch):
+    """A follow-up naming its own action must NOT inject the prior intent — only the subject."""
+    from agents import conversation_router as cr
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["VCB"])
+    tc = MagicMock()
+    tc.name = "needs_agent_run"
+    tc.input = {"intent": "price_action", "ticker": "VCB", "query": "giá cổ phiếu vietcombank?", "reason": ""}
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+
+    route = cr.llm_route(
+        "giá cổ phiếu vietcombank?", [], "sys", client=client,
+        last_intent="valuation", last_subject="VCB",
+    )
+
+    system = client.generate.call_args.kwargs["system"]
+    assert "chủ thể 'VCB'" in system
+    assert "intent 'valuation'" not in system, "prior intent must be suppressed for a non-bare follow-up"
+    assert route["type"] == "agent"
+
+
 def test_llm_route_no_last_context_no_injection():
     from agents import conversation_router as cr
     resp = MagicMock(); resp.tool_calls = []; resp.text = "xin chào"
@@ -770,6 +802,42 @@ def test_route_after_subqueries_skips_replan_on_budget():
 
 def test_route_after_critique_saves_on_budget():
     assert route_after_critique({"llm_calls": 100, "critique_pass": False, "critique_attempts": 0}) == "save"
+
+
+def test_is_label_line():
+    assert _is_label_line("[PRICE_ACTION — VCB]") is True
+    assert _is_label_line("[GIÁ & DÒNG TIỀN VCB]") is True
+    assert _is_label_line("Giá: 100") is False
+    assert _is_label_line("") is False
+
+
+def test_strip_subresult_labels_single_drops_outer_and_question():
+    block = (
+        "[PRICE_ACTION — VCB]\n"
+        "cho tôi phân tích tổng hợp về giá cổ phiếu VCB\n"
+        "[GIÁ & DÒNG TIỀN VCB]\n"
+        "Giá: 100\nKhối lượng: 200"
+    )
+    out = _strip_subresult_labels([block])
+    assert "[PRICE_ACTION" not in out, "outer [INTENT — TICKER] label must be stripped"
+    assert "cho tôi phân tích tổng hợp" not in out, "single sub-task must drop the rewritten question line"
+    assert "[GIÁ & DÒNG TIỀN VCB]" in out, "inner [MARKER] must be kept as the source label"
+    assert "Giá: 100" in out
+    assert "Khối lượng: 200" in out
+
+
+def test_strip_subresult_labels_multi_keeps_question_and_markers():
+    b1 = "[TECHNICAL_ANALYSIS — VCB]\nphân tích kỹ thuật VCB\n[KỸ THUẬT VCB]\nRSI: 55"
+    b2 = "[NEWS_SENTIMENT — VCB]\ntin tức VCB\n[TIN TỨC & SENTIMENT VCB]\n- bài 1"
+    out = _strip_subresult_labels([b1, b2])
+    assert "[TECHNICAL_ANALYSIS" not in out, "outer label must be stripped"
+    assert "[NEWS_SENTIMENT" not in out, "outer label must be stripped"
+    assert "phân tích kỹ thuật VCB" in out, "multi sub-task must keep the question line (source angle)"
+    assert "tin tức VCB" in out
+    assert "[KỸ THUẬT VCB]" in out, "inner source marker must be kept for decompose"
+    assert "[TIN TỨC & SENTIMENT VCB]" in out, "inner source marker must be kept for decompose"
+    assert "RSI: 55" in out
+    assert "- bài 1" in out
 
 
 class TestUnitGatherAndApproval:

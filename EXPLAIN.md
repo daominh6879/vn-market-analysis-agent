@@ -463,3 +463,157 @@ Verify từng ca. Ca quan trọng nhất: **PDF scan phải bị chặn** và ph
 python data/quality.py --list-quarantine
 ```
 In bảng từ Postgres: doc_id, nguồn, lý do, các chỉ số đo được, thời gian. Dùng để audit "file nào bị loại vì sao" — không cần mở MinIO UI hay query SQL thủ công.
+
+---
+
+## Đơn vị giá cổ phiếu VN — cái bẫy 1000x
+
+API chứng khoán VN (Fireant, và bảng `ohlcv_daily` sinh ra từ nó) trả giá theo **nghìn đồng**, không phải VND:
+
+```
+HPG close = 21.7    → 21,700 VND
+VPB close = 27.8    → 27,800 VND
+VCB close = 58.9    → 58,900 VND
+```
+
+Nhưng API khác lại trả VND thật — VCI price board `foreignBuyValue` là VND nguyên. Cùng một khái niệm "giá trị giao dịch" mà hai nguồn khác nhau 1000 lần.
+
+Hệ quả khi suy ra giá trị từ khối lượng:
+
+```python
+# SAI — coi close là VND
+buy_value_ty = volume * close / 1e9
+
+# ĐÚNG — close là nghìn đồng, volume × close ra nghìn đồng
+buy_value_ty = volume * close / 1e6
+```
+
+**Nguyên tắc:** đơn vị phải là phần của *contract*, không phải kiến thức ngầm. Một cột `BIGINT buy_value` không nói nó là VND, nghìn đồng, hay tỷ đồng. Khi contract không được viết ra, mỗi call-site tự đoán — và đoán khác nhau. Cách phòng: đặt tên cột/biến kèm đơn vị (`buy_value_bn`), hoặc normalize ngay tại **boundary** (chỗ data vào hệ thống) rồi bên trong chỉ dùng một đơn vị duy nhất.
+
+Bug này biểu hiện thành `0` chứ không thành số sai lệch nhẹ, vì lỗi xảy ra **hai lần cùng chiều**: ingest chia 1e9 (thay vì 1e6), rồi format lại chia 1e9 lần nữa. Tổng 1e12 → mọi giá trị hợp lý đều làm tròn về 0. Lỗi nhân tính chất lũy — dễ phát hiện hơn lỗi lệch nhẹ, nhưng chỉ khi có người nhìn output thật.
+
+## Nhiều nguồn ghi cùng một bảng — ai được đè ai
+
+Khi hai ingest path viết cùng `(ticker, date)`, `ON CONFLICT DO UPDATE` ở cả hai nghĩa là **job chạy sau thắng** — thứ tự cron quyết định chất lượng data, một cách vô tình.
+
+Trường hợp `foreign_flows`:
+
+```
+17:30  VCI price board    → value THẬT (API trả trực tiếp)
+18:30  Fireant + ohlcv    → value SUY RA (volume × close)
+       ↑ chạy sau, DO UPDATE → đè mất value thật
+```
+
+Cách sửa không phải đổi cron (mong manh, phụ thuộc timing) mà là mã hoá **thứ bậc nguồn** vào chính câu SQL:
+
+```sql
+-- nguồn chính (value thật): được đè
+ON CONFLICT (ticker, date) DO UPDATE SET ...
+
+-- nguồn phụ (value suy ra): chỉ lấp lỗ trống
+ON CONFLICT (ticker, date) DO NOTHING
+```
+
+`DO NOTHING` biến path phụ thành **gap-filler** idempotent: chạy bao nhiêu lần, chạy lúc nào cũng không phá data tốt. Đổi lại `cur.rowcount` không còn bằng `len(rows)` — phải trả rowcount thật, nếu không log sẽ báo "upserted 248 rows" trong khi thực tế insert 0.
+
+**Nguyên tắc:** khi nhiều nguồn có độ tin cậy khác nhau ghi cùng một bảng, thứ bậc phải nằm trong conflict clause, không nằm trong lịch chạy.
+
+## Ổ rác sống sót sau backfill
+
+Backfill bằng upsert (`--migrate`) chỉ đè được `(ticker, date)` mà **nguồn hiện tại trả về**. Row nào nguồn không có data thì giữ nguyên scale cũ — im lặng sống sót:
+
+| Loại row sống sót | Vì sao nguồn không trả |
+|---|---|
+| Ngày không phải phiên (thứ Bảy) | Fireant không có data ngày nghỉ |
+| Ticker đã bị huỷ/tạm ngừng | Không còn trong response |
+| Ticker ngoài `securities.is_active` | `_active_tickers()` không lặp tới |
+| Date ngoài window backfill | Không nằm trong range query |
+| Chỉ số (VNINDEX) lẫn vào bảng per-ticker | Không thuộc universe cổ phiếu |
+
+Row cuối đặc biệt nguy hiểm: VNINDEX trong `foreign_flows` khiến `SUM(net_value)` toàn thị trường bị **cộng trùng** — chỉ số đã là tổng hợp của các mã thành phần.
+
+**Nguyên tắc:** backfill xong phải chạy invariant check, không chỉ đếm rows upserted. Các check dạng "bất khả thi":
+
+```sql
+abs(net_value) > 10000              -- không phiên nào ròng 10,000 tỷ
+buy_volume = 0 AND buy_value <> 0   -- không có giá trị mà không có khối lượng
+date NOT IN (SELECT date FROM ohlcv_daily)   -- ngày không phải phiên giao dịch
+ticker NOT IN (SELECT ticker FROM securities)  -- ticker ngoài universe
+```
+
+Mỗi check tốn một query, phát hiện được cả loại lỗi chưa nghĩ tới.
+
+## Live price board không có session date — phantom session
+
+Endpoint dạng "price board" (VCI `price/symbols/getList`) trả **trạng thái hiện tại**, không trả ngày của phiên đang hiển thị. Ngày nghỉ nó vẫn serve số phiên gần nhất — không có cờ nào nói "đây là data cũ".
+
+Client tự đóng dấu `date.today()` lên đó rồi ghi DB:
+
+```
+Thứ Bảy 2026-08-29  → board serve số của thứ Sáu 08-28
+                    → ghi thành row date = 2026-08-29
+                    → "phiên" thứ Bảy xuất hiện trong DB
+```
+
+Hệ quả không chỉ là một row rác: mọi aggregate theo phiên đều lệch. Streak "mua ròng N phiên liên tiếp" đếm cả phiên không tồn tại. Trung bình 5 phiên bị pha loãng bằng bản sao.
+
+Hai lớp chặn, rẻ và không cần dependency:
+
+```python
+# 1. Weekend — deterministic, chặn trước khi gọi API
+if target_date.weekday() >= 5:
+    return 0
+
+# 2. Holiday — so volume với phiên đã lưu gần nhất
+if matched / compared >= 0.9:   # board chỉ lặp lại phiên trước
+    return 0
+```
+
+**Tại sao không dùng holiday calendar?** VN có bridge day bất quy tắc quanh Tết và 2/9, công bố từng năm — calendar phải maintain tay và sẽ lệch. So volume tự đúng với mọi ngày nghỉ, kể cả nghỉ đột xuất (sàn treo phiên).
+
+Chọn `buy_volume`/`sell_volume` làm khoá so sánh vì đó là **số nguyên đếm khớp lệnh** — hai phiên thật gần như không thể trùng khít trên hàng trăm mã. Giá trị tiền thì có thể trùng do làm tròn.
+
+Ngưỡng `compared < 10 → không kết luận` là fail-open có chủ ý: thiếu overlap thì thà ghi rồi cleanup sau, hơn là chặn oan một phiên thật.
+
+**Nguyên tắc:** khi nguồn không tự khai thời điểm của data, client phải tự kiểm chứng data có mới không. "Gọi lúc nào thì là data lúc đó" là giả định sai với mọi endpoint dạng snapshot.
+
+## Incremental ingest không lấp được lỗ ở giữa
+
+Incremental kiểu `range_start = MAX(date) + 1` chỉ tiến về phía trước. Một ngày fail ở giữa series thì:
+
+```
+DB có:  ... 08-27, 08-28, [thiếu 08-31], 09-03, 09-04
+MAX = 09-04  →  range_start = 09-05  →  không bao giờ chạm 08-31
+```
+
+Job daily chạy mãi cũng không tự sửa. Chỉ full backfill (`--migrate`, 365 ngày × toàn bộ mã) mới lấp được — quá nặng để chạy vì một ngày.
+
+Cần một đường thứ ba: range tường minh (`--start-date` / `--end-date`) cho phép lấp đúng lỗ. Ba mode phủ ba tình huống khác nhau:
+
+| Mode | Dùng khi |
+|---|---|
+| incremental (`MAX+1 → today`) | job daily, chi phí thấp nhất |
+| explicit range | lấp gap đã xác định |
+| full backfill | đổi schema/đơn vị, cần ghi lại toàn bộ |
+
+**Nguyên tắc:** ingest nào có state ("đã chạy tới đâu") thì phải có đường bypass state, nếu không mọi lỗi transient đều thành lỗ vĩnh viễn.
+
+## Time-bomb test — fixture ngày cố định + logic ngày tương đối
+
+Test xanh suốt rồi tự vỡ không do ai sửa code:
+
+```python
+base = date(2026, 8, 1)                    # fixture: ngày cố định
+fetch_and_upsert("HPG", days=30)           # code: window tương đối today
+```
+
+Ngày `today` còn trong 30 ngày kể từ 2026-08-01 thì trùng nhau, test xanh. Qua 2026-08-31 thì window trượt khỏi fixture → rows bị clip hết → fail.
+
+Hai chi tiết làm nó khó tìm:
+
+1. **Chỉ một path clip.** Fireant path không filter theo range, fallback path có. Nên cùng fixture đó, 37 test xanh và đúng 1 test đỏ — trông như bug ở fallback logic.
+2. **Fail message vô hại.** `assert 0 == 3` không gợi gì về ngày tháng.
+
+Cách phòng: fixture và code phải cùng hệ quy chiếu. Hoặc fixture sinh theo `today` (`base = today - timedelta(days=5)`), hoặc test truyền range tường minh để không phụ thuộc `today`. Trộn hai hệ là bom hẹn giờ.
+
+Cùng họ với lỗi ở `tests/test_phase2.py`: fixture `date(2026, 8, 25)` + `_is_db_fresh()` so với `date.today()` → sau vài ngày data mock bị coi là stale, tool rơi xuống live path và gọi network thật trong unit test.

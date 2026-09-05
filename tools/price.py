@@ -1325,6 +1325,12 @@ def _get_foreign_flows_live() -> ToolResult:
             ),
         )
 
+    # VCI returns raw VND; foreign_flows (and _build_foreign_result) use tỷ đồng
+    for r in all_rows:
+        r["buy_value"] /= 1e9
+        r["sell_value"] /= 1e9
+        r["net_value"] /= 1e9
+
     total_buy = sum(r["buy_value"] for r in all_rows)
     total_sell = sum(r["sell_value"] for r in all_rows)
     net = total_buy - total_sell
@@ -1343,7 +1349,8 @@ def _build_foreign_result(
     top_sellers: list[dict],
     source: str = "db",
 ) -> ToolResult:
-    net_bn = net_value / 1e9
+    # All inputs are in tỷ đồng (DB stores tỷ; live path normalizes before calling)
+    net_bn = net_value
     direction = "Mua ròng" if net_bn >= 0 else "Bán ròng"
     source_tag = " (live)" if source == "live" else ""
 
@@ -1358,8 +1365,8 @@ def _build_foreign_result(
     net_buyers = [(t, v) for t, v in net_items if v > 0][:3]
     net_sellers = [(t, v) for t, v in net_items if v < 0][-3:]
 
-    top_buy_str = " / ".join(f"{t} {v/1e9:.0f}tỷ" for t, v in net_buyers)
-    top_sell_str = " / ".join(f"{t} {abs(v)/1e9:.0f}tỷ" for t, v in reversed(net_sellers))
+    top_buy_str = " / ".join(f"{t} {v:.0f}tỷ" for t, v in net_buyers)
+    top_sell_str = " / ".join(f"{t} {abs(v):.0f}tỷ" for t, v in reversed(net_sellers))
 
     summary = "\n".join([
         f"Khối ngoại {date_str}{source_tag}: {direction} {abs(net_bn):.0f} tỷ đồng",

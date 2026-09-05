@@ -9,15 +9,16 @@ Steps:
   3. MinIO setup      — create bucket 'bctc-reports' + upload BCTC PDFs
   4. Financial facts  — vnstock (primary) for HPG, VCB, FPT (2020-2025)
   5. OHLCV + foreign  — Fireant (primary) -> VCI/KBS fallback, 1-year backfill
-  6. Market index     — SSI iBoard, 365 days (VNINDEX/HNX/UPCOM/VN30/HNX30)
-  7. Stock ratios     — vnstock KBS → stock_ratios (P/E, P/B, ROE, EPS for peer tickers)
-  8. Audit            — scripts/audit_db.py to verify completeness
+  6. Foreign latest   — VCI price board, real traded value for the latest session
+  7. Market index     — SSI iBoard, 365 days (VNINDEX/HNX/UPCOM/VN30/HNX30)
+  8. Stock ratios     — vnstock KBS → stock_ratios (P/E, P/B, ROE, EPS for peer tickers)
+  9. Audit            — scripts/audit_db.py to verify completeness
 
 Usage:
     python scripts/migrate.py
     python scripts/migrate.py --dry-run            # print plan, no changes
     python scripts/migrate.py --skip-minio         # skip MinIO/PDF step
-    python scripts/migrate.py --skip-market-data   # skip steps 4-6 (schema only)
+    python scripts/migrate.py --skip-market-data   # skip steps 4-8 (schema only)
     python scripts/migrate.py --tickers HPG,VCB    # limit data fetch to these tickers
     python scripts/migrate.py --skip-audit         # skip final audit
 """
@@ -80,7 +81,7 @@ def _run(cmd: list[str], label: str, dry: bool) -> bool:
 # ── Step 1: SQL migrations ────────────────────────────────────────────────────
 
 def run_migrations(dry: bool) -> bool:
-    print("\n[1/8] SQL migrations")
+    print("\n[1/9] SQL migrations")
     from data.db import get_conn
 
     ok = err = skip = 0
@@ -138,7 +139,7 @@ def run_migrations(dry: bool) -> bool:
 # ── Step 2: Seed securities ───────────────────────────────────────────────────
 
 def seed_securities(dry: bool) -> bool:
-    print("\n[2/8] Seed securities (~400 HOSE tickers)")
+    print("\n[2/9] Seed securities (~400 HOSE tickers)")
     if dry:
         print("  [DRY] skip")
         return True
@@ -156,7 +157,7 @@ def seed_securities(dry: bool) -> bool:
 # ── Step 3: MinIO bucket + PDF upload ────────────────────────────────────────
 
 def setup_minio_and_upload(dry: bool) -> bool:
-    print("\n[3/8] MinIO bucket + BCTC PDF upload")
+    print("\n[3/9] MinIO bucket + BCTC PDF upload")
     pdfs = sorted(REPORTS_DIR.rglob("*.pdf"))
     print(f"  PDFs found: {len(pdfs)}")
     for p in pdfs:
@@ -211,7 +212,7 @@ def setup_minio_and_upload(dry: bool) -> bool:
 def populate_financials(dry: bool) -> bool:
     # No --tickers arg: populate_financial_data.py calls core.tickers.get_tickers()
     # which reads securities table (populated in step 2). Falls back to TICKERS env var.
-    print("\n[4/8] Financial facts (vnstock -> financial_facts)")
+    print("\n[4/9] Financial facts (vnstock -> financial_facts)")
     print("  tickers: from securities table (step 2)  periods: 2020-2025")
     return _run(
         [
@@ -232,7 +233,7 @@ def populate_financials(dry: bool) -> bool:
 #   Upserts ohlcv_daily AND foreign_flows in one pass.
 
 def backfill_ohlcv(dry: bool) -> bool:
-    print("\n[5/8] OHLCV + foreign flows (Fireant->VCI/KBS, 1-year backfill)")
+    print("\n[5/9] OHLCV + foreign flows (Fireant->VCI/KBS, 1-year backfill)")
     print("  Provider chain: Fireant (primary) -> KBS -> VCI")
     print("  Fireant response includes foreign buy/sell -> populates foreign_flows too")
     return _run(
@@ -242,10 +243,35 @@ def backfill_ohlcv(dry: bool) -> bool:
     )
 
 
-# ── Step 6: Market index (SSI iBoard) ────────────────────────────────────────
+# ── Step 6: Foreign flows, latest session (VCI price board) ──────────────────
+#
+# Step 5 fills foreign_flows from Fireant, which only exposes foreign *volume*
+# — the values there are derived (volume x close). VCI's price board reports the
+# real traded value, but only for the current session, so it can upgrade the
+# latest session and nothing further back.
+#
+# Non-fatal: VCI is the only working foreign provider (see BLOCKED.md) and it
+# writes nothing on weekends/holidays by design. Derived values from step 5 are
+# already in place, so a failure here degrades accuracy, not completeness.
+
+def refresh_foreign_latest(dry: bool) -> bool:
+    print("\n[6/9] Foreign flows, latest session (VCI price board)")
+    print("  Upgrades derived values from step 5 to real traded values")
+    print("  Non-fatal: skipped on weekends/holidays, and if VCI is unreachable")
+    ok = _run(
+        [PYTHON, "ingest/fetch_foreign_flows.py", "--all-securities", "--live"],
+        "foreign_flows latest session (VCI)",
+        dry,
+    )
+    if not ok:
+        print("  WARNING: VCI live fetch failed — keeping derived values from step 5")
+    return True
+
+
+# ── Step 7: Market index (SSI iBoard) ────────────────────────────────────────
 
 def backfill_market_index(dry: bool) -> bool:
-    print("\n[6/8] Market index daily (SSI iBoard, 365 days)")
+    print("\n[7/9] Market index daily (SSI iBoard, 365 days)")
     print("  Indices: VNINDEX, HNX, UPCOM, VN30, HNX30")
     return _run(
         [PYTHON, "ingest/fetch_index.py", "--days", "365"],
@@ -254,10 +280,10 @@ def backfill_market_index(dry: bool) -> bool:
     )
 
 
-# ── Step 7: Stock ratios (vnstock KBS → stock_ratios) ─────────────────────────
+# ── Step 8: Stock ratios (vnstock KBS → stock_ratios) ─────────────────────────
 
 def populate_ratios(dry: bool) -> bool:
-    print("\n[7/8] Stock ratios (vnstock KBS → stock_ratios)")
+    print("\n[8/9] Stock ratios (vnstock KBS → stock_ratios)")
     from pipeline.assets_vnstock import _UPSERT_SQL
     from core.tickers import get_ratio_tickers
     ticker_list = get_ratio_tickers()
@@ -317,10 +343,10 @@ def populate_ratios(dry: bool) -> bool:
     return failed == 0
 
 
-# ── Step 8: Audit ─────────────────────────────────────────────────────────────
+# ── Step 9: Audit ─────────────────────────────────────────────────────────────
 
 def run_audit(dry: bool) -> bool:
-    print("\n[8/8] DB completeness audit")
+    print("\n[9/9] DB completeness audit")
     if dry:
         print("  [DRY] skip")
         return True
@@ -342,7 +368,7 @@ def main() -> None:
     parser.add_argument("--skip-securities",  action="store_true",
                         help="Skip HOSE securities seed")
     parser.add_argument("--skip-market-data", action="store_true",
-                        help="Skip steps 4-7 (financial facts, OHLCV, market index, stock ratios)")
+                        help="Skip steps 4-8 (financial facts, OHLCV, foreign live, market index, stock ratios)")
     parser.add_argument("--skip-audit",       action="store_true",
                         help="Skip final DB audit")
     args = parser.parse_args()
@@ -363,30 +389,32 @@ def main() -> None:
     if not args.skip_securities:
         results["securities"] = seed_securities(dry)
     else:
-        print("\n[2/8] Securities seed -- SKIPPED")
+        print("\n[2/9] Securities seed -- SKIPPED")
 
     if not args.skip_minio:
         results["minio"] = setup_minio_and_upload(dry)
     else:
-        print("\n[3/8] MinIO/PDF -- SKIPPED")
+        print("\n[3/9] MinIO/PDF -- SKIPPED")
 
     # Market data population
     if not args.skip_market_data:
         results["financials"]    = populate_financials(dry)
         results["ohlcv"]         = backfill_ohlcv(dry)
+        results["foreign_live"]  = refresh_foreign_latest(dry)
         results["market_index"]  = backfill_market_index(dry)
         results["stock_ratios"]  = populate_ratios(dry)
     else:
-        print("\n[4/8] Financial facts -- SKIPPED")
-        print("\n[5/8] OHLCV + foreign flows -- SKIPPED")
-        print("\n[6/8] Market index -- SKIPPED")
-        print("\n[7/8] Stock ratios -- SKIPPED")
+        print("\n[4/9] Financial facts -- SKIPPED")
+        print("\n[5/9] OHLCV + foreign flows -- SKIPPED")
+        print("\n[6/9] Foreign flows latest session -- SKIPPED")
+        print("\n[7/9] Market index -- SKIPPED")
+        print("\n[8/9] Stock ratios -- SKIPPED")
 
     # Audit
     if not args.skip_audit:
         results["audit"] = run_audit(dry)
     else:
-        print("\n[8/8] Audit -- SKIPPED")
+        print("\n[9/9] Audit -- SKIPPED")
 
     # Summary
     print("\n" + "=" * 60)

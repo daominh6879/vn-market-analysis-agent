@@ -278,7 +278,12 @@ class TestFetchOhlcv:
         ):
             mock_fa.fetch_history_range.side_effect = RuntimeError("fireant down")
             mock_fb.get_history.return_value = df_fallback
-            result = fetch_and_upsert("HPG", days=30)
+            # Explicit range matching the fixture dates: the fallback path clips
+            # rows to [range_start, range_end], so a relative `days=` window
+            # silently drops every fixture row once today drifts past it.
+            result = fetch_and_upsert(
+                "HPG", start_date=date(2026, 8, 1), end_date=date(2026, 8, 10)
+            )
         mock_fb.get_history.assert_called_once()
         assert result["ohlcv"] == 3
         assert result["foreign"] == 0  # no foreign col on fallback
@@ -312,14 +317,14 @@ class TestFetchOhlcv:
         assert result["ohlcv"] == 10
 
     def test_foreign_value_derived_from_volume_times_close(self):
-        """buy_val = buy_vol × close / 1e9 (tỷ đồng)."""
+        """buy_val = buy_vol × close / 1e6 (tỷ đồng); Fireant close is nghìn đồng."""
         from ingest.fetch_ohlcv import fetch_and_upsert, _upsert_foreign as real_upsert_foreign
         df = pd.DataFrame({
             "time":             ["2026-08-01"],
-            "open":             [20_000.0],
-            "high":             [20_500.0],
-            "low":              [19_800.0],
-            "close":            [20_000.0],
+            "open":             [20.0],
+            "high":             [20.5],
+            "low":              [19.8],
+            "close":            [20.0],
             "volume":           [1_000_000],
             "foreign_buy_vol":  [100_000],
             "foreign_sell_vol": [40_000],
@@ -343,9 +348,11 @@ class TestFetchOhlcv:
         # row = (ticker, date, buy_val, sell_val, net_val, buy_vol, sell_vol, net_vol)
         ticker, d, buy_val, sell_val, net_val, buy_vol, sell_vol, net_vol = row
         assert ticker == "HPG"
-        expected_buy = round(100_000 * 20_000.0 / 1e9, 4)
+        # close 20.0 nghìn đồng = 20,000 VND → 100,000 shares = 2 tỷ đồng
+        expected_buy = round(100_000 * 20.0 / 1e6, 4)
+        assert expected_buy == 2.0
         assert abs(buy_val - expected_buy) < 1e-6
-        expected_sell = round(40_000 * 20_000.0 / 1e9, 4)
+        expected_sell = round(40_000 * 20.0 / 1e6, 4)
         assert abs(sell_val - expected_sell) < 1e-6
         assert buy_vol == 100_000
         assert sell_vol == 40_000
@@ -485,6 +492,72 @@ class TestFetchForeignFlowsLive:
             n = fetch_live_today(date(2026, 8, 25))
         assert n == 0
 
+    def test_fetch_live_today_skips_weekend(self):
+        """VCI board serves the last session on a weekend — must not be written."""
+        from ingest.fetch_foreign_flows import fetch_live_today
+        with (
+            patch("ingest.fetch_foreign_flows._active_tickers", return_value=["HPG"]),
+            patch("ingest.fetch_foreign_flows._vci") as mock_vci,
+            patch("ingest.fetch_foreign_flows._upsert_rows") as mock_upsert,
+        ):
+            n = fetch_live_today(date(2026, 8, 29))   # Saturday
+        assert n == 0
+        mock_vci.fetch_foreign_batch.assert_not_called()
+        mock_upsert.assert_not_called()
+
+    def test_fetch_live_today_skips_stale_board(self):
+        """Holiday: board repeats the previous session → phantom session, skip write."""
+        from ingest.fetch_foreign_flows import fetch_live_today
+        tickers = [f"T{i:02d}" for i in range(20)]
+        batch = [
+            {"ticker": t, "buy_value": 0.0, "sell_value": 0.0, "net_value": 0.0,
+             "buy_volume": 1000 + i, "sell_volume": 500 + i, "net_volume": 500}
+            for i, t in enumerate(tickers)
+        ]
+        prev = {t: (1000 + i, 500 + i) for i, t in enumerate(tickers)}
+        with (
+            patch("ingest.fetch_foreign_flows._active_tickers", return_value=tickers),
+            patch("ingest.fetch_foreign_flows._vci") as mock_vci,
+            patch("ingest.fetch_foreign_flows._latest_stored_session",
+                  return_value=(date(2026, 8, 28), prev)),
+            patch("ingest.fetch_foreign_flows._upsert_rows") as mock_upsert,
+        ):
+            mock_vci.fetch_foreign_batch.return_value = batch
+            n = fetch_live_today(date(2026, 8, 31))   # Monday, but a holiday
+        assert n == 0
+        mock_upsert.assert_not_called()
+
+    def test_fetch_live_today_writes_when_volumes_differ(self):
+        """Real session: volumes differ from the previous one → write."""
+        from ingest.fetch_foreign_flows import fetch_live_today
+        tickers = [f"T{i:02d}" for i in range(20)]
+        batch = [
+            {"ticker": t, "buy_value": 0.0, "sell_value": 0.0, "net_value": 0.0,
+             "buy_volume": 9000 + i, "sell_volume": 4000 + i, "net_volume": 5000}
+            for i, t in enumerate(tickers)
+        ]
+        prev = {t: (1000 + i, 500 + i) for i, t in enumerate(tickers)}
+        with (
+            patch("ingest.fetch_foreign_flows._active_tickers", return_value=tickers),
+            patch("ingest.fetch_foreign_flows._vci") as mock_vci,
+            patch("ingest.fetch_foreign_flows._latest_stored_session",
+                  return_value=(date(2026, 8, 28), prev)),
+            patch("ingest.fetch_foreign_flows._upsert_rows", return_value=20) as mock_upsert,
+        ):
+            mock_vci.fetch_foreign_batch.return_value = batch
+            n = fetch_live_today(date(2026, 8, 31))
+        assert n == 20
+        mock_upsert.assert_called_once()
+
+    def test_is_stale_board_needs_enough_overlap(self):
+        """Fewer than 10 comparable tickers → cannot judge, do not block the write."""
+        from ingest.fetch_foreign_flows import _is_stale_board
+        prev = {f"T{i:02d}": (100, 50) for i in range(5)}
+        rows = [(f"T{i:02d}", "2026-08-31", 0.0, 0.0, 0.0, 100, 50, 50) for i in range(5)]
+        assert _is_stale_board(rows, prev) is False
+        assert _is_stale_board([], prev) is False
+        assert _is_stale_board(rows, {}) is False
+
 
 # ═══ 5. Backward-compat shims ════════════════════════════════════════════════
 
@@ -559,6 +632,45 @@ class TestDagsterAssetCallSites:
         for val in [{"ohlcv": 5, "foreign": 3}, 5]:
             n = val["ohlcv"] if isinstance(val, dict) else val
             assert n == 5
+
+
+# ═══ 6b. Orchestrator wiring for the VCI live step ═══════════════════════════
+
+class TestForeignLiveOrchestration:
+    """migrate.py and daily_ingest.py must run the VCI live step, non-fatally."""
+
+    _LIVE_CMD = ["ingest/fetch_foreign_flows.py", "--all-securities", "--live"]
+
+    def test_migrate_step_runs_live_fetch(self):
+        import scripts.migrate as migrate
+        with patch.object(migrate, "_run", return_value=True) as mock_run:
+            assert migrate.refresh_foreign_latest(dry=False) is True
+        cmd = mock_run.call_args[0][0]
+        assert cmd[1:] == self._LIVE_CMD
+
+    def test_migrate_step_is_non_fatal(self):
+        """VCI is the only foreign provider and writes nothing on holidays."""
+        import scripts.migrate as migrate
+        with patch.object(migrate, "_run", return_value=False):
+            assert migrate.refresh_foreign_latest(dry=False) is True
+
+    def test_migrate_step_respects_dry_run(self):
+        import scripts.migrate as migrate
+        with patch.object(migrate, "_run", return_value=True) as mock_run:
+            migrate.refresh_foreign_latest(dry=True)
+        assert mock_run.call_args[0][2] is True
+
+    def test_daily_ingest_runs_live_fetch(self):
+        import scripts.daily_ingest as daily
+        with patch.object(daily, "run", return_value=True) as mock_run:
+            daily.run_foreign_live()
+        cmd = mock_run.call_args[0][0]
+        assert cmd[1:] == self._LIVE_CMD
+
+    def test_daily_ingest_live_failure_does_not_raise(self):
+        import scripts.daily_ingest as daily
+        with patch.object(daily, "run", return_value=False):
+            daily.run_foreign_live()   # must not raise, must not sys.exit
 
 
 # ═══ 7. Live Fireant test (marked, skipped in CI) ════════════════════════════

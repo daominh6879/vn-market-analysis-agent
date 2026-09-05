@@ -148,16 +148,16 @@ class TestForeignFlowDb:
 class TestGetForeignFlows:
     _MARKET = {
         "date": "2026-08-25",
-        "total_buy": 500e9,
-        "total_sell": 312e9,
-        "net_value": 188e9,
+        "total_buy": 500.0,
+        "total_sell": 312.0,
+        "net_value": 188.0,
     }
     _BUYERS = [
-        {"ticker": "HPG", "buy_value": 150e9, "sell_value": 50e9, "net_value": 100e9},
-        {"ticker": "VIC", "buy_value": 120e9, "sell_value": 30e9, "net_value": 90e9},
+        {"ticker": "HPG", "buy_value": 150.0, "sell_value": 50.0, "net_value": 100.0},
+        {"ticker": "VIC", "buy_value": 120.0, "sell_value": 30.0, "net_value": 90.0},
     ]
     _SELLERS = [
-        {"ticker": "TCB", "buy_value": 20e9, "sell_value": 90e9, "net_value": -70e9},
+        {"ticker": "TCB", "buy_value": 20.0, "sell_value": 90.0, "net_value": -70.0},
     ]
 
     def test_ok_net_buy(self):
@@ -167,20 +167,20 @@ class TestGetForeignFlows:
             patch("tools.foreign_flow_db.query_market_foreign_net", return_value=self._MARKET),
             patch("tools.foreign_flow_db.query_top_foreign", side_effect=[self._BUYERS, self._SELLERS]),
         ):
-            result = get_foreign_flows(days=1)
+            result = get_foreign_flows(days=1, as_of_date="2026-08-25")
         assert result.status == "ok"
         assert "Mua ròng" in result.message
         assert "188" in result.message
 
     def test_ok_net_sell(self):
         from tools.price import get_foreign_flows
-        market_sell = {**self._MARKET, "net_value": -500e9}
+        market_sell = {**self._MARKET, "net_value": -500.0}
         with (
             patch("tools.foreign_flow_db.query_latest_foreign_date", return_value=date(2026, 8, 25)),
             patch("tools.foreign_flow_db.query_market_foreign_net", return_value=market_sell),
             patch("tools.foreign_flow_db.query_top_foreign", side_effect=[self._BUYERS, self._SELLERS]),
         ):
-            result = get_foreign_flows(days=1)
+            result = get_foreign_flows(days=1, as_of_date="2026-08-25")
         assert result.status == "ok"
         assert "Bán ròng" in result.message
 
@@ -214,7 +214,7 @@ class TestGetForeignFlows:
             patch("tools.foreign_flow_db.query_market_foreign_net", return_value=self._MARKET),
             patch("tools.foreign_flow_db.query_top_foreign", side_effect=[self._BUYERS, self._SELLERS]),
         ):
-            result = get_foreign_flows(days=1)
+            result = get_foreign_flows(days=1, as_of_date="2026-08-25")
         required = {"date", "market_net_value", "market_net_value_bn",
                     "total_buy", "total_sell", "top_buyers", "top_sellers"}
         assert required.issubset(result.data.keys())
@@ -226,7 +226,7 @@ class TestGetForeignFlows:
             patch("tools.foreign_flow_db.query_market_foreign_net", return_value=self._MARKET),
             patch("tools.foreign_flow_db.query_top_foreign", side_effect=[self._BUYERS, self._SELLERS]),
         ):
-            result = get_foreign_flows(days=1)
+            result = get_foreign_flows(days=1, as_of_date="2026-08-25")
         assert "HPG" in result.message or "VIC" in result.message
 
     def test_net_value_bn_calculation(self):
@@ -236,7 +236,7 @@ class TestGetForeignFlows:
             patch("tools.foreign_flow_db.query_market_foreign_net", return_value=self._MARKET),
             patch("tools.foreign_flow_db.query_top_foreign", side_effect=[self._BUYERS, self._SELLERS]),
         ):
-            result = get_foreign_flows(days=1)
+            result = get_foreign_flows(days=1, as_of_date="2026-08-25")
         assert result.data["market_net_value_bn"] == pytest.approx(188.0, abs=1.0)
 
 
@@ -245,22 +245,22 @@ class TestGetForeignFlows:
 class TestBuildForeignResult:
     def test_net_buy_positive(self):
         from tools.price import _build_foreign_result
-        buyers = [{"ticker": "HPG", "buy_value": 150e9, "sell_value": 50e9}]
-        sellers = [{"ticker": "TCB", "buy_value": 20e9, "sell_value": 90e9}]
-        result = _build_foreign_result("2026-08-25", 188e9, 500e9, 312e9, buyers, sellers)
+        buyers = [{"ticker": "HPG", "buy_value": 150.0, "sell_value": 50.0}]
+        sellers = [{"ticker": "TCB", "buy_value": 20.0, "sell_value": 90.0}]
+        result = _build_foreign_result("2026-08-25", 188.0, 500.0, 312.0, buyers, sellers)
         assert result.status == "ok"
         assert "Mua ròng" in result.message
         assert "188" in result.message
 
     def test_net_sell_negative(self):
         from tools.price import _build_foreign_result
-        result = _build_foreign_result("2026-08-25", -300e9, 200e9, 500e9, [], [])
+        result = _build_foreign_result("2026-08-25", -300.0, 200.0, 500.0, [], [])
         assert "Bán ròng" in result.message
         assert "300" in result.message
 
     def test_data_has_correct_net_bn(self):
         from tools.price import _build_foreign_result
-        result = _build_foreign_result("2026-08-25", 188e9, 500e9, 312e9, [], [])
+        result = _build_foreign_result("2026-08-25", 188.0, 500.0, 312.0, [], [])
         assert "market_net_value_bn" in result.data
         assert result.data["market_net_value_bn"] == pytest.approx(188.0, abs=1.0)
 
