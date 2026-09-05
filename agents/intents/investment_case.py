@@ -28,9 +28,11 @@ _SYSTEM = (
 )
 
 
-def _safe_run(module_run, ticker: str, query: str, label: str) -> str:
+def _safe_run(module_run, ticker: str, query: str, label: str, tc: dict | None = None) -> str:
     try:
-        return module_run(ticker, query)
+        if tc is None:
+            return module_run(ticker, query)
+        return module_run(ticker, query, tc)
     except Exception as exc:
         return f"[{label}: lỗi — {exc}]"
 
@@ -47,14 +49,14 @@ def _assemble_report(ticker: str, bull: str, bear: str, khuyen_nghi: str, khung_
     )
 
 
-def gather_data(ticker: str, query: str) -> str:
+def gather_data(ticker: str, query: str, time_context: dict | None = None) -> str:
     """Gather data from all 5 sub-modules — no LLM call at any step."""
     from agents.intents import price_action, technical, fundamentals, macro_sector, news_sentiment
-    pa_data    = _safe_run(price_action.gather_data,   ticker, query, "price_action")
-    tech_data  = _safe_run(technical.gather_data,      ticker, query, "technical")
-    fund_data  = _safe_run(fundamentals.gather_data,   ticker, query, "fundamentals")
-    macro_data = _safe_run(macro_sector.gather_data,   ticker, query, "macro_sector")
-    news_data  = _safe_run(news_sentiment.gather_data, ticker, query, "news_sentiment")
+    pa_data    = _safe_run(price_action.gather_data,   ticker, query, "price_action", time_context)
+    tech_data  = _safe_run(technical.gather_data,      ticker, query, "technical", time_context)
+    news_data  = _safe_run(news_sentiment.gather_data, ticker, query, "news_sentiment", time_context)
+    fund_data  = _safe_run(fundamentals.gather_data,   ticker, query, "fundamentals", time_context)
+    macro_data = _safe_run(macro_sector.gather_data,   ticker, query, "macro_sector", time_context)
     parts = [p for p in [pa_data, tech_data, fund_data, macro_data, news_data] if p]
     return "\n\n---\n\n".join(parts)
 

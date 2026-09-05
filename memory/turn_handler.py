@@ -458,6 +458,7 @@ async def stream_turn(
         agent_state["intent"] = intent
         agent_state["ticker"] = ticker
         agent_state["original_query"] = user_message
+        agent_state["time_context"] = route.get("time_context")
 
         # Invoke graph in a thread with current_observer set, so synthesize_final's
         # emit_llm_delta flows out as SSE in real time. Falls back to line-chunking
@@ -538,23 +539,14 @@ async def stream_turn(
         except Exception:
             pass
 
-        if final.get("_cache_hit"):
-            cached = final.get("report", "")
-            log.info("cache.hit conv=%s intent=%s ticker=%s tier=%s",
-                     conversation_id[:8], intent, ticker, final.get("_cache_tier", ""))
-            yield _sse_status("cache_hit", tier=final.get("_cache_tier", ""), ticker=ticker or None)
-            for line in cached.split("\n"):
-                yield _sse_chunk(line + "\n")
-            assistant_reply = cached
+        report = final.get("report") or ""
+        if did_stream:
+            assistant_reply = report  # already emitted token-by-token via llm_delta
         else:
-            report = final.get("report") or ""
-            if did_stream:
-                assistant_reply = report  # already emitted token-by-token via llm_delta
-            else:
-                yield _sse_status("streaming", agent=intent)
-                for line in report.split("\n"):
-                    yield _sse_chunk(line + "\n")
-                assistant_reply = report
+            yield _sse_status("streaming", agent=intent)
+            for line in report.split("\n"):
+                yield _sse_chunk(line + "\n")
+            assistant_reply = report
 
     else:
         # ── Direct reply: tool or free-text response ──────────────────────────

@@ -33,13 +33,17 @@ _SYSTEM = (
 )
 
 
-def _get_ohlcv(ticker: str) -> tuple[str, "pd.DataFrame | None"]:
+def _get_ohlcv(
+    ticker: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> tuple[str, "pd.DataFrame | None"]:
     """DB-first OHLCV fetch; falls back to live API when DB is empty or stale.
 
     Delegates to get_historical_ohlcv, which already checks DB freshness
     (_is_db_fresh) and falls back to the live provider when ohlcv_daily is stale.
     """
-    r = get_historical_ohlcv(ticker, days=365)
+    r = get_historical_ohlcv(ticker, days=365, start_date=start_date, end_date=end_date)
     return r.status, r.data if r.status == "ok" else None
 
 
@@ -128,9 +132,12 @@ def _assemble_report(
     )
 
 
-def gather_data(ticker: str, query: str) -> str:
+def gather_data(ticker: str, query: str, time_context: dict | None = None) -> str:
     """Fetch OHLCV, indicators, S/R, OBV, Fibonacci, candle — no LLM call."""
-    status, df = _get_ohlcv(ticker)
+    tc = time_context or {}
+    start = tc.get("start_date") if tc.get("explicit") else None
+    end = tc.get("end_date") if tc.get("explicit") else None
+    status, df = _get_ohlcv(ticker, start_date=start, end_date=end)
     if status != "ok" or df is None:
         return f"[KỸ THUẬT {ticker}]\nKhông có dữ liệu OHLCV."
     ind_r = calculate_indicators(df)

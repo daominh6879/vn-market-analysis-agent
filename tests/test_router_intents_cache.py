@@ -33,7 +33,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-import redis as redis_lib
 from dotenv import load_dotenv
 
 # Graph nodes print Vietnamese text; Windows default console is cp1252, so a `print`
@@ -49,9 +48,6 @@ load_dotenv(ROOT / ".env")
 
 from agents.classifier import RouterResult, classify_hybrid, llm_classify
 from agents.graph import (
-    check_cache_node,
-    check_cache_hit,
-    cache_save_node,
     _is_empty_result,
     _route_after_clarify,
     route_after_subqueries,
@@ -63,17 +59,6 @@ from agents.graph import (
     build_single_subtask_node,
 )
 from agents.state import make_initial_state, AgentState
-from core.config import settings
-from core.cache import (
-    CacheKey,
-    cache_get,
-    cache_set,
-    make_cache_key,
-    normalize_question,
-    PROMPT_VERSION,
-    ttl_seconds,
-    _INTENT_TTL,
-)
 from core.tickers import raw_tickers, extract_tickers
 
 # Minimal persona for llm_route — routing is tool-driven, not prompt-sensitive.
@@ -178,13 +163,6 @@ def _state(query: str, intent: str = "", ticker: str | None = _MISSING, **kw) ->
     if ticker is not _MISSING:
         s["ticker"] = ticker  # None means genuinely missing; "" means resolved-but-empty
     return s
-
-
-def _flush_test_keys(pattern: str = "cache:b32:*") -> None:
-    r = redis_lib.from_url(settings.REDIS_URL, decode_responses=True)
-    keys = r.keys(pattern)
-    if keys:
-        r.delete(*keys)
 
 
 def _make_result(intent: str, ticker: str | None = None) -> RouterResult:
@@ -498,7 +476,38 @@ def test_llm_route_no_last_context_no_injection():
     with patch("agents.classifier.classify_hybrid",
                return_value=RouterResult("conversation", None, "x")):
         cr.llm_route("xin chào", [], "sys", client=client)
-    assert client.generate.call_args.kwargs["system"] == "sys"
+    system = client.generate.call_args.kwargs["system"]
+    assert "Lượt trước" not in system
+    assert system.endswith("sys")
+
+
+def test_router_time_context_schema_and_parse():
+    from agents.conversation_router import AGENT_RUN_TOOL, _parse_time_context
+    props = AGENT_RUN_TOOL["input_schema"]["properties"]
+    assert "time_context" in props, "needs_agent_run must expose time_context"
+
+    tc = _parse_time_context({"start_date": "2026-08-29", "end_date": "2026-09-05", "explicit": True})
+    assert tc["start_date"] == "2026-08-29"
+    assert tc["end_date"] == "2026-09-05"
+    assert tc["explicit"] is True
+    assert tc["anchor"], "anchor must be set"
+
+    tc2 = _parse_time_context(None)
+    assert tc2["start_date"] is None
+    assert tc2["explicit"] is False
+    assert tc2["end_date"] == tc2["anchor"]
+
+    # explicit derives from start_date, not the LLM's `explicit` flag: a real start_date
+    # with explicit=false must force True (else "tuần trước"/"tháng trước" collide on the
+    # same cache key), and explicit=true with no start_date must force False (no spurious
+    # "..<today>" day-scope).
+    tc3 = _parse_time_context({"start_date": "2026-08-29", "explicit": False})
+    assert tc3["start_date"] == "2026-08-29"
+    assert tc3["explicit"] is True, "real start_date must force explicit=True"
+
+    tc4 = _parse_time_context({"start_date": None, "explicit": True})
+    assert tc4["start_date"] is None
+    assert tc4["explicit"] is False, "no start_date must force explicit=False"
 
 
 def test_llm_route_llm_error_returns_text():
@@ -564,6 +573,31 @@ def test_llm_route_needs_agent_out_of_scope_intent_declined():
     assert route["reason"] == "out_of_scope"
 
 
+def test_llm_route_out_of_scope_empty_text_still_declines():
+    """out_of_scope tool with empty text → OUT_OF_SCOPE_REPLY, never a blank reply."""
+    from agents import conversation_router as cr
+    from agents.classifier import OUT_OF_SCOPE_REPLY
+    tc = MagicMock(); tc.name = "out_of_scope"; tc.input = {"text": "", "reason": ""}
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+    route = cr.llm_route("giá bitcoin hôm nay", [], "sys", client=client)
+    assert route["type"] == "text"
+    assert route["text"] == OUT_OF_SCOPE_REPLY
+
+
+def test_llm_route_direct_reply_empty_text_not_blank():
+    """direct_reply with empty text on a social turn → safe non-empty text, not ''."""
+    from agents import conversation_router as cr
+    tc = MagicMock(); tc.name = "direct_reply"; tc.input = {"text": "", "reason": ""}
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+    with patch("agents.classifier.classify_hybrid",
+               return_value=RouterResult("conversation", None, "x")):
+        route = cr.llm_route("cảm ơn bạn", [], "sys", client=client)
+    assert route["type"] == "text"
+    assert route["text"], "empty direct_reply text must not escape as blank"
+
+
 def test_validate_ticker(monkeypatch):
     monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "VCB"])
     from agents.conversation_router import _validate_ticker
@@ -572,6 +606,19 @@ def test_validate_ticker(monkeypatch):
     assert _validate_ticker("") == ""
     assert _validate_ticker("AAPL") == ""
     assert _validate_ticker("VNINDEX") == ""
+
+
+def test_validate_ticker_shape_fallback_when_table_down(monkeypatch):
+    """get_tickers() raises (DB down) → 3-letter shape check, not silent drop to ''."""
+    def _boom():
+        raise RuntimeError("db down")
+    monkeypatch.setattr("core.tickers.get_tickers", _boom)
+    from agents.conversation_router import _validate_ticker
+    assert _validate_ticker("HPG") == "HPG"
+    assert _validate_ticker("hpg") == "HPG"
+    assert _validate_ticker("AAPL") == ""      # 4 letters — not the VN 3-char shape
+    assert _validate_ticker("VNINDEX") == ""   # index, not a 3-char ticker
+    assert _validate_ticker("") == ""
 
 
 def test_fallback_classify_passes_history():
@@ -587,6 +634,11 @@ def test_fallback_classify_passes_history():
     assert m.call_args.kwargs.get("messages") == history
     assert route is not None and route["type"] == "agent"
     assert route["intent"] == "technical_analysis"
+    # Fallback classify must attach a default time_context so classify_node doesn't
+    # burn a second LLM call in _resolve_time_context.
+    assert route.get("time_context") is not None
+    assert route["time_context"]["explicit"] is False
+    assert route["time_context"]["start_date"] is None
 
 
 def test_fallback_classify_social_returns_none():
@@ -616,30 +668,6 @@ def test_extract_tickers_false_positive_universe(monkeypatch):
     assert extract_tickers("phân tích HPG và VCB") == ["HPG", "VCB"]
     assert extract_tickers("tin tức về HPG") == ["HPG"]
     assert extract_tickers("TIN và HPG") == ["TIN", "HPG"]
-
-
-def test_check_cache_node_uses_query_for_tickerless_original(monkeypatch):
-    """'phân tích sâu hơn' (no subject) must key off the self-contained query."""
-    from core.cache import _question_scope
-    captured = {}
-
-    def fake_cache_get(ck):
-        captured["ticker"] = ck.ticker
-        captured["scope"] = ck.scope
-        return None, "miss"
-
-    monkeypatch.setattr("core.cache.cache_get", fake_cache_get)
-    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "VCB"])
-
-    state = {
-        "original_query": "phân tích sâu hơn",
-        "query": "phân tích sâu hơn về ngành ngân hàng",
-        "tenant_id": "default",
-        "intent": "macro_sector",
-        "ticker": "",
-    }
-    check_cache_node(state)
-    assert captured["scope"] == _question_scope("phân tích sâu hơn về ngành ngân hàng")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -742,36 +770,6 @@ def test_route_after_subqueries_skips_replan_on_budget():
 
 def test_route_after_critique_saves_on_budget():
     assert route_after_critique({"llm_calls": 100, "critique_pass": False, "critique_attempts": 0}) == "save"
-
-
-class TestUnitCacheNodes:
-    def test_check_cache_miss_returns_cache_key(self, monkeypatch):
-        """Cache miss: _cache_key set, _cache_hit=False. Redis state is mocked out."""
-        from core import cache as cache_mod
-        monkeypatch.setattr(cache_mod, "cache_get", lambda ck: (None, "miss"))
-        state = _state("HPG giá hôm nay", intent="price_action", ticker="HPG", tenant_id="default")
-        state["messages"] = []
-        result = check_cache_node(state)
-        assert result["_cache_hit"] is False
-        assert result.get("_cache_key"), "cache miss must still produce a _cache_key"
-
-    def test_check_cache_hit_edge_function(self):
-        assert check_cache_hit({"_cache_hit": True}) == "hit"
-        assert check_cache_hit({"_cache_hit": False}) == "miss"
-        assert check_cache_hit({}) == "miss"
-
-    def test_cache_save_noop_when_no_key(self):
-        state = _state("hello", intent="conversation")
-        state["_cache_key"] = None
-        state["report"] = "some reply"
-        assert cache_save_node(state) == {}
-
-    def test_cache_save_noop_when_cache_hit(self):
-        state = _state("HPG RSI", intent="technical_analysis", ticker="HPG")
-        state["_cache_hit"] = True
-        state["_cache_key"] = object()
-        state["report"] = "cached report"
-        assert cache_save_node(state) == {}
 
 
 class TestUnitGatherAndApproval:
@@ -935,109 +933,6 @@ def test_snapshot_ts_string_created_at():
     snap = _FakeSnap(created_at="2026-09-05T03:00:00+00:00")
     ts = _snapshot_ts(snap)
     assert ts == datetime(2026, 9, 5, 3, 0, 0, tzinfo=timezone.utc)
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# UNIT — cache key / TTL (core/cache.py)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def test_normalize_question():
-    q = "HPG có nên mua không?"
-    n = normalize_question(q)
-    assert n == n.lower()
-    assert "?" not in n
-    assert "e" in n
-
-
-def test_cache_key_no_conversation_id():
-    ck = CacheKey(
-        tenant_id="t1",
-        intent="technical_analysis",
-        ticker="HPG",
-        scope="",
-        prompt_version="v1",
-        model_version="deepseek-v4-flash",
-    )
-    data = ck.model_dump()
-    assert "conversation_id" not in data
-    assert "intent" in data
-    assert "normalized_question" not in data
-
-
-def test_make_cache_key_returns_key_for_any_turn():
-    """All intents cacheable regardless of turn — history is not part of the key."""
-    for intent in ("technical_analysis", "price_action", "news_sentiment",
-                   "macro_sector", "rag_qa", "investment_case", "screening"):
-        ck = make_cache_key("t1", "phan tich MBB", "MBB", intent)
-        assert ck is not None, f"{intent} must be cacheable any turn"
-
-
-def test_make_cache_key_skips_conversation():
-    ck = make_cache_key("t1", "xin chào", "", "conversation")
-    assert ck is None, "conversation must not be cached"
-
-
-def test_make_cache_key_ticker_extraction():
-    ck = make_cache_key("t1", "so sánh HPG với VCB", "", "investment_case")
-    assert ck is not None
-    assert ck.ticker == "HPG|VCB"
-
-
-def test_make_cache_key_scope_for_always_scope_intents():
-    from core.cache import _ALWAYS_SCOPE_INTENTS
-    for intent in _ALWAYS_SCOPE_INTENTS:
-        ck = make_cache_key("t1", "tỷ giá USD/VND hôm nay", "HPG", intent)
-        assert ck is not None, f"{intent} must be cacheable"
-        assert ck.scope != "", f"{intent} must have a question-hash scope"
-    for intent in ("price_action", "technical_analysis", "news_sentiment",
-                   "investment_case", "market_brief"):
-        ck = make_cache_key("t1", "phân tích HPG", "HPG", intent)
-        assert ck is not None, f"{intent} must be cacheable"
-        assert ck.scope == "", f"{intent} must have empty scope"
-
-
-def test_intent_ttl_ordering():
-    price_in, _ = _INTENT_TTL["price_action"]
-    rag_in, _ = _INTENT_TTL["rag_qa"]
-    assert price_in < rag_in
-    _, price_off = _INTENT_TTL["price_action"]
-    _, rag_off = _INTENT_TTL["rag_qa"]
-    assert price_off < rag_off
-
-
-def test_ttl_seconds_returns_intent_ttl():
-    t = ttl_seconds("price_action")
-    assert isinstance(t, int) and t > 0
-
-
-def test_same_ticker_different_intent_no_cross_hit():
-    from core.cache import set_exact, get_exact
-    ck_tech = CacheKey(tenant_id="default", intent="technical_analysis", ticker="HPG", scope="",
-                       prompt_version="v1", model_version="deepseek-v4-flash")
-    ck_fund = CacheKey(tenant_id="default", intent="rag_qa", ticker="HPG", scope="",
-                       prompt_version="v1", model_version="deepseek-v4-flash")
-    set_exact(ck_tech, "technical reply")
-    assert get_exact(ck_fund) is None
-
-
-def test_hpg_hsg_no_cross_hit():
-    from core.cache import set_exact, get_exact
-    ck_hpg = CacheKey(tenant_id="default", intent="technical_analysis", ticker="HPG", scope="",
-                      prompt_version="v1", model_version="deepseek-v4-flash")
-    ck_hsg = CacheKey(tenant_id="default", intent="technical_analysis", ticker="HSG", scope="",
-                      prompt_version="v1", model_version="deepseek-v4-flash")
-    set_exact(ck_hpg, "HPG reply")
-    assert get_exact(ck_hsg) is None
-
-
-def test_prompt_version_invalidates_exact():
-    from core.cache import set_exact, get_exact
-    ck_v1 = CacheKey(tenant_id="test-tenant", intent="technical_analysis", ticker="HPG", scope="",
-                     prompt_version="v1", model_version="deepseek-v4-flash")
-    ck_v2 = CacheKey(tenant_id="test-tenant", intent="technical_analysis", ticker="HPG", scope="",
-                     prompt_version="v2", model_version="deepseek-v4-flash")
-    set_exact(ck_v1, "reply v1")
-    assert get_exact(ck_v2) is None
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1228,12 +1123,6 @@ class TestGraphInvoke:
         assert not final.get("needs_clarification")
         assert len(report) > 50
 
-    def test_cache_key_set_after_report(self):
-        final = _invoke("HPG RSI hôm nay", tenant_id="default")
-        print(f"\n[cache_key] _cache_key type: {type(final.get('_cache_key'))}")
-        assert "report" in final
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # E2E — full stream_turn path (real LLM + tools → SSE)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1289,15 +1178,6 @@ class TestStreamAllIntents:
             "missing bull/bear/recommendation section"
         assert any(kw in reply_lower for kw in ["mua", "bán", "nắm giữ", "tích lũy"]), \
             "missing buy/sell/hold verdict"
-
-    def test_cache_hit_emitted(self):
-        cid1, uid = _new_conv()
-        _run_stream(cid1, uid, "HPG giá hôm nay")
-        cid2, _ = _new_conv()
-        events2 = _parse_sse(_run_stream(cid2, uid, "HPG giá hôm nay"))
-        print(f"\n[cache_hit] events: {[p for p in events2.get('status', []) if p.get('step') == 'cache_hit']}")
-        assert _done(events2) is not None, "must complete even if cache miss"
-
 
 @pytest.mark.e2e
 class TestStreamClarificationResume:
@@ -1374,54 +1254,6 @@ def test_decompose_assigns_distinct_intents():
     )
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# E2E — intent-level cache contract (real Redis + LLM + tools)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-@pytest.mark.e2e
-def test_cache_hit_second_request_real():
-    _flush_test_keys()
-    cid1, uid1 = _new_conv()
-    question = "dòng tiền và khối lượng giao dịch HPG hôm nay"
-
-    reply1 = _reply(_parse_sse(_run_stream(cid1, uid1, question, is_first_turn=True)))
-    assert len(reply1) > 50, f"First reply too short: {len(reply1)}"
-    print(f"\nFirst reply ({len(reply1)} chars): {reply1[:200]}")
-
-    cid2, uid2 = _new_conv()
-    events2 = _parse_sse(_run_stream(cid2, uid2, question, is_first_turn=True))
-    reply2 = _reply(events2)
-    cache_event = _status(events2, "cache_hit")
-
-    print(f"Cache event: {cache_event}")
-    print(f"Second reply ({len(reply2)} chars): {reply2[:200]}")
-
-    assert cache_event is not None, "Expected cache_hit SSE event on second call"
-    assert cache_event.get("tier") == "exact", f"Unexpected tier: {cache_event}"
-    assert len(reply2) > 50
-
-
-@pytest.mark.e2e
-def test_turn2_hits_cache_real():
-    _flush_test_keys()
-    question = "phân tích kỹ thuật HPG: RSI và MACD"
-    cid, uid = _new_conv()
-
-    reply1 = _reply(_parse_sse(_run_stream(cid, uid, question, is_first_turn=True)))
-    assert len(reply1) > 50, "Turn 1 must have reply"
-    print(f"\nTurn 1 reply ({len(reply1)} chars): {reply1[:200]}")
-
-    events2 = _parse_sse(_run_stream(cid, uid, question, is_first_turn=False))
-    cache_event = _status(events2, "cache_hit")
-    reply2 = _reply(events2)
-    print(f"Turn 2 cache event: {cache_event}")
-    print(f"Turn 2 reply ({len(reply2)} chars): {reply2[:200]}")
-
-    assert cache_event is not None, "Turn 2 with same intent+ticker must hit cache"
-    assert cache_event.get("tier") == "exact"
-    assert len(reply2) > 50
-
-
 @pytest.mark.e2e
 def test_ngan_hang_thinh_vuong_resolves_vpb():
     result = classify_hybrid("phân tích cổ phiếu Ngân hàng Thịnh Vượng")
@@ -1429,122 +1261,3 @@ def test_ngan_hang_thinh_vuong_resolves_vpb():
     assert result.ticker == "VPB", f"Expected VPB, got {result.ticker}"
 
 
-@pytest.mark.e2e
-def test_company_name_same_cache_as_ticker_real():
-    _flush_test_keys()
-
-    cid1, uid1 = _new_conv()
-    reply1 = _reply(_parse_sse(_run_stream(cid1, uid1, "phân tích Ngân hàng Thịnh Vượng hôm nay", is_first_turn=True)))
-    print(f"\nCompany-name reply ({len(reply1)} chars): {reply1[:200]}")
-    assert len(reply1) > 50, "First reply too short"
-
-    cid2, uid2 = _new_conv()
-    events2 = _parse_sse(_run_stream(cid2, uid2, "phân tích VPB hôm nay", is_first_turn=True))
-    cache_event = _status(events2, "cache_hit")
-    reply2 = _reply(events2)
-    print(f"Cache event: {cache_event}")
-    print(f"VPB reply ({len(reply2)} chars): {reply2[:200]}")
-
-    assert cache_event is not None, "company name and ticker must share same cache entry"
-    assert cache_event.get("tier") == "exact"
-
-
-@pytest.mark.e2e
-def test_hpg_hsg_no_cross_cache_real():
-    _flush_test_keys()
-    cid1, uid1 = _new_conv()
-
-    hpg_q = "doanh thu HPG năm 2024 là bao nhiêu?"
-    hsg_q = "doanh thu HSG năm 2024 là bao nhiêu?"
-
-    hpg_reply = _reply(_parse_sse(_run_stream(cid1, uid1, hpg_q, is_first_turn=True)))
-    assert "HPG" in hpg_reply.upper() or len(hpg_reply) > 20
-    print(f"\nHPG reply: {hpg_reply[:200]}")
-
-    cid2, uid2 = _new_conv()
-    events2 = _parse_sse(_run_stream(cid2, uid2, hsg_q, is_first_turn=True))
-    cache_event = _status(events2, "cache_hit")
-    hsg_reply = _reply(events2)
-    print(f"Cache event for HSG query: {cache_event}")
-    print(f"HSG reply: {hsg_reply[:200]}")
-
-    if cache_event is not None:
-        assert hsg_reply != hpg_reply, "HSG must not receive HPG cached reply"
-    assert len(hsg_reply) > 20
-
-
-@pytest.mark.e2e
-def test_prompt_version_change_invalidates_cache_real():
-    import os
-    from core import cache as cache_mod
-
-    _flush_test_keys()
-    original = cache_mod.PROMPT_VERSION
-
-    question = "giá HPG hiện tại"
-    cid1, uid1 = _new_conv()
-    reply1 = _reply(_parse_sse(_run_stream(cid1, uid1, question, is_first_turn=True)))
-    assert len(reply1) > 50
-
-    cache_mod.PROMPT_VERSION = original + "_test_bump"
-    try:
-        cid2, uid2 = _new_conv()
-        events2 = _parse_sse(_run_stream(cid2, uid2, question, is_first_turn=True))
-        assert _status(events2, "cache_hit") is None, "Bumped PROMPT_VERSION must cause cache miss"
-    finally:
-        cache_mod.PROMPT_VERSION = original
-
-
-@pytest.mark.e2e
-def test_different_phrasing_same_intent_ticker_hits_cache():
-    _flush_test_keys()
-
-    q1 = "HPG hôm nay thế nào?"
-    q2 = "Cập nhật giá và khối lượng HPG"
-
-    cid1, uid1 = _new_conv()
-    reply1 = _reply(_parse_sse(_run_stream(cid1, uid1, q1, is_first_turn=True)))
-    print(f"\nq1 reply ({len(reply1)} chars): {reply1[:200]}")
-    assert len(reply1) > 50, "q1 reply too short — pipeline failed"
-
-    cid2, uid2 = _new_conv()
-    events2 = _parse_sse(_run_stream(cid2, uid2, q2, is_first_turn=True))
-    cache_event = _status(events2, "cache_hit")
-    reply2 = _reply(events2)
-    print(f"Cache event: {cache_event}")
-    print(f"q2 reply ({len(reply2)} chars): {reply2[:200]}")
-
-    assert cache_event is not None, "different phrasing, same intent+ticker must hit cache"
-    assert cache_event.get("tier") == "exact"
-    # Byte-identity with the first reply is not asserted: the first turn streams
-    # token deltas during synthesis, the cached turn re-streams the final report —
-    # the two can differ (thinking-strip / critique) even on a correct cache hit.
-    assert len(reply2) > 50, "cached reply must be non-trivial"
-
-
-@pytest.mark.e2e
-def test_e2e_full_cycle_all_major_intents():
-    _flush_test_keys()
-
-    cases = [
-        ("phân tích kỹ thuật HPG RSI MACD", "technical_analysis", "HPG"),
-        ("tin tức và sentiment VCB tuần này", "news_sentiment", "VCB"),
-        ("tổng quan thị trường hôm nay", "market_brief", ""),
-    ]
-
-    for question, expected_intent, expected_ticker in cases:
-        label = f"{expected_intent}/{expected_ticker or 'no-ticker'}"
-
-        cid1, uid1 = _new_conv()
-        reply1 = _reply(_parse_sse(_run_stream(cid1, uid1, question, is_first_turn=True)))
-        print(f"\n[{label}] first reply ({len(reply1)} chars): {reply1[:120]}")
-        assert len(reply1) > 50, f"[{label}] first reply too short"
-
-        cid2, uid2 = _new_conv()
-        events2 = _parse_sse(_run_stream(cid2, uid2, question, is_first_turn=True))
-        cache_event = _status(events2, "cache_hit")
-        reply2 = _reply(events2)
-        print(f"[{label}] cache_event={cache_event}")
-        assert cache_event is not None, f"[{label}] second call must hit cache"
-        assert cache_event.get("tier") == "exact", f"[{label}] wrong tier: {cache_event}"
-        assert len(reply2) > 50, f"[{label}] cached reply must be non-trivial"

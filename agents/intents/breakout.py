@@ -27,11 +27,15 @@ _SYSTEM = (
 )
 
 
-def _get_market_df() -> pd.DataFrame:
-    """VNINDEX OHLCV — DB-first with freshness check; falls back to live API."""
+def _get_market_df(end_date: str | None = None) -> pd.DataFrame:
+    """VNINDEX OHLCV — DB-first with freshness check; falls back to live API.
+
+    end_date (ISO): cap the OHLCV window at that date, so "tháng trước" scans the
+    market as of the requested period rather than the latest session.
+    """
     try:
         from tools.price import get_historical_ohlcv
-        r = get_historical_ohlcv("VNINDEX", days=150)
+        r = get_historical_ohlcv("VNINDEX", days=150, end_date=end_date)
         if r.status == "ok" and r.data is not None:
             return r.data
     except Exception:
@@ -70,9 +74,11 @@ def _get_news(ticker: str) -> str:
     return ""
 
 
-def gather_data(ticker: str, query: str) -> str:
+def gather_data(ticker: str, query: str, time_context: dict | None = None) -> str:
     """Scan for breakout signals and return structured signal data — no LLM call."""
-    market_df = _get_market_df()
+    tc = time_context or {}
+    end_date = tc.get("end_date") if tc.get("explicit") else None
+    market_df = _get_market_df(end_date=end_date)
     if ticker and ticker.upper() not in ("VNINDEX", "VN30", "VN100", "HOSE", "HNX"):
         t = ticker.upper()
         signals = scan_ticker(t, market_df)

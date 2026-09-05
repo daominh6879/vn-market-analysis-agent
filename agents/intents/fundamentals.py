@@ -395,11 +395,13 @@ def _extract_data_table(analysis: str) -> str:
     return "\n".join(table_lines).strip() if table_lines else ""
 
 
-def gather_data(ticker: str | None, query: str) -> str:
+def gather_data(ticker: str | None, query: str, time_context: dict | None = None) -> str:
     """Fetch valuation + peer comparison data — no LLM call.
 
     Serves the `valuation` intent (and investment_case's gather). Cross-ticker when the
     query names ≥2 real tickers, otherwise sector peers for the single ticker.
+    time_context accepted for a uniform gather signature; valuation ratios come from
+    the latest `stock_ratios` snapshot (no historical period axis) — pass-through.
     """
     if not ticker:
         return "[CƠ BẢN]\nKhông có mã cổ phiếu."

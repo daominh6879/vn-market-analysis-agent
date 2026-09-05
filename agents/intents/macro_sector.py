@@ -72,8 +72,12 @@ def _assemble_report(
     )
 
 
-def gather_data(ticker: str | None, query: str) -> str:
-    """Fetch FX, commodities, VN gold, sector performance — no LLM call."""
+def gather_data(ticker: str | None, query: str, time_context: dict | None = None) -> str:
+    """Fetch FX, commodities, VN gold, sector performance — no LLM call.
+
+    time_context accepted for a uniform gather signature; FX/commodities/sector are
+    current-snapshot (no historical axis) — pass-through.
+    """
     from tools.global_market import get_vn_gold
     fx_r        = get_fx_rates()
     comm_r      = get_commodities()

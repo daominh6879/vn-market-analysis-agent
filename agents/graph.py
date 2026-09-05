@@ -4,18 +4,18 @@ agents/graph.py — LangGraph graph: single entry from raw query → report.
 Flow:
   classify_node → check_conversation
     └── "conversation" → END  (stream_turn handles LLM streaming)
-    └── "verify" → check_cache_node
-          ├── "hit"  → END  (cached report in state["report"])
-          └── "miss" → clarify_node → _route_after_clarify
-                ├── "market_brief" → node_market_brief → cache_save_node → END
-                ├── "simple"      → build_single_subtask_node ─┐
-                ├── "decompose"   → decompose_node ────────────┴→ run_subqueries_node
-                └── "conversation" → cache_save_node → END (clarify merged to non-financial)
+    └── "out_of_scope" → node_out_of_scope → END
+    └── "verify" → clarify_node → _route_after_clarify
+          ├── "market_brief" → node_market_brief → finalize_node → END
+          ├── "simple"      → build_single_subtask_node ─┐
+          ├── "decompose"   → decompose_node ────────────┴→ run_subqueries_node
+          ├── "conversation" → finalize_node → END (clarify merged to non-financial)
+          └── "out_of_scope" → node_out_of_scope → END
     run_subqueries_node → route_after_subqueries
           ├── "replan"     → decompose_node (≤ 1, on >50% empty sub_results)
           └── "synthesize" → [request_approval] → synthesize_final
     synthesize_final → critique_report_node → route_after_critique
-          ├── "save"  → cache_save_node → END
+          ├── "save"  → finalize_node → END
           └── "retry" → synthesize_final (≤ MAX_CRITIQUE, folds critique_feedback)
 
 Design rules:
@@ -58,6 +58,23 @@ def _llm_budget_exceeded(state: AgentState) -> bool:
         return True
     started = state.get("turn_started_at")
     return bool(started) and (time.time() - started) > MAX_TURN_SECONDS
+
+
+def _resolve_time_context(intent: str, query: str) -> dict:
+    """Resolve the question to an exact time window (defaults to "now"). Never raises.
+
+    Conversation / out-of-scope turns skip the LLM resolver (no retrieval happens).
+    """
+    from datetime import date
+    today = date.today().isoformat()
+    default = {"anchor": today, "start_date": None, "end_date": today, "explicit": False}
+    if intent in ("conversation", "out_of_scope"):
+        return default
+    try:
+        from core.time_context import resolve_time_context, to_dict
+        return to_dict(resolve_time_context(query))
+    except Exception:
+        return default
 
 # Intents that require multi-angle decomposition — always go through decompose_node.
 # All others use the fast path (build_single_subtask_node) when a ticker is present.
@@ -116,15 +133,20 @@ def classify_node(state: AgentState) -> dict:
     except Exception:
         pass
 
+    # Router-provided time_context (stream_turn sets it from llm_route) wins; otherwise
+    # resolve here — only for direct graph invocation (tests / clarify resume), never in
+    # the production router path.
+    time_context = state.get("time_context") or _resolve_time_context(result.intent, state.get("query", ""))
     return {
         "intent": result.intent,
         "ticker": result.ticker or "",
         "classify_reason": result.reason,
+        "time_context": time_context,
     }
 
 
 def check_conversation(state: AgentState) -> str:
-    """Skip cache/clarify for conversation / out-of-scope turns — no graph work needed."""
+    """Skip clarify for conversation / out-of-scope turns — no graph work needed."""
     intent = state.get("intent", "")
     if intent == "conversation":
         return "skip"
@@ -141,48 +163,6 @@ def node_out_of_scope(state: AgentState) -> dict:
     except Exception:
         pass
     return {"report": OUT_OF_SCOPE_REPLY, "intent": "out_of_scope"}
-
-
-# ── Node 0: check_cache_node ─────────────────────────────────────────────────
-
-def check_cache_node(state: AgentState) -> dict:
-    """Check cache using classified intent+ticker. Returns early if hit."""
-    from core.cache import make_cache_key, cache_get
-    # Use original_query (verbatim user message) for cache key — query may be LLM-expanded
-    # and differs each turn, causing cache misses for semantically identical requests.
-    # A follow-up like "phân tích sâu hơn" names no subject, so its verbatim text would
-    # collide across sectors/conversations (macro_sector + ticker="" → scope=hash). Trust
-    # original_query only when it names a concrete ticker; else use the router's
-    # self-contained `query` so the subject is part of the cache key.
-    cache_question = state.get("original_query") or state.get("query", "")
-    if not extract_tickers(cache_question) and state.get("query"):
-        cache_question = state.get("query", "")
-    ck = make_cache_key(
-        state.get("tenant_id", "default"),
-        cache_question,
-        state.get("ticker") or "",
-        state.get("intent", "conversation"),
-    )
-    if ck is None:
-        return {"_cache_key": None, "_cache_hit": False}
-    hit, tier = cache_get(ck)
-    if hit:
-        try:
-            from tracing import get_tracer
-            get_tracer().turn_end(
-                intent=state.get("intent", ""),
-                ticker=state.get("ticker", ""),
-                report_len=len(hit),
-                cache_hit=True,
-            )
-        except Exception:
-            pass
-        return {"report": hit, "_cache_hit": True, "_cache_tier": tier, "_cache_key": ck.model_dump()}
-    return {"_cache_key": ck.model_dump(), "_cache_hit": False}
-
-
-def check_cache_hit(state: AgentState) -> str:
-    return "hit" if state.get("_cache_hit") else "miss"
 
 
 # ── Node 0a: clarify_node ─────────────────────────────────────────────────────
@@ -223,14 +203,24 @@ def clarify_node(state: AgentState) -> dict:
     from agents.classifier import classify_hybrid
     result = classify_hybrid(merged_query, messages=state.get("messages"))
 
+    report = ""
+    if result.intent == "conversation":
+        # Clarify re-classified the merged answer as non-financial (e.g. "bỏ qua").
+        # The "conversation" route exits via END with report="" → blank reply.
+        # Acknowledge so the turn always returns something.
+        report = "Đã rõ. Tôi sẵn sàng hỗ trợ phân tích chứng khoán Việt Nam khi bạn cần."
+
     return {
         "query": merged_query,
         "intent": result.intent,
         "ticker": result.ticker or "",
         "classify_reason": result.reason,
-        # query/intent/ticker changed after clarify — the pre-clarify cache key is stale.
-        # Disable caching for this turn instead of storing under the ambiguous key.
-        "_cache_key": None,
+        "report": report,
+        # Resume reuses the checkpoint state from when the interrupt was created, which
+        # may be minutes/hours old — reset the per-turn budget so replan/critique-retry
+        # aren't silently skipped on every resumed turn (_llm_budget_exceeded).
+        "turn_started_at": time.time(),
+        "llm_calls": 0,
     }
 
 
@@ -254,15 +244,11 @@ def node_market_brief(state: AgentState) -> dict:
     return {"report": report}
 
 
-# ── cache_save_node ───────────────────────────────────────────────────────────
+# ── finalize_node ─────────────────────────────────────────────────────────────
 
-def cache_save_node(state: AgentState) -> dict:
-    """Persist report to cache after successful generation."""
-    ck = state.get("_cache_key")
+def finalize_node(state: AgentState) -> dict:
+    """Close the turn's trace span after a successful report (no response cache)."""
     report = state.get("report") or ""
-    if ck and report and not state.get("_cache_hit"):
-        from core.cache import CacheKey, cache_set
-        cache_set(CacheKey(**ck), report)
     try:
         from tracing import get_tracer
         get_tracer().turn_end(
@@ -326,7 +312,6 @@ def decompose_node(state: AgentState) -> dict:
         pass
     return {
         "sub_tasks": sub_tasks,
-        "iteration": 0,
         "replan_attempted": bool(replan_note),
         "replan_note": "",
         "llm_calls": state.get("llm_calls", 0) + 1,
@@ -345,17 +330,16 @@ def _get_gather_map() -> dict:
         from rag import qa as _qa
 
         _GATHER_MAP.update({
-            "price_action":       lambda t, q: price_action.gather_data(t, q),
-            "technical_analysis": lambda t, q: technical.gather_data(t, q),
-            "news_sentiment":     lambda t, q: news_sentiment.gather_data(t, q),
-            "macro_sector":       lambda t, q: macro_sector.gather_data(t, q),
-            "investment_case":    lambda t, q: investment_case.gather_data(t, q),
-            "screening":          lambda t, q: screening.gather_data(t, q),
-            "rag_qa":             lambda t, q: _qa.retrieve_only(q, ticker=t),
-            "valuation":          lambda t, q: fundamentals.gather_data(t, q),
-            "breakout_scan":      lambda t, q: breakout.gather_data(t, q),
-            "market_brief":       lambda t, q: "[market_brief: xem riêng]",
-            "conversation":       lambda t, q: "",
+            "price_action":       lambda t, q, tc=None: price_action.gather_data(t, q, tc),
+            "technical_analysis": lambda t, q, tc=None: technical.gather_data(t, q, tc),
+            "news_sentiment":     lambda t, q, tc=None: news_sentiment.gather_data(t, q, tc),
+            "macro_sector":       lambda t, q, tc=None: macro_sector.gather_data(t, q, tc),
+            "investment_case":    lambda t, q, tc=None: investment_case.gather_data(t, q, tc),
+            "screening":          lambda t, q, tc=None: screening.gather_data(t, q, tc),
+            "rag_qa":             lambda t, q, tc=None: _qa.retrieve_only(q, ticker=t),
+            "valuation":          lambda t, q, tc=None: fundamentals.gather_data(t, q, tc),
+            "breakout_scan":      lambda t, q, tc=None: breakout.gather_data(t, q, tc),
+            "market_brief":       lambda t, q, tc=None: "[market_brief: xem riêng]",
         })
     return _GATHER_MAP
 
@@ -373,38 +357,61 @@ def _is_empty_result(data: str) -> bool:
     ))
 
 
-def _safe_gather(fn, ticker: str, question: str) -> str:
-    """Call a gather fn, converting any error to an inline error string (never raises)."""
+def _is_gather_error(s: str) -> bool:
+    """True when a gather entry is an error marker emitted by _safe_gather/_gather_tickers."""
+    return "— lỗi:" in s
+
+
+def _safe_gather(fn, ticker: str, question: str, tc: dict | None = None) -> str:
+    """Call a gather fn, converting any error to an inline error string (never raises).
+
+    tc (time_context) is passed only when non-None, so 2-arg gather fns (unit tests,
+    direct gather_data calls) keep working unchanged.
+    """
     try:
-        return fn(ticker, question) or ""
+        if tc is None:
+            return fn(ticker, question) or ""
+        return fn(ticker, question, tc) or ""
     except Exception as exc:
         return f"[{ticker} — lỗi: {exc}]"
 
 
-def _gather_tickers(fn, tickers: list[str], question: str) -> str:
+def _gather_tickers(fn, tickers: list[str], question: str, tc: dict | None = None) -> str:
     """Fan-out a gather fn over multiple tickers in parallel, preserving input order.
 
-    Each future is awaited directly with a per-fetch timeout — `as_completed` would
-    never yield a future whose fn hangs, so the timeout would never fire for it.
+    Futures run in parallel under a shared GATHER_TIMEOUT_SECONDS deadline — awaiting
+    each in order with a per-future timeout would let N hangs eat N×30s serially.
     """
     if not tickers:
         return ""
     if len(tickers) == 1:
-        return _safe_gather(fn, tickers[0], question)
+        return _safe_gather(fn, tickers[0], question, tc)
     results: dict[str, str] = {}
     ex = ThreadPoolExecutor(max_workers=min(len(tickers), MAX_FANOUT_TICKERS))
     try:
-        futs = [(ex.submit(_safe_gather, fn, t, question), t) for t in tickers]
+        futs = [(ex.submit(_safe_gather, fn, t, question, tc), t) for t in tickers]
+        # Shared deadline, not per-future: awaiting each in order with a per-future
+        # timeout lets N hanging futures eat N×GATHER_TIMEOUT_SECONDS serially (5×30s
+        # = 150s vs MAX_TURN_SECONDS=180). Each future gets the remaining budget.
+        deadline = time.monotonic() + GATHER_TIMEOUT_SECONDS
         for fut, t in futs:
             try:
-                results[t] = fut.result(timeout=GATHER_TIMEOUT_SECONDS) or ""
+                remaining = max(0.0, deadline - time.monotonic())
+                results[t] = fut.result(timeout=remaining) or ""
             except Exception as exc:
                 results[t] = f"[{t} — lỗi: {exc}]"
     finally:
         # wait=False: a hung gather thread must not stall the turn at executor exit.
         # The tool layer (VCI/yfinance) carries its own HTTP timeout as the real bound.
         ex.shutdown(wait=False, cancel_futures=True)
-    return "\n\n".join(results[t] for t in tickers if results.get(t))
+    # Drop per-ticker error markers when at least one ticker returned data, so a 1-of-N
+    # failure doesn't make the whole fan-out read as "lỗi:" (spurious replan) and isn't
+    # mixed into otherwise-good data for synthesis. All-failed keeps the error detail.
+    entries = [results.get(t, "") for t in tickers]
+    ok = [e for e in entries if e and not _is_gather_error(e)]
+    if ok:
+        return "\n\n".join(ok)
+    return "\n\n".join(e for e in entries if e)
 
 
 def run_subqueries_node(state: AgentState) -> dict:
@@ -420,8 +427,10 @@ def run_subqueries_node(state: AgentState) -> dict:
     sub_tasks = state.get("sub_tasks") or []
     fallback_ticker = state.get("ticker", "")
     fallback_query = state.get("query", "")
+    tc = state.get("time_context")
 
     sub_results: list[str] = []
+    usable = 0
     for task in sub_tasks:
         intent = task.get("intent", "macro_sector")
         tickers = task.get("tickers") or ([fallback_ticker] if fallback_ticker else [])
@@ -444,11 +453,15 @@ def run_subqueries_node(state: AgentState) -> dict:
             intent = "macro_sector"
 
         if intent in _FANOUT_INTENTS:
-            data = _gather_tickers(fn, tickers, question)
+            data = _gather_tickers(fn, tickers, question, tc)
         else:
             primary = tickers[0] if tickers else fallback_ticker
-            data = _safe_gather(fn, primary, question)
+            data = _safe_gather(fn, primary, question, tc)
 
+        # Judge emptiness on the raw gather output, not the composed label string —
+        # the question/label text must not flip a task to "empty".
+        if not _is_empty_result(data):
+            usable += 1
         if data:
             tickers_label = "+".join(tickers) if tickers else "N/A"
             sub_results.append(f"[{intent.upper()} — {tickers_label}]\n{question}\n{data}")
@@ -465,7 +478,6 @@ def run_subqueries_node(state: AgentState) -> dict:
             pass
 
     total = len(sub_tasks)
-    usable = sum(1 for r in sub_results if not _is_empty_result(r))
     empty_ratio = (total - usable) / total if total else 1.0
 
     updates: dict = {"sub_results": sub_results, "sub_results_empty_ratio": empty_ratio}
@@ -481,7 +493,6 @@ def run_subqueries_node(state: AgentState) -> dict:
 
 def synthesize_final(state: AgentState) -> dict:
     """Single LLM call over all gathered sub-results. Respects STRICT_NEUTRAL env flag."""
-    import os
     from llm.factory import create_client
     from llm.types import Message
 
@@ -489,16 +500,28 @@ def synthesize_final(state: AgentState) -> dict:
     query = state.get("query", "")
     context = "\n\n---\n\n".join(sub_results)
 
+    # Date-aware synthesis: anchor the report to the resolved time window.
+    tc = state.get("time_context") or {}
+    anchor = tc.get("anchor") or ""
+    start = tc.get("start_date")
+    end = tc.get("end_date")
+    if start and end:
+        time_line = f"Hôm nay: {anchor}. Khoảng thời gian yêu cầu: {start} → {end}."
+    elif anchor:
+        time_line = f"Hôm nay: {anchor}. Dùng dữ liệu mới nhất hiện có."
+    else:
+        time_line = ""
+
     strict = os.environ.get("STRICT_NEUTRAL", "false").lower() == "true"
     if strict:
         user_prompt = (
             f"Tổng hợp phân tích DỮ KIỆN từ ngữ cảnh. Trình bày trung lập.\n"
-            f"Ngữ cảnh: {context}\nCâu hỏi: {query}"
+            f"{time_line}\nNgữ cảnh: {context}\nCâu hỏi: {query}"
         )
     else:
         user_prompt = (
             f"Tổng hợp phân tích từ ngữ cảnh và trả lời câu hỏi.\n"
-            f"Ngữ cảnh: {context}\nCâu hỏi: {query}"
+            f"{time_line}\nNgữ cảnh: {context}\nCâu hỏi: {query}"
         )
 
     strict_note = " TUYỆT ĐỐI không đưa khuyến nghị mua/bán/nắm giữ." if strict else ""
@@ -522,16 +545,21 @@ def synthesize_final(state: AgentState) -> dict:
     # on stream errors and never returns an empty report.
     report = ""
     streamed = False
-    try:
-        from tracing import emit_llm_delta
-        parts: list[str] = []
-        for chunk in client.stream(messages, max_tokens=4000, system=system_prompt):
-            parts.append(chunk)
-            emit_llm_delta(chunk)
-        report = "".join(parts).strip()
-        streamed = bool(parts)
-    except Exception:
-        streamed = False
+    # Only the first attempt streams: a critique retry must NOT emit_llm_delta again,
+    # or the SSE client receives draft1 + draft2 concatenated while assistant_reply
+    # keeps only the last one (streamed text ≠ saved reply).
+    is_retry = state.get("critique_attempts", 0) > 0
+    if not is_retry:
+        try:
+            from tracing import emit_llm_delta
+            parts: list[str] = []
+            for chunk in client.stream(messages, max_tokens=4000, system=system_prompt):
+                parts.append(chunk)
+                emit_llm_delta(chunk)
+            report = "".join(parts).strip()
+            streamed = bool(parts)
+        except Exception:
+            streamed = False
 
     if not streamed:
         resp = client.generate(messages, max_tokens=4000, system=system_prompt)
@@ -738,7 +766,6 @@ def build_single_subtask_node(state: AgentState) -> dict:
         pass
     return {
         "sub_tasks": [{"intent": intent, "tickers": tickers, "question": query}],
-        "iteration": 0,
     }
 
 
@@ -747,11 +774,11 @@ def build_single_subtask_node(state: AgentState) -> dict:
 def _request_approval(state: AgentState) -> dict:
     """Pause for human review. interrupt() suspends graph until resumed via Command(resume=...)."""
     from langgraph.types import interrupt
+    sub_results = state.get("sub_results") or []
     proposal = {
         "ticker": state.get("ticker"),
-        "risk_verdict": state.get("risk_verdict", "N/A"),
-        "tech_signals": (state.get("tech_signals") or "")[:500],
-        "news_preview": (state.get("news_data") or "")[:300],
+        "query": state.get("query", ""),
+        "data_preview": "\n\n".join(sub_results)[:1500],
     }
     decision = interrupt(proposal)
     if decision is False:
@@ -777,7 +804,6 @@ def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGra
     g = StateGraph(AgentState)
 
     g.add_node("classify_node",            classify_node)
-    g.add_node("check_cache_node",         check_cache_node)
     g.add_node("clarify_node",             clarify_node)
     g.add_node("node_market_brief",        node_market_brief)
     g.add_node("node_out_of_scope",        node_out_of_scope)
@@ -786,23 +812,21 @@ def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGra
     g.add_node("run_subqueries_node",      run_subqueries_node)
     g.add_node("synthesize_final",         synthesize_final)
     g.add_node("critique_report_node",     critique_report_node)
-    g.add_node("cache_save_node",          cache_save_node)
+    g.add_node("finalize_node",            finalize_node)
 
     if human_approval:
         g.add_node("request_approval", _request_approval)
 
     g.set_entry_point("classify_node")
     g.add_conditional_edges("classify_node", check_conversation,
-        {"skip": END, "out_of_scope": "node_out_of_scope", "verify": "check_cache_node"})
-    g.add_conditional_edges("check_cache_node", check_cache_hit,
-        {"hit": END, "miss": "clarify_node"})
+        {"skip": END, "out_of_scope": "node_out_of_scope", "verify": "clarify_node"})
     g.add_conditional_edges("clarify_node", _route_after_clarify,
         {"market_brief": "node_market_brief",
          "simple": "build_single_subtask_node",
          "decompose": "decompose_node",
-         "conversation": "cache_save_node",
+         "conversation": "finalize_node",
          "out_of_scope": "node_out_of_scope"})
-    g.add_edge("node_market_brief", "cache_save_node")
+    g.add_edge("node_market_brief", "finalize_node")
     g.add_edge("node_out_of_scope", END)
     g.add_edge("build_single_subtask_node", "run_subqueries_node")
     g.add_edge("decompose_node",            "run_subqueries_node")
@@ -818,9 +842,9 @@ def build_graph(checkpointer=None, human_approval: bool = False) -> "CompiledGra
 
     g.add_edge("synthesize_final", "critique_report_node")
     g.add_conditional_edges("critique_report_node", route_after_critique,
-        {"save": "cache_save_node", "retry": "synthesize_final"})
+        {"save": "finalize_node", "retry": "synthesize_final"})
 
-    g.add_edge("cache_save_node",     END)
+    g.add_edge("finalize_node",     END)
 
     return g.compile(checkpointer=checkpointer)
 
@@ -844,6 +868,7 @@ def save_graph_image(app, path: str = "agents/graph.png") -> bool:
                 app.get_graph().draw_mermaid(), encoding="utf-8"
             )
             print(f"[graph image] Đã lưu Mermaid text → {mermaid_txt}")
+            return True
         except Exception:
             pass
         return False

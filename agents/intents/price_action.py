@@ -32,7 +32,7 @@ _SYSTEM = (
 )
 
 
-def _get_foreign_flow_summary(ticker: str) -> str:
+def _get_foreign_flow_summary(ticker: str, as_of: str | None = None) -> str:
     """Market-level flow for indices; per-ticker flow for stocks."""
     t = ticker.strip().upper()
     # Market indices → use market-level foreign flows
@@ -49,8 +49,8 @@ def _get_foreign_flow_summary(ticker: str) -> str:
         from datetime import date
         from tools.foreign_flow_db import query_ticker_foreign_net
         from tools.price import _is_db_fresh
-        today = date.today()
-        row = query_ticker_foreign_net(ticker, today.isoformat())
+        today = as_of or date.today().isoformat()
+        row = query_ticker_foreign_net(ticker, today)
         if row and _is_db_fresh(row["date"]):
             # foreign_flows stores values in tỷ đồng (ingest divides raw VND by 1e9)
             return (
@@ -103,28 +103,34 @@ def _price_change_summary(df: pd.DataFrame) -> str:
 _INDEX_CODES = frozenset({"VNINDEX", "VN30", "HNX", "HNX30", "UPCOM"})
 
 
-def _load_ohlcv(ticker: str) -> pd.DataFrame | None:
+def _load_ohlcv(
+    ticker: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> pd.DataFrame | None:
     """DB-first for indices (market_index_daily); live API for stocks; CSV cache fallback."""
     t = ticker.strip().upper()
+    from core.time_context import to_days
+    days = to_days(start_date, end_date, default=25) if (start_date or end_date) else 25
 
     # Index path: DB → live API (skip stale DB)
     if t in _INDEX_CODES:
         from tools.index_db import query_index
         from tools.price import _is_db_fresh
-        df = query_index(t, days=25)
+        df = query_index(t, days=days)
         if df is not None and not df.empty and _is_db_fresh(df["time"].iloc[-1]):
             # Rename matched_volume → volume for downstream compatibility
             if "matched_volume" in df.columns and "volume" not in df.columns:
                 df = df.rename(columns={"matched_volume": "volume"})
             return df
         # Fallback: live VCI (DB empty or stale)
-        r = get_historical_ohlcv(t, days=25)
+        r = get_historical_ohlcv(t, days=days, start_date=start_date, end_date=end_date)
         if r.status == "ok" and r.data is not None:
             return r.data
         return None
 
     # Stock path: live API → CSV cache
-    r = get_historical_ohlcv(t, days=25)
+    r = get_historical_ohlcv(t, days=days, start_date=start_date, end_date=end_date)
     if r.status == "ok" and r.data is not None:
         return r.data
     cache = Path("outputs/agent_cache") / f"{t}_ohlcv.csv"
@@ -146,14 +152,18 @@ def _assemble_report(ticker: str, gia_bien_dong: str, dong_tien: str, ket_luan: 
     )
 
 
-def gather_data(ticker: str, query: str) -> str:
+def gather_data(ticker: str, query: str, time_context: dict | None = None) -> str:
     """Fetch price, OHLCV, foreign flow — no LLM call."""
+    tc = time_context or {}
+    explicit = bool(tc.get("explicit"))
+    start = tc.get("start_date") if explicit else None
+    end = tc.get("end_date") if explicit else None
     price_r = get_realtime_price(ticker)
-    df = _load_ohlcv(ticker)
+    df = _load_ohlcv(ticker, start_date=start, end_date=end)
     price_line  = price_r.message
     change_line = _price_change_summary(df) if df is not None else "Không có dữ liệu OHLCV."
     vol_line    = _volume_vs_ma(df)         if df is not None else "Không có dữ liệu khối lượng."
-    flow_line   = _get_foreign_flow_summary(ticker)
+    flow_line   = _get_foreign_flow_summary(ticker, as_of=end)
     return (
         f"[GIÁ & DÒNG TIỀN {ticker}]\n"
         f"{price_line}\n"

@@ -207,11 +207,14 @@ def search_news_by_text(
     days: int = 30,
     limit: int = 5,
     ticker: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
 ) -> list[dict]:
     """Search news_chunks with time filter. Returns list of payload dicts.
 
     ticker: if provided, add a MatchAny filter on the `tickers` payload field.
     Only effective after backfill_tickers() has been run.
+    start_date/end_date (ISO YYYY-MM-DD): exact range filter — overrides `days` when set.
     """
     from qdrant_client.models import MatchAny
 
@@ -222,10 +225,16 @@ def search_news_by_text(
 
     qvec = _embed(query, embed_model)
     # B4: always use RFC-3339 UTC format — Qdrant DatetimeRange requires it
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if start_date:
+        gte = f"{start_date}T00:00:00Z"
+    else:
+        gte = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rng: dict = {"gte": gte}
+    if end_date:
+        rng["lte"] = f"{end_date}T23:59:59Z"
 
     must_conditions = [
-        FieldCondition(key="published_at", range=DatetimeRange(gte=cutoff)),
+        FieldCondition(key="published_at", range=DatetimeRange(**rng)),
     ]
     if ticker:
         must_conditions.append(

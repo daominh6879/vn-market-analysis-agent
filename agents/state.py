@@ -25,7 +25,6 @@ class AgentState(TypedDict, total=False):
     step_count: int
     # Grading (guide A5/A6)
     grades: dict             # {"verdict": "enough" | "insufficient" | "rewrite"}
-    iteration: int           # loop counter for rewrite guard
     # RAG-Fusion (rag/rag_fusion_graph.py)
     sub_queries: list[str]   # generated sub-queries (legacy)
     sub_tasks: list[dict]    # structured sub-tasks [{intent, tickers, question}]
@@ -45,10 +44,6 @@ class AgentState(TypedDict, total=False):
     tenant_id: str           # for cache key namespacing
     messages: list[dict]     # last N turns [{role, content}] — for cache turn-1 check
     original_query: str      # verbatim user message — used for cache key (query may be LLM-expanded)
-    # Cache (set by check_cache_node / cache_save_node inside graph)
-    _cache_hit: bool
-    _cache_tier: str
-    _cache_key: dict         # CacheKey.model_dump() or None — serializable, not the Pydantic object
     # Self-critique loop (synthesize_final → critique_report_node)
     critique_pass: bool      # verdict from critique_report_node
     critique_feedback: str   # feedback folded into synthesize retry
@@ -62,6 +57,8 @@ class AgentState(TypedDict, total=False):
     # Per-turn budget guard (route_after_subqueries / route_after_critique)
     llm_calls: int                  # count of graph LLM calls this turn (router call not included)
     turn_started_at: float          # time.time() at turn start — wall-clock guard
+    # Time-aware retrieval (set by classify_node via core/time_context.py)
+    time_context: dict              # {anchor, start_date, end_date, explicit} — serializable
 
 
 def make_initial_state(

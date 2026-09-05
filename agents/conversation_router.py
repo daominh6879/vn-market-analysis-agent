@@ -80,6 +80,23 @@ AGENT_RUN_TOOL: dict = {
                 "type": "string",
                 "description": "One short sentence explaining this routing decision (for debugging misroutes).",
             },
+            "time_context": {
+                "type": "object",
+                "description": (
+                    "Khoảng thời gian câu hỏi ngụ ý, quy về ngày hôm nay (đã nêu trong system). "
+                    "Không nêu thời gian ('hiện tại', 'bây giờ', 'gần nhất', 'mới nhất') → "
+                    "start_date=null, explicit=false. Tương đối: 'hôm qua'=1 ngày, 'tuần trước'=7 ngày, "
+                    "'tháng trước'=30 ngày, 'quý trước'=90 ngày, 'năm ngoái'=365 ngày, "
+                    "'N ngày/tháng/tuần/năm'=N×đơn vị. end_date mặc định = hôm nay. "
+                    "KHÔNG tự bịa ngày cố định; luôn dùng hôm nay làm mốc."
+                ),
+                "properties": {
+                    "start_date": {"type": ["string", "null"], "description": "ISO YYYY-MM-DD hoặc null."},
+                    "end_date": {"type": ["string", "null"], "description": "ISO YYYY-MM-DD hoặc null."},
+                    "explicit": {"type": "boolean"},
+                },
+                "required": ["start_date", "end_date", "explicit"],
+            },
         },
         "required": ["intent", "query"],
     },
@@ -144,6 +161,7 @@ class RouteResult(TypedDict, total=False):
     intent: str     # present when type == "agent"
     ticker: str     # present when type == "agent"
     query: str      # present when type == "agent"
+    time_context: dict  # present when type == "agent" — {anchor, start_date, end_date, explicit}
     text: str       # present when type == "text"
     reason: str     # short routing decision note (for debugging/tracing)
 
@@ -193,8 +211,36 @@ def _validate_ticker(raw) -> str:
         if t in get_tickers():
             return t
     except Exception:
-        pass
+        # Ticker table unavailable (Postgres down) — fall back to a shape check so a
+        # plausible code survives instead of silently dropping to "" (which would make
+        # every price_action gather fail with "ticker không được rỗng").
+        import re
+        if re.fullmatch(r"[A-Z]{3}", t):
+            return t
     return ""
+
+
+def _parse_time_context(raw) -> dict:
+    """Normalize the router's `time_context` tool input into a stable dict.
+
+    Returns {anchor, start_date, end_date, explicit}. anchor = today (the resolution
+    anchor); start_date/end_date are ISO date strings (or None). Never raises.
+    """
+    from datetime import date
+    today = date.today().isoformat()
+    raw = raw or {}
+    start = raw.get("start_date")
+    end = raw.get("end_date")
+    return {
+        "anchor": today,
+        "start_date": str(start)[:10] if start else None,
+        "end_date": str(end)[:10] if end else today,
+        # Derive explicit from start_date, not the LLM's `explicit` flag: the model can
+        # set explicit=false with a real start_date ("tuần trước" vs "tháng trước" would
+        # collide on the same cache key) or explicit=true with start_date=null (spurious
+        # "..<today>" day-scope). A real start_date is the only reliable signal.
+        "explicit": bool(start),
+    }
 
 
 def _fallback_classify(query: str, history: list[dict]) -> RouteResult | None:
@@ -217,6 +263,7 @@ def _fallback_classify(query: str, history: list[dict]) -> RouteResult | None:
             intent=r.intent,
             ticker=_validate_ticker(r.ticker),
             query=query,
+            time_context=_parse_time_context(None),
             reason="fallback_classify",
         )
     return None
@@ -266,6 +313,10 @@ def llm_route(
     if last_intent or last_subject:
         system_prompt = _inject_last_context(system_prompt, last_intent, last_subject)
 
+    # Anchor time resolution to today so the router can map relative phrases to dates.
+    from datetime import date as _date
+    system_prompt = f"Hôm nay là {_date.today().isoformat()}.\n" + system_prompt
+
     if client is None:
         from llm.factory import create_client
         client = create_client()
@@ -306,22 +357,27 @@ def llm_route(
             intent = inp.get("intent", "")
             if intent in INTENTS and intent not in ("conversation", "out_of_scope"):
                 ticker = _validate_ticker(inp.get("ticker"))
+                time_context = _parse_time_context(inp.get("time_context"))
                 _trace("agent", intent=intent, ticker=ticker)
                 return RouteResult(
                     type="agent",
                     intent=intent,
                     ticker=ticker,
                     query=inp.get("query") or query,
+                    time_context=time_context,
                     reason=inp.get("reason", ""),
                 )
             # needs_agent_run returned an invalid intent — fall through to re-classify.
         elif tc.name == "out_of_scope":
             # Explicit LLM decision to decline (crypto/US stock/non-VND forex). No
             # fallback classify — that would re-map the foreign subject onto a VN intent.
+            # Empty text must still decline — an empty RouteResult text would make
+            # turn_handler free-generate on the raw message (answering the crypto
+            # question it just refused).
             _trace("out_of_scope")
             return RouteResult(
                 type="text",
-                text=tc.input.get("text", "").strip(),
+                text=tc.input.get("text", "").strip() or OUT_OF_SCOPE_REPLY,
                 reason=tc.input.get("reason", "out_of_scope"),
             )
         elif tc.name == "direct_reply":
@@ -331,7 +387,13 @@ def llm_route(
                 _trace(r.get("type", "agent"), intent=r.get("intent", ""), ticker=r.get("ticker", ""), fallback_used=True)
                 return r
             _trace("text")
-            return RouteResult(type="text", text=tc.input.get("text", "").strip(), reason=tc.input.get("reason", ""))
+            text = tc.input.get("text", "").strip()
+            if not text:
+                # Empty direct_reply text must not reach turn_handler as "" (it would
+                # free-generate on the raw message). Re-route to this response's free
+                # text, else a safe error — never let empty text escape.
+                text = (resp.text or "").strip() or _ROUTE_ERROR_TEXT
+            return RouteResult(type="text", text=text, reason=tc.input.get("reason", ""))
 
     # No (or invalid) tool call — LLM bypassed tools; re-classify with history so an
     # implicit follow-up still resolves its subject. Prevents hallucinated "I don't have

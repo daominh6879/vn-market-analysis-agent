@@ -27,7 +27,6 @@ flowchart TD
     PRE --> GRAPH["Graph.invoke(state)"]
     GRAPH --> GOUT{graph\nresult}
 
-    GOUT -->|_cache_hit| CACHED([Stream cached report])
     GOUT -->|clarify interrupt| CLARIFY([Stream clarification question\ngraph stays interrupted])
     GOUT -->|report| RPT([Stream report to user])
 ```
@@ -63,24 +62,20 @@ flowchart TD
 
     check_conversation -->|conversation| END0([END — stream_turn handles streaming])
     check_conversation -->|out_of_scope| node_out_of_scope
-    check_conversation -->|else| check_cache_node
+    check_conversation -->|else| clarify_node
 
     node_out_of_scope["node_out_of_scope\nfixed decline text — no gather, no LLM"] --> END1([END])
-
-    check_cache_node["check_cache_node\nRedis single tier\nkey = (tenant_id, intent, ticker, scope, prompt_version, model_version)\nscope = question-hash for _ALWAYS_SCOPE_INTENTS\nuses query when original_query names no ticker"]
-    check_cache_node -->|hit| END2([END — _cache_hit=True, report=cached])
-    check_cache_node -->|miss| clarify_node
 
     clarify_node["clarify_node\n① detect_ambiguity — ticker/intent missing?\n② yes → interrupt() — wait for user answer\n③ merge answer → re-classify\n④ no ambiguity → pass through"]
     clarify_node --> route_check{route after\nclarify}
 
     route_check -->|out_of_scope| node_out_of_scope
-    route_check -->|conversation| cache_save_node
+    route_check -->|conversation| finalize_node
     route_check -->|market_brief| node_market_brief
     route_check -->|"leaf intent + ticker"| fast_node
     route_check -->|"complex intent / no ticker"| decompose_node
 
-    node_market_brief["node_market_brief\nbuild_brief_graph — global + VN data"] --> cache_save_node
+    node_market_brief["node_market_brief\nbuild_brief_graph — global + VN data"] --> finalize_node
 
     fast_node["build_single_subtask_node\nWrap intent+ticker → 1 sub_task\nno LLM call"] --> run_subqueries_node
 
@@ -95,7 +90,7 @@ flowchart TD
     approval_check -->|True| request_approval
     approval_check -->|False| synthesize_final
 
-    request_approval["request_approval\ninterrupt() — human reviews\n{ticker, risk, signals, news}"]
+    request_approval["request_approval\ninterrupt() — human reviews\n{ticker, query, data_preview}"]
     request_approval -->|approved| synthesize_final
     request_approval -->|rejected| END3([END — error: rejected_by_user])
 
@@ -105,53 +100,16 @@ flowchart TD
     critique_report_node["critique_report_node\nLLM self-check vs checklist\n→ {pass, feedback}\ntracks critique_results\nkeeps best report when retries exhausted"]
     critique_report_node --> critique_check{pass?}
 
-    critique_check -->|"pass"| cache_save_node
+    critique_check -->|"pass"| finalize_node
     critique_check -->|"fail & attempts ≤ MAX_CRITIQUE (1)"| synthesize_final
-    critique_check -->|"fail & attempts > MAX_CRITIQUE"| cache_save_node
+    critique_check -->|"fail & attempts > MAX_CRITIQUE"| finalize_node
 
-    cache_save_node["cache_save_node\nPersist report to Redis"] --> END4([END — report in state])
+    finalize_node["finalize_node\nturn_end trace — no response cache"] --> END4([END — report in state])
 ```
 
 Budget guard: `route_after_subqueries` and `route_after_critique` short-circuit first when the turn
 has hit `MAX_TURN_LLM_CALLS` (default 8) or `MAX_TURN_SECONDS` (default 180) — no re-plan/retry once
 the budget is gone.
-
-## Cache design (single-tier Redis)
-
-Key model: `(tenant_id, intent, ticker, scope, prompt_version, model_version)` — **no full question text**.
-
-Same intent+ticker (+scope where applicable) always returns the same cached answer, cross-conversation.
-
-`_ALWAYS_SCOPE_INTENTS` (`macro_sector`, `rag_qa`, `valuation`, `screening`, `breakout_scan`)
-add an 8-char question-hash `scope` to the key — for these, ticker alone does not specify the
-query (e.g. "P/E HPG" ≠ "ROE HPG"). All other intents use `scope=""` (ticker fully differentiates).
-
-`check_cache_node` uses `original_query` (verbatim) only when it names a concrete ticker; a ticker-less
-follow-up ("phân tích sâu hơn") keys off the router's self-contained `query` so the sector/subject is
-part of the key and can't collide with another conversation's cached report.
-
-Ticker extraction for the key is shared with the graph (`core.tickers.raw_tickers` / `extract_tickers`):
-uppercase tokens matched first, stopword-filtered (ROE/EPS/PE/PB…), universe-filtered — one helper,
-no duplicate regex.
-
-### Per-intent TTL
-
-| Intent | Market hours | Off-hours |
-|---|---|---|
-| `price_action` | 60 s | 300 s |
-| `technical_analysis` | 300 s | 1800 s |
-| `news_sentiment` | 600 s | 3600 s |
-| `macro_sector` | 600 s | 3600 s |
-| `market_brief` | 120 s | 1800 s |
-| `investment_case` | 1800 s | 86400 s |
-| `rag_qa` | 3600 s | 86400 s |
-| `valuation` | 3600 s | 86400 s |
-| `screening` | 300 s | 3600 s |
-| `breakout_scan` | 120 s | 3600 s |
-
-Market hours: Mon–Fri 09:00–14:45 VN time (UTC+7).
-
-`conversation` intent → never cached. `out_of_scope` → not cached (no agent result).
 
 ## gather_data dispatch (run_subqueries_node)
 
@@ -223,13 +181,12 @@ draft if any, else the first draft) so a worse retry never overwrites a better f
 | `last_intent` / `last_subject` injected into router prompt | Bare follow-ups ("phân tích sâu hơn") need the prior turn's subject; 120-char truncated assistant history can't guarantee it. Explicit signal beats prompt-engineering around truncation. |
 | Assistant history truncated to 120 chars in `llm_route` | Full reports in history let LLM answer new ticker queries from stale data. 120 chars = header only (confirms topic, not data). |
 | Stale interrupt orphaned (thread_id swap) | A clarify interrupt left >10 min (user abandoned it) must not swallow every later message. A fresh `thread_id` orphans it and the turn routes normally. |
-| Intent-level cache key (no question text) | Same intent+ticker = same data shape = same answer. Avoids cache misses from paraphrase. Ticker-less follow-ups key off the self-contained `query`. |
 | No per-sub-query `classify_hybrid` | `decompose_node` uses tool calling — LLM returns structured `{intent, tickers, question}` directly. Saves N LLM calls per turn. |
 | `classify_node` skips LLM when intent pre-set | Avoid redundant classification after `llm_route` already decided. |
-| `conversation` / `out_of_scope` exit graph immediately | No cache check, no decompose, no gather for pure chat or declined turns. |
+| `conversation` / `out_of_scope` exit graph immediately | No decompose, no gather for pure chat or declined turns. |
 | Fast path bypasses `decompose_node` | Single-ticker leaf-intent queries (price_action, technical_analysis, news_sentiment, rag_qa, valuation, screening, breakout_scan) skip decompose entirely — saves 1 LLM call + avoids 3 unnecessary data fetches. `macro_sector`, `investment_case`, `market_brief` always decompose (multi-component or no ticker). |
 | `valuation` split from `rag_qa` | LLM routes metric/peer queries (P/E, P/B, ROE, EPS, EV/EBITDA) to `valuation` → `fundamentals.gather_data` (vnstock/KBS peer table). Report-content queries (revenue, profit, balance sheet) stay `rag_qa` → `retrieve_only` (RAG/SQL). Removes the `_is_sector_comparison` keyword heuristic — routing decision lives in the LLM, not keywords. |
 | Re-plan loop capped at 1 | Re-decomposing identical input is usually deterministic; a second decompose rarely adds data. Cap 1 avoids infinite loop while still catching transient tool errors. |
 | Self-critique capped at 1 retry | Critiquing the report costs 1 LLM call/turn; 1 retry catches most citation/truncation failures without doubling latency. Best-effort report returned on final fail. |
 | Per-turn budget guard | `MAX_TURN_LLM_CALLS` + `MAX_TURN_SECONDS` bound total LLM calls and wall-clock so a pathological turn cannot loop unbounded. |
-| Fan-out parallelised with timeout | Multi-ticker fan-out runs in a thread pool with a per-fetch timeout, so one hung source no longer serialises/stalls the whole turn. |
+| Fan-out parallelised with a shared deadline | Multi-ticker fan-out runs in a thread pool under one `GATHER_TIMEOUT_SECONDS` deadline, so N hung sources eat one window, not N×30s serially. |

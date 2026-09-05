@@ -19,28 +19,47 @@ from agents.intents import strip_preamble, strip_thinking, extract_report, NO_TH
 _period_cache: str | None = None
 
 
-def _get_latest_period() -> str:
-    """Query DB for the most recent 4-digit year period in financial_facts."""
+def _get_latest_period(as_of_date: str | None = None) -> str:
+    """Query DB for the most recent 4-digit year period in financial_facts.
+
+    as_of_date (ISO YYYY-MM-DD): cap the period at that date's year — e.g. "năm ngoái"
+    → latest year <= last year. None → absolute latest (cached).
+    """
     global _period_cache
-    if _period_cache:
+    if as_of_date is None and _period_cache:
         return _period_cache
+    year = as_of_date[:4] if as_of_date else None
     try:
         from core.db import get_conn
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT MAX(period) FROM financial_facts "
-                    "WHERE period ~ '^[0-9]{4}$'"
-                )
+                if year:
+                    cur.execute(
+                        "SELECT MAX(period) FROM financial_facts "
+                        "WHERE period ~ '^[0-9]{4}$' AND period <= %s",
+                        (year,),
+                    )
+                else:
+                    cur.execute(
+                        "SELECT MAX(period) FROM financial_facts "
+                        "WHERE period ~ '^[0-9]{4}$'"
+                    )
                 row = cur.fetchone()
                 if row and row[0]:
-                    _period_cache = str(row[0])
-                    return _period_cache
+                    period = str(row[0])
+                    if as_of_date is None:
+                        _period_cache = period
+                    return period
     except Exception:
         pass
     from datetime import date
-    _period_cache = str(date.today().year - 2)  # safe fallback: 2 years back
-    return _period_cache
+    if as_of_date:
+        fallback = str(date.fromisoformat(as_of_date).year - 2)
+    else:
+        fallback = str(date.today().year - 2)
+    if as_of_date is None:
+        _period_cache = fallback
+    return fallback
 
 
 # ── pre-built SQL templates ────────────────────────────────────────────────────
@@ -135,10 +154,10 @@ _NOTABLE_PATTERNS = frozenset({
 })
 
 
-def _pick_template(query: str) -> str | None:
+def _pick_template(query: str, as_of_date: str | None = None) -> str | None:
     """Return pre-built SQL if query matches a known screening pattern."""
     lower = query.lower()
-    period = _get_latest_period()
+    period = _get_latest_period(as_of_date)
     if "roe" in lower:
         return _roe_top_sql(period)
     if "doanh thu" in lower and ("cao nhất" in lower or "top" in lower or "lớn nhất" in lower):
@@ -172,9 +191,14 @@ def _narrate(query: str, rows_text: str) -> str:
     return strip_thinking(strip_preamble(extract_report(resp.text.strip())))
 
 
-def gather_data(ticker: str | None, query: str) -> str:
-    """Execute SQL screening and return raw rows — no LLM narration."""
-    sql = _pick_template(query)
+def gather_data(ticker: str | None, query: str, time_context: dict | None = None) -> str:
+    """Execute SQL screening and return raw rows — no LLM narration.
+
+    time_context.end_date caps the financial_facts period year (e.g. "năm ngoái").
+    """
+    tc = time_context or {}
+    end = tc.get("end_date") if tc.get("explicit") else None
+    sql = _pick_template(query, as_of_date=end)
     if sql:
         try:
             from rag.sql_agent import run_raw_sql

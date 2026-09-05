@@ -192,13 +192,28 @@ def get_realtime_price_intl(ticker: str, provider: PriceProvider | None = None) 
 
 # ── Tool 2: Lịch sử OHLCV ────────────────────────────────────────────────────
 
+def _clip_range(df, start_date: str | None, end_date: str | None):
+    """Slice an OHLCV DataFrame to [start_date, end_date] on the `time` column."""
+    if df is None or getattr(df, "empty", True) or "time" not in df.columns:
+        return df
+    times = df["time"].astype(str)
+    if start_date:
+        df = df[times >= start_date]
+        times = df["time"].astype(str)
+    if end_date:
+        df = df[times <= end_date]
+    return df.reset_index(drop=True)
+
+
 @instrument_tool("get_historical_ohlcv")
 def get_historical_ohlcv(
     ticker: str,
     days: int = 60,
     provider: PriceProvider | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
 ) -> ToolResult:
-    """Trả DataFrame OHLCV `days` phiên gần nhất. Luôn trả ToolResult, không raise."""
+    """Trả DataFrame OHLCV `days` phiên gần nhất (hoặc `start_date..end_date`). Luôn trả ToolResult, không raise."""
     if not ticker or not ticker.strip():
         return ToolResult(
             status="invalid_input",
@@ -213,13 +228,23 @@ def get_historical_ohlcv(
         )
     t = ticker.strip().upper()
 
+    # Explicit range → derive a conservative `days` window (calendar→trading buffer) so
+    # the DB-first path fetches enough rows, then slice to the exact [start, end].
+    has_range = bool(start_date or end_date)
+    if has_range:
+        from core.time_context import to_days
+        range_days = to_days(start_date, end_date, default=days)
+        days = max(days, range_days + 10)
+
     # DB-first: read from ohlcv_daily (Postgres). Falls back to live VCI/yfinance if
     # the DB is empty or unavailable. query_ohlcv returns None on error — never raises.
+    db_df = None
     try:
         from tools.ohlcv_db import query_ohlcv
         db_df = query_ohlcv(t, days)
         if db_df is not None and not db_df.empty and len(db_df) >= 2:
             if _is_db_fresh(db_df["time"].iloc[-1]):
+                db_df = _clip_range(db_df, start_date, end_date) if has_range else db_df
                 return ToolResult(
                     status="ok",
                     data=db_df,
@@ -233,6 +258,7 @@ def get_historical_ohlcv(
     p = provider or _detect_provider(t)
     try:
         df = p.get_history(resolved, days)
+        df = _clip_range(df, start_date, end_date) if has_range else df
         return ToolResult(
             status="ok",
             data=df,
@@ -643,6 +669,19 @@ def _auto_fetch_ticker_news(ticker: str, days: int) -> None:
         sys.stderr.write(f"[auto-fetch] failed for {ticker}: {e}\n")
 
 
+def _filter_news_range(items: list[dict], start_date: str | None, end_date: str | None) -> list[dict]:
+    """Keep only articles whose published_at date falls in [start_date, end_date]."""
+    out: list[dict] = []
+    for item in items:
+        pub = str(item.get("published_at", ""))[:10]
+        if start_date and pub < start_date:
+            continue
+        if end_date and pub > end_date:
+            continue
+        out.append(item)
+    return out
+
+
 def _dedup_news(raw: list[dict], limit: int = 5) -> list[dict]:
     seen_urls: set[str] = set()
     unique: list[dict] = []
@@ -661,8 +700,10 @@ def search_financial_news(
     ticker: str,
     days: int = 7,
     provider: PriceProvider | None = None,  # unused — kept for interface consistency
+    start_date: str | None = None,
+    end_date: str | None = None,
 ) -> ToolResult:
-    """Tìm tin tức tài chính về ticker trong N ngày gần nhất từ Qdrant news_chunks.
+    """Tìm tin tức tài chính về ticker trong N ngày gần nhất (hoặc `start_date..end_date`).
 
     ticker có thể là mã cổ phiếu (HPG, VNM) hoặc chỉ số thị trường (VNINDEX, HOSE, VN30).
     Với chỉ số: tìm tin tức chung về thị trường, không lọc theo ticker.
@@ -680,6 +721,9 @@ def search_financial_news(
             data=None,
             message=f"days={days} không hợp lệ. Phải từ 1 đến 365. Thử days=7.",
         )
+    if start_date or end_date:
+        from core.time_context import to_days
+        days = max(days, to_days(start_date, end_date, default=days))
 
     t = ticker.strip().upper()
     market_query = _is_market_index(t)
@@ -713,7 +757,7 @@ def search_financial_news(
     search_ticker = None if market_query else t
 
     try:
-        raw = search_news_by_text(t, days=days, limit=10, ticker=search_ticker)
+        raw = search_news_by_text(t, days=days, limit=10, ticker=search_ticker, start_date=start_date, end_date=end_date)
     except Exception as e:
         return _map_upstream_error(t, e)
 
@@ -732,6 +776,9 @@ def search_financial_news(
                     break
             except Exception:
                 pass
+
+    if start_date or end_date:
+        unique = _filter_news_range(unique, start_date, end_date)
 
     if not unique:
         if market_query:
@@ -1511,7 +1558,12 @@ def _query_sector_performance_fallback(sessions: int = 1) -> list[dict] | None:
 # ── Tool 9: Phân tích sentiment thị trường ───────────────────────────────────
 
 @instrument_tool("analyze_market_sentiment")
-def analyze_market_sentiment(ticker: str, days: int = 7) -> ToolResult:
+def analyze_market_sentiment(
+    ticker: str,
+    days: int = 7,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> ToolResult:
     """Phân tích cảm xúc thị trường về ticker từ tin tức gần nhất (few-shot LLM).
 
     ticker có thể là mã cổ phiếu (HPG) hoặc chỉ số thị trường (VNINDEX, HOSE, VN30).
@@ -1528,6 +1580,9 @@ def analyze_market_sentiment(ticker: str, days: int = 7) -> ToolResult:
             data=None,
             message=f"days={days} không hợp lệ. Phải từ 1 đến 365. Thử days=7.",
         )
+    if start_date or end_date:
+        from core.time_context import to_days
+        days = max(days, to_days(start_date, end_date, default=days))
 
     t = ticker.strip().upper()
     market_query = _is_market_index(t)
@@ -1557,7 +1612,7 @@ def analyze_market_sentiment(ticker: str, days: int = 7) -> ToolResult:
 
     search_ticker = None if market_query else t
     try:
-        raw = search_news_by_text(t, days=days, limit=5, ticker=search_ticker)
+        raw = search_news_by_text(t, days=days, limit=5, ticker=search_ticker, start_date=start_date, end_date=end_date)
     except Exception as e:
         return _map_upstream_error(t, e)
 
@@ -1571,6 +1626,9 @@ def analyze_market_sentiment(ticker: str, days: int = 7) -> ToolResult:
             unique = _dedup_news(raw2, limit=5)
         except Exception:
             pass
+
+    if start_date or end_date:
+        unique = _filter_news_range(unique, start_date, end_date)
 
     if not unique:
         label = "thị trường" if market_query else t

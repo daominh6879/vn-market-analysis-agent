@@ -29,10 +29,15 @@ _SYSTEM = (
 )
 
 
-def _fetch_news_text(ticker: str | None, days: int) -> str:
+def _fetch_news_text(
+    ticker: str | None,
+    days: int,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> str:
     subject = ticker or "thị trường"
 
-    r = search_financial_news(subject, days)
+    r = search_financial_news(subject, days, start_date=start_date, end_date=end_date)
     if r.status == "ok" and r.message.strip():
         return r.message
 
@@ -79,11 +84,17 @@ def _assemble_report(
     )
 
 
-def gather_data(ticker: str | None, query: str) -> str:
+def gather_data(ticker: str | None, query: str, time_context: dict | None = None) -> str:
     """Fetch news and sentiment — no LLM call."""
     subject = ticker or "thị trường"
-    news_text = _fetch_news_text(ticker, days=3)
-    sentiment_r = analyze_market_sentiment(subject, days=7)
+    from core.time_context import to_days
+    tc = time_context or {}
+    explicit = bool(tc.get("explicit"))
+    start = tc.get("start_date")
+    end = tc.get("end_date")
+    days = to_days(start, end, default=3) if explicit else 3
+    news_text = _fetch_news_text(ticker, days=days, start_date=start, end_date=end)
+    sentiment_r = analyze_market_sentiment(subject, days=max(7, days), start_date=start, end_date=end)
     sentiment_text = sentiment_r.message if sentiment_r.status == "ok" else "Không có dữ liệu sentiment."
     return (
         f"[TIN TỨC & SENTIMENT {subject}]\n"
