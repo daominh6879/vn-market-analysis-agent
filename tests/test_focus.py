@@ -40,10 +40,15 @@ def test_extract_focus_entities_wraps_core(monkeypatch):
     assert extract_focus_entities("") == []
 
 
-def test_extract_focus_sector():
+def test_extract_focus_sector(monkeypatch):
+    # Data-driven: labels come from securities.sector + tags (no hardcoded gazetteer).
+    monkeypatch.setattr(
+        "core.tickers._load_sector_labels",
+        lambda: ["ngân hàng", "vật liệu", "năng lượng", "dầu thô", "thép"],
+    )
     assert extract_focus_sector("phân tích ngành ngân hàng") == "ngân hàng"
     assert extract_focus_sector("giá thép hôm nay") == "thép"
-    assert extract_focus_sector("dầu thô brent tăng") == "năng lượng"
+    assert extract_focus_sector("dầu thô brent tăng") == "dầu thô"
     assert extract_focus_sector("VNINDEX hôm nay") == "VNINDEX"
     assert extract_focus_sector("VN30 tuần này") == "VN30"
     assert extract_focus_sector("tỷ giá USD/VND") == ""  # FX, not a sector keyword

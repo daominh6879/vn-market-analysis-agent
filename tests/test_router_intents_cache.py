@@ -1723,3 +1723,102 @@ def test_ngan_hang_thinh_vuong_resolves_vpb():
     assert result.ticker == "VPB", f"Expected VPB, got {result.ticker}"
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Data-driven ticker/sector resolution (securities enrichment — replaces SECTOR_ALIAS)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _fake_db(rows):
+    """Minimal get_conn()/cursor fake that records the last SQL and returns `rows`."""
+    executed = {}
+
+    class _Cur:
+        def execute(self, sql, params=None):
+            executed["sql"] = sql
+            executed["params"] = params
+
+        def fetchall(self):
+            return rows
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class _Conn:
+        def cursor(self):
+            return _Cur()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    return _Conn(), executed
+
+
+def test_extract_tickers_resolves_company_alias(monkeypatch):
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["VNM", "HPG"])
+    monkeypatch.setattr("core.tickers._load_name_index",
+                        lambda: {"vinamilk": "VNM", "cong ty sua viet nam": "VNM"})
+    assert extract_tickers("phân tích vinamilk") == ["VNM"]
+    assert extract_tickers("phân tích công ty sữa việt nam") == ["VNM"]
+
+
+def test_extract_tickers_diacritic_insensitive(monkeypatch):
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "VNM"])
+    monkeypatch.setattr("core.tickers._load_name_index", lambda: {"hoa phat": "HPG"})
+    assert extract_tickers("giá hoa phat hôm nay") == ["HPG"]
+    assert extract_tickers("giá Hòa Phát hôm nay") == ["HPG"]
+
+
+def test_extract_tickers_no_name_resolution_when_code_present(monkeypatch):
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG"])
+    monkeypatch.setattr("core.tickers._load_name_index", lambda: {"vinamilk": "VNM"})
+    assert extract_tickers("phân tích HPG và vinamilk") == ["HPG"]
+
+
+def test_load_name_index_skips_short_and_normalizes(monkeypatch):
+    from core import tickers as T
+    conn, _ = _fake_db([
+        ("VNM", ["vinamilk", "sữa"], "Công ty Sữa Việt Nam"),
+        ("HPG", ["hòa phát"], ""),
+    ])
+    monkeypatch.setattr("core.db.get_conn", lambda: conn)
+    idx = T._load_name_index()
+    assert "vinamilk" in idx and idx["vinamilk"] == "VNM"
+    assert "cong ty sua viet nam" in idx        # company_name normalized
+    assert idx.get("hoa phat") == "HPG"         # diacritics stripped
+    assert "sua" not in idx                      # 3 chars < _MIN_ALIAS_LEN
+
+
+def test_resolve_name_tickers_longest_wins_deduped(monkeypatch):
+    from core.tickers import resolve_name_tickers
+    monkeypatch.setattr("core.tickers._load_name_index", lambda: {
+        "sua viet nam": "VNM",
+        "cong ty sua viet nam": "VNM",
+        "hoa phat": "HPG",
+    })
+    # "sữa việt nam" is a prefix of "công ty sữa việt nam"; both map to VNM once.
+    assert resolve_name_tickers("công ty sữa việt nam và hoa phat") == ["VNM", "HPG"]
+
+
+def test_get_sector_tickers_uses_tags(monkeypatch):
+    from core import tickers as T
+    conn, executed = _fake_db([("HPG",), ("HSG",), ("NKG",)])
+    monkeypatch.setattr("core.db.get_conn", lambda: conn)
+    assert T.get_sector_tickers("thép") == ["HPG", "HSG", "NKG"]
+    assert "tags @>" in executed["sql"]
+    assert "industry ILIKE" in executed["sql"]
+    assert executed["params"] == ("%thép%", "%thép%", ["thép"])
+
+
+def test_get_sector_tickers_direct_sector(monkeypatch):
+    from core import tickers as T
+    conn, executed = _fake_db([("VCB",), ("BID",)])
+    monkeypatch.setattr("core.db.get_conn", lambda: conn)
+    assert T.get_sector_tickers("ngân hàng") == ["VCB", "BID"]
+    assert "sector ILIKE" in executed["sql"]
+
+

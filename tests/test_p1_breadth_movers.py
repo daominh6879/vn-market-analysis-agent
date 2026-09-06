@@ -79,6 +79,35 @@ class TestHoseUniverse:
             assert "ticker" in item
             assert "sector" in item
             assert "index_member" in item
+            assert "company_name" in item
+            assert "industry" in item
+            assert "name_aliases" in item
+            assert "tags" in item
+
+    def test_enrichment_aliases_unique(self):
+        import unicodedata
+        from data.hose_universe import TICKER_ENRICHMENT
+
+        def norm(s: str) -> str:
+            return "".join(c for c in unicodedata.normalize("NFKD", s.lower())
+                           if not unicodedata.combining(c))
+
+        seen: dict[str, str] = {}
+        for ticker, enr in TICKER_ENRICHMENT.items():
+            for alias in enr.get("name_aliases", ()):
+                key = norm(alias)
+                if key in seen and seen[key] != ticker:
+                    raise AssertionError(
+                        f"alias {alias!r} maps to both {seen[key]} and {ticker}"
+                    )
+                seen[key] = ticker
+
+    def test_enrichment_tags(self):
+        from data.hose_universe import _enrich
+        assert "thép" in _enrich("HPG", "Vật liệu")["tags"]
+        assert "năng lượng" in _enrich("GAS", "Dầu khí")["tags"]
+        assert "thủy sản" in _enrich("VHC", "Thực phẩm & Đồ uống")["tags"]
+        assert "cao su" in _enrich("GVR", "Nông nghiệp")["tags"]
 
     def test_no_duplicates_in_seed(self):
         from data.hose_universe import HOSE_SEED
