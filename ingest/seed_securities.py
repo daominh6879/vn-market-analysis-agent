@@ -31,12 +31,18 @@ def upsert_securities(rows: list[dict]) -> int:
                 cur.executemany(
                     """
                     INSERT INTO securities
-                        (ticker, exchange, sector, index_member, is_active)
+                        (ticker, exchange, sector, industry, company_name,
+                         name_aliases, tags, index_member, is_active)
                     VALUES
-                        (%(ticker)s, %(exchange)s, %(sector)s, %(index_member)s, %(is_active)s)
+                        (%(ticker)s, %(exchange)s, %(sector)s, %(industry)s, %(company_name)s,
+                         %(name_aliases)s, %(tags)s, %(index_member)s, %(is_active)s)
                     ON CONFLICT (ticker) DO UPDATE SET
                         sector       = EXCLUDED.sector,
                         exchange     = EXCLUDED.exchange,
+                        industry     = EXCLUDED.industry,
+                        company_name = EXCLUDED.company_name,
+                        name_aliases = EXCLUDED.name_aliases,
+                        tags         = EXCLUDED.tags,
                         index_member = EXCLUDED.index_member,
                         is_active    = EXCLUDED.is_active
                     """,
@@ -50,19 +56,23 @@ def upsert_securities(rows: list[dict]) -> int:
 
 
 def seed_from_hose_seed() -> int:
-    """Seed securities from HOSE_SEED hardcoded list."""
-    from data.hose_universe import HOSE_SEED
+    """Seed securities from HOSE_SEED hardcoded list (company_name left empty — no vnstock)."""
+    from data.hose_universe import HOSE_SEED, _enrich
 
-    rows = [
-        {
+    rows = []
+    for ticker, sector, index_member in HOSE_SEED:
+        enr = _enrich(ticker, sector)
+        rows.append({
             "ticker": ticker,
             "exchange": "HOSE",
             "sector": sector,
+            "industry": enr["industry"],
+            "company_name": "",
+            "name_aliases": enr["name_aliases"],
+            "tags": enr["tags"],
             "index_member": [index_member],  # TEXT[] in Postgres
             "is_active": True,
-        }
-        for ticker, sector, index_member in HOSE_SEED
-    ]
+        })
     return upsert_securities(rows)
 
 
@@ -70,7 +80,7 @@ def seed_from_json() -> int:
     """Seed securities from hose_tickers.json (richer, from VCI fetch)."""
     from data.hose_universe import load_hose_universe
 
-    universe = load_hose_universe()  # [{ticker, sector, index_member}]
+    universe = load_hose_universe()  # full records incl. company_name/industry/aliases/tags
     if not universe:
         sys.stderr.write("[seed_securities] load_hose_universe returned empty — falling back to HOSE_SEED\n")
         return seed_from_hose_seed()
@@ -80,6 +90,10 @@ def seed_from_json() -> int:
             "ticker": u["ticker"],
             "exchange": "HOSE",
             "sector": u.get("sector") or "Không phân loại",
+            "industry": u.get("industry") or "Unknown",
+            "company_name": u.get("company_name") or "",
+            "name_aliases": u.get("name_aliases") or [],
+            "tags": u.get("tags") or [],
             "index_member": [u["index_member"]] if u.get("index_member") else [],
             "is_active": True,
         }

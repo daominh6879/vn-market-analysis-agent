@@ -2,2431 +2,6076 @@
   {
     "ticker": "AAA",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Hóa chất",
+    "index_member": "HOSE",
+    "company_name": "CTCP Nhựa An Phát Xanh",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "nhựa an phát xanh"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "AAM",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE",
+    "company_name": "CTCP Thủy sản MeKong",
+    "industry": "Chế biến Thủy sản",
+    "name_aliases": [
+      "thủy sản mekong"
+    ],
+    "tags": [
+      "chế biến thủy sản",
+      "thực phẩm",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "AAN",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Nông nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Lương thực A An",
+    "industry": "Nông - Lâm - Ngư",
+    "name_aliases": [
+      "lương thực a an"
+    ],
+    "tags": [
+      "nông - lâm - ngư"
+    ]
   },
   {
     "ticker": "AAT",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập Đoàn Tiên Sơn Thanh Hóa ",
+    "industry": "SX Hàng gia dụng",
+    "name_aliases": [
+      "tập đoàn tiên sơn thanh hóa"
+    ],
+    "tags": [
+      "sx hàng gia dụng"
+    ]
   },
   {
     "ticker": "ABR",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghệ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Nhãn hiệu Việt",
+    "industry": "Công nghệ và thông tin",
+    "name_aliases": [
+      "đầu tư nhãn hiệu việt"
+    ],
+    "tags": [
+      "công nghệ và thông tin"
+    ]
   },
   {
     "ticker": "ABS",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Hóa chất",
+    "index_member": "HOSE",
+    "company_name": "CTCP Dịch vụ Nông nghiệp Bình Thuận",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "dịch vụ nông nghiệp bình thuận"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "ABT",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE",
+    "company_name": "CTCP Xuất nhập khẩu Thủy sản Bến Tre",
+    "industry": "Chế biến Thủy sản",
+    "name_aliases": [
+      "xuất nhập khẩu thủy sản bến tre"
+    ],
+    "tags": [
+      "chế biến thủy sản",
+      "thực phẩm",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "ACB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Ngân hàng TMCP Á Châu",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "ngân hàng á châu",
+      "ngân hàng á châu việt nam",
+      "á châu"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "ACC",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Vật liệu",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư và Xây dựng Bình Dương ACC",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [
+      "đầu tư và xây dựng bình dương acc"
+    ],
+    "tags": [
+      "vật liệu xây dựng"
+    ]
   },
   {
     "ticker": "ACG",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Gỗ An Cường",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "gỗ an cường"
+    ],
+    "tags": [
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "ACL",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE",
+    "company_name": "CTCP Xuất nhập khẩu Thủy sản Cửu Long An Giang",
+    "industry": "Chế biến Thủy sản",
+    "name_aliases": [
+      "xuất nhập khẩu thủy sản cửu long an giang"
+    ],
+    "tags": [
+      "chế biến thủy sản",
+      "thực phẩm",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "ADG",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Clever Group",
+    "industry": "Công nghiệp",
+    "name_aliases": [
+      "clever group"
+    ],
+    "tags": [
+      "công nghiệp"
+    ]
   },
   {
     "ticker": "ADP",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Hóa chất",
+    "index_member": "HOSE",
+    "company_name": "CTCP Sơn Á Đông",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "sơn á đông"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "ADS",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Damsan",
+    "industry": "SX Hàng gia dụng",
+    "name_aliases": [
+      "damsan"
+    ],
+    "tags": [
+      "sx hàng gia dụng"
+    ]
   },
   {
     "ticker": "AFX",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE",
+    "company_name": "CTCP Xuất nhập khẩu Nông sản Thực phẩm An Giang",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "xuất nhập khẩu nông sản thực phẩm an giang"
+    ],
+    "tags": [
+      "thực phẩm",
+      "thực phẩm - đồ uống",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "AGG",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư và Phát triển Bất động sản An Gia",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "đầu tư và phát triển bất động sản an gia"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "AGR",
     "exchange": "HOSE",
     "sector": "Chứng khoán",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Chứng khoán Agribank",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "agriseco",
+      "chứng khoán agribank"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "ANT",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE",
+    "company_name": "CTCP Rau quả Thực phẩm An Giang",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "rau quả thực phẩm an giang"
+    ],
+    "tags": [
+      "thực phẩm",
+      "thực phẩm - đồ uống",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "ANV",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Nam Việt",
+    "industry": "Chế biến Thủy sản",
+    "name_aliases": [
+      "nam việt",
+      "thủy sản nam việt"
+    ],
+    "tags": [
+      "chế biến thủy sản",
+      "thủy sản",
+      "thực phẩm",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "APG",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Chứng khoán",
+    "index_member": "HOSE",
+    "company_name": "CTCP Chứng khoán APG",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán apg"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "APH",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Hóa chất",
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn An Phát Holdings",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "tập đoàn an phát holdings"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "ASG",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Logistics",
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn ASG",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "tập đoàn asg"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "ASM",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Sao Mai",
+    "industry": "Chế biến Thủy sản",
+    "name_aliases": [
+      "tập đoàn sao mai"
+    ],
+    "tags": [
+      "chế biến thủy sản",
+      "thực phẩm",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "ASP",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Tiện ích",
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Dầu khí An Pha",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "tập đoàn dầu khí an pha"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "AST",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Logistics",
+    "index_member": "HOSE",
+    "company_name": "CTCP Dịch vụ Hàng không Taseco",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "dịch vụ hàng không taseco"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "BAF",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Nông nghiệp BAF Việt Nam",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "nông nghiệp baf việt nam"
+    ],
+    "tags": [
+      "thực phẩm",
+      "thực phẩm - đồ uống",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "BCE",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Xây dựng và Giao thông Bình Dương",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "xây dựng và giao thông bình dương"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "BCM",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Tập đoàn Đầu tư và Phát triển Công nghiệp Becamex - CTCP",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "becamex",
+      "tổng công ty đầu tư và phát triển công nghiệp",
+      "đầu tư và phát triển công nghiệp becamex"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "BFC",
     "exchange": "HOSE",
     "sector": "Hóa chất",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Phân bón Bình Điền",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "phân bón bình điền"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "BHN",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Tổng Công ty cổ phần Bia - Rượu - Nước giải khát Hà Nội",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "bia hà nội",
+      "cổ phần bia - rượu - nước giải khát hà nội",
+      "habeco",
+      "tổng công ty bia rượu nước giải khát hà nội"
+    ],
+    "tags": [
+      "thực phẩm",
+      "thực phẩm - đồ uống",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "BIC",
     "exchange": "HOSE",
     "sector": "Bảo hiểm",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Tổng Công ty cổ phần Bảo hiểm Ngân hàng Đầu tư và Phát triển Việt Nam",
+    "industry": "Bảo hiểm",
+    "name_aliases": [
+      "cổ phần bảo hiểm ngân hàng đầu tư và phát triển việt nam"
+    ],
+    "tags": [
+      "bảo hiểm"
+    ]
   },
   {
     "ticker": "BID",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Ngân hàng TMCP Đầu tư và Phát triển Việt Nam",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "bidv",
+      "ngân hàng đầu tư phát triển việt nam",
+      "ngân hàng đầu tư và phát triển",
+      "đầu tư và phát triển việt nam"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "BKG",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư BKG Việt Nam",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "đầu tư bkg việt nam"
+    ],
+    "tags": [
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "BMC",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Vật liệu",
+    "index_member": "HOSE",
+    "company_name": "CTCP Khoáng sản Bình Định",
+    "industry": "Khai khoáng",
+    "name_aliases": [
+      "khoáng sản bình định"
+    ],
+    "tags": [
+      "khai khoáng"
+    ]
   },
   {
     "ticker": "BMI",
     "exchange": "HOSE",
     "sector": "Bảo hiểm",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Tổng Công ty cổ phần Bảo Minh",
+    "industry": "Bảo hiểm",
+    "name_aliases": [
+      "bảo minh",
+      "cổ phần bảo minh",
+      "tổng công ty bảo minh"
+    ],
+    "tags": [
+      "bảo hiểm"
+    ]
   },
   {
     "ticker": "BMP",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Nhựa Bình Minh",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "nhựa bình minh"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "BRC",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Nông nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Cao su Bến Thành",
+    "industry": "Sản phẩm cao su",
+    "name_aliases": [
+      "cao su bến thành"
+    ],
+    "tags": [
+      "sản phẩm cao su"
+    ]
   },
   {
     "ticker": "BSI",
     "exchange": "HOSE",
     "sector": "Chứng khoán",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Chứng khoán BIDV",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán bidv"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "BSR",
     "exchange": "HOSE",
     "sector": "Dầu khí",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP - Tổng Công ty Lọc hóa dầu Việt Nam",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "- tổng công ty lọc hóa dầu việt nam",
+      "bình sơn",
+      "lọc hóa dầu bình sơn"
+    ],
+    "tags": [
+      "dầu thô",
+      "năng lượng",
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "BTP",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Nhiệt điện Bà Rịa",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "nhiệt điện bà rịa"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "BTT",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Thương mại Dịch vụ Bến Thành",
+    "industry": "Bán lẻ",
+    "name_aliases": [
+      "thương mại dịch vụ bến thành"
+    ],
+    "tags": [
+      "bán lẻ",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "BVB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Ngân hàng TMCP Bản Việt",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "bản việt",
+      "ngân hàng bản việt",
+      "vietcapital bank"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "BVH",
     "exchange": "HOSE",
     "sector": "Bảo hiểm",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Tập đoàn Bảo Việt",
+    "industry": "Bảo hiểm",
+    "name_aliases": [
+      "bảo việt",
+      "tập đoàn bảo việt"
+    ],
+    "tags": [
+      "bảo hiểm"
+    ]
   },
   {
     "ticker": "BWE",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP - Tổng công ty nước - môi trường Bình Dương",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "- tổng công ty nước - môi trường bình dương"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "C32",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư và Xây dựng 3-2",
+    "industry": "Khai khoáng",
+    "name_aliases": [
+      "đầu tư và xây dựng 3-2"
+    ],
+    "tags": [
+      "khai khoáng"
+    ]
   },
   {
     "ticker": "C47",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Xây dựng 47",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "xây dựng 47"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "CCC",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Xây dựng",
+    "index_member": "HOSE",
+    "company_name": "CTCP Xây dựng CDC",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "xây dựng cdc"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "CCI",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Phát triển Công nghiệp Thương mại Củ Chi",
+    "industry": "Bán lẻ",
+    "name_aliases": [
+      "đầu tư phát triển công nghiệp thương mại củ chi"
+    ],
+    "tags": [
+      "bán lẻ",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "CCL",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư và Phát triển Đô thị Dầu khí Cửu Long",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "đầu tư và phát triển đô thị dầu khí cửu long"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "CDC",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Chương Dương",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "chương dương"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "CHP",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Thủy điện Miền Trung",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "thủy điện miền trung"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "CIG",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bất động sản",
+    "index_member": "HOSE",
+    "company_name": "CTCP COMA 18",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "coma 18"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "CII",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Đầu tư Hạ tầng Kỹ thuật Thành phố Hồ Chí Minh",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "hạ tầng kỹ thuật tphcm",
+      "đầu tư hạ tầng kỹ thuật",
+      "đầu tư hạ tầng kỹ thuật thành phố hồ chí minh"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "CKG",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn CIC",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "tập đoàn cic"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "CLC",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Cát Lợi",
+    "industry": "Công nghiệp",
+    "name_aliases": [
+      "cát lợi"
+    ],
+    "tags": [
+      "công nghiệp"
+    ]
   },
   {
     "ticker": "CLL",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Cảng Cát Lái",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "cảng cát lái"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "CLW",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Cấp nước Chợ Lớn",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "cấp nước chợ lớn"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "CMG",
     "exchange": "HOSE",
     "sector": "Công nghệ",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Tập đoàn Công nghệ CMC",
+    "industry": "Công nghệ và thông tin",
+    "name_aliases": [
+      "cmc",
+      "tập đoàn công nghệ cmc"
+    ],
+    "tags": [
+      "công nghệ và thông tin"
+    ]
   },
   {
     "ticker": "CMV",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Thương nghiệp Cà Mau",
+    "industry": "Bán lẻ",
+    "name_aliases": [
+      "thương nghiệp cà mau"
+    ],
+    "tags": [
+      "bán lẻ",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "CMX",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE",
+    "company_name": "CTCP Camimex Group",
+    "industry": "Chế biến Thủy sản",
+    "name_aliases": [
+      "camimex group"
+    ],
+    "tags": [
+      "chế biến thủy sản",
+      "thực phẩm",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "CNG",
     "exchange": "HOSE",
     "sector": "Dầu khí",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP CNG Việt Nam",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "cng việt nam",
+      "khí tự nhiên cng"
+    ],
+    "tags": [
+      "dầu thô",
+      "năng lượng",
+      "tiện ích"
+    ]
   },
   {
     "ticker": "COM",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Vật tư - Xăng Dầu",
+    "industry": "Bán lẻ",
+    "name_aliases": [
+      "vật tư - xăng dầu"
+    ],
+    "tags": [
+      "bán lẻ",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "CRC",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Vật liệu",
+    "index_member": "HOSE",
+    "company_name": "CTCP Create Capital Việt Nam",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [
+      "create capital việt nam"
+    ],
+    "tags": [
+      "vật liệu xây dựng"
+    ]
   },
   {
     "ticker": "CRE",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Bất động sản Thế Kỷ",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "bất động sản thế kỷ"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "CRV",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bất động sản",
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Bất động sản CRV",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "tập đoàn bất động sản crv"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "CSM",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Công nghiệp Cao su Miền Nam",
+    "industry": "Sản phẩm cao su",
+    "name_aliases": [
+      "công nghiệp cao su miền nam"
+    ],
+    "tags": [
+      "sản phẩm cao su"
+    ]
   },
   {
     "ticker": "CSV",
     "exchange": "HOSE",
     "sector": "Hóa chất",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Hóa chất Cơ bản Miền Nam",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "hóa chất cơ bản miền nam"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "CTD",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Xây dựng Coteccons",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "coteccons",
+      "xây dựng coteccons"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "CTF",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP City Auto",
+    "industry": "Bán lẻ",
+    "name_aliases": [
+      "city auto"
+    ],
+    "tags": [
+      "bán lẻ",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "CTG",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Ngân hàng TMCP Công Thương Việt Nam",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "công thương việt nam",
+      "ngân hàng công thương",
+      "ngân hàng công thương việt nam",
+      "vietinbank"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "CTI",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Phát triển Cường Thuận IDICO",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "đầu tư phát triển cường thuận idico"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "CTR",
     "exchange": "HOSE",
     "sector": "Công nghệ",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Tổng Công ty cổ phần Công trình Viettel",
+    "industry": "Công nghệ và thông tin",
+    "name_aliases": [
+      "công trình viettel",
+      "cổ phần công trình viettel",
+      "viettel construction"
+    ],
+    "tags": [
+      "công nghệ và thông tin"
+    ]
   },
   {
     "ticker": "CTS",
     "exchange": "HOSE",
     "sector": "Chứng khoán",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Chứng khoán VietinBank",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán vietinbank"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "CVT",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP CMC",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [],
+    "tags": [
+      "vật liệu xây dựng"
+    ]
   },
   {
     "ticker": "D2D",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Phát triển Đô thị Công nghiệp số 2",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "phát triển đô thị công nghiệp số 2"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "DAH",
     "exchange": "HOSE",
     "sector": "Du lịch",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Khách sạn Đông Á",
+    "industry": "Dịch vụ lưu trú, ăn uống, giải trí",
+    "name_aliases": [
+      "tập đoàn khách sạn đông á"
+    ],
+    "tags": [
+      "dịch vụ lưu trú, ăn uống, giải trí"
+    ]
   },
   {
     "ticker": "DAT",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư du lịch và Phát triển Thủy sản",
+    "industry": "Chế biến Thủy sản",
+    "name_aliases": [
+      "đầu tư du lịch và phát triển thủy sản"
+    ],
+    "tags": [
+      "chế biến thủy sản"
+    ]
   },
   {
     "ticker": "DBC",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Dabaco Việt Nam",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "tập đoàn dabaco việt nam"
+    ],
+    "tags": [
+      "thực phẩm",
+      "thực phẩm - đồ uống",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "DBD",
     "exchange": "HOSE",
     "sector": "Y tế",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Dược - Trang thiết bị Y tế Bình Định (Bidiphar)",
+    "industry": "Chăm sóc sức khỏe",
+    "name_aliases": [
+      "bidiphar",
+      "dược - trang thiết bị y tế bình định",
+      "dược bến tre"
+    ],
+    "tags": [
+      "chăm sóc sức khỏe"
+    ]
   },
   {
     "ticker": "DBT",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Y tế",
+    "index_member": "HOSE",
+    "company_name": "CTCP Dược phẩm Bến Tre",
+    "industry": "Chăm sóc sức khỏe",
+    "name_aliases": [
+      "dược phẩm bến tre"
+    ],
+    "tags": [
+      "chăm sóc sức khỏe"
+    ]
   },
   {
     "ticker": "DC4",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP DICERA Holdings",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "dicera holdings"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "DCL",
     "exchange": "HOSE",
     "sector": "Y tế",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Dược phẩm Cửu Long",
+    "industry": "Chăm sóc sức khỏe",
+    "name_aliases": [
+      "dược phẩm cửu long"
+    ],
+    "tags": [
+      "chăm sóc sức khỏe"
+    ]
   },
   {
     "ticker": "DCM",
     "exchange": "HOSE",
     "sector": "Hóa chất",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP - Tổng công ty Phân bón Dầu khí Cà Mau",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "- tổng công ty phân bón dầu khí cà mau",
+      "phân bón dầu khí cà mau",
+      "đạm cà mau"
+    ],
+    "tags": [
+      "phân bón",
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "DGC",
     "exchange": "HOSE",
     "sector": "Hóa chất",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Hóa chất Đức Giang",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "hóa chất đức giang",
+      "tập đoàn hóa chất đức giang",
+      "đức giang"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "DGW",
     "exchange": "HOSE",
     "sector": "Bán lẻ",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Thế Giới Số",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "digiworld",
+      "thế giới số"
+    ],
+    "tags": [
+      "bán buôn",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "DHA",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Vật liệu",
+    "index_member": "HOSE",
+    "company_name": "CTCP Hóa An",
+    "industry": "Khai khoáng",
+    "name_aliases": [
+      "hóa an"
+    ],
+    "tags": [
+      "khai khoáng"
+    ]
   },
   {
     "ticker": "DHC",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đông Hải Bến Tre",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "đông hải bến tre"
+    ],
+    "tags": [
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "DHG",
     "exchange": "HOSE",
     "sector": "Y tế",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Dược Hậu Giang",
+    "industry": "Chăm sóc sức khỏe",
+    "name_aliases": [
+      "dược hậu giang"
+    ],
+    "tags": [
+      "chăm sóc sức khỏe"
+    ]
   },
   {
     "ticker": "DHM",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư và Thương mại DHM",
+    "industry": "Khai khoáng",
+    "name_aliases": [
+      "đầu tư và thương mại dhm"
+    ],
+    "tags": [
+      "khai khoáng"
+    ]
   },
   {
     "ticker": "DIG",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "Tổng Công ty cổ phần Đầu tư Phát triển Xây dựng",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "cổ phần đầu tư phát triển xây dựng",
+      "dic corp",
+      "dầu khí miền đông",
+      "tổng công ty cổ phần đầu tư phát triển xây dựng"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "DLG",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Đức Long Gia Lai",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "tập đoàn đức long gia lai"
+    ],
+    "tags": [
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "DMC",
     "exchange": "HOSE",
     "sector": "Y tế",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Xuất nhập khẩu Y Tế DOMESCO",
+    "industry": "Chăm sóc sức khỏe",
+    "name_aliases": [
+      "xuất nhập khẩu y tế domesco"
+    ],
+    "tags": [
+      "chăm sóc sức khỏe"
+    ]
   },
   {
     "ticker": "DMX",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Điện máy Xanh",
+    "industry": "Bán lẻ",
+    "name_aliases": [
+      "đầu tư điện máy xanh"
+    ],
+    "tags": [
+      "bán lẻ",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "DPG",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Đạt Phương",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "tập đoàn đạt phương"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "DPM",
     "exchange": "HOSE",
     "sector": "Hóa chất",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "Tổng công ty Phân bón và Hóa chất Dầu khí - CTCP",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "phân bón và hóa chất dầu khí",
+      "đạm phú mỹ"
+    ],
+    "tags": [
+      "phân bón",
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "DPR",
     "exchange": "HOSE",
     "sector": "Nông nghiệp",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Cao su Đồng Phú",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "cao su đồng phú"
+    ],
+    "tags": [
+      "cao su",
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "DQC",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Điện Quang",
+    "industry": "Thiết bị điện",
+    "name_aliases": [
+      "tập đoàn điện quang"
+    ],
+    "tags": [
+      "thiết bị điện"
+    ]
   },
   {
     "ticker": "DRC",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Nông nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Cao su Đà Nẵng",
+    "industry": "Sản phẩm cao su",
+    "name_aliases": [
+      "cao su đà nẵng"
+    ],
+    "tags": [
+      "sản phẩm cao su"
+    ]
   },
   {
     "ticker": "DRH",
     "exchange": "HOSE",
     "sector": "Du lịch",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP DRH Holdings",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "drh holdings"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "DRL",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Thủy điện - Điện Lực 3",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "thủy điện - điện lực 3"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "DSC",
     "exchange": "HOSE",
     "sector": "Chứng khoán",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Chứng khoán DSC",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán dsc"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "DSE",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Chứng khoán",
+    "index_member": "HOSE",
+    "company_name": "CTCP Chứng khoán DNSE",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán dnse"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "DSN",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Du lịch",
+    "index_member": "HOSE",
+    "company_name": "CTCP Công viên nước Đầm Sen",
+    "industry": "Dịch vụ lưu trú, ăn uống, giải trí",
+    "name_aliases": [
+      "công viên nước đầm sen"
+    ],
+    "tags": [
+      "dịch vụ lưu trú, ăn uống, giải trí"
+    ]
   },
   {
     "ticker": "DTA",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bất động sản",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đệ Tam",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "đệ tam"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "DTL",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đại Thiên Lộc",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [
+      "đại thiên lộc"
+    ],
+    "tags": [
+      "vật liệu xây dựng"
+    ]
   },
   {
     "ticker": "DTT",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Hóa chất",
+    "index_member": "HOSE",
+    "company_name": "CTCP Kỹ nghệ Đô Thành",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "kỹ nghệ đô thành"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "DVP",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư và Phát triển Cảng Đình Vũ",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "đầu tư và phát triển cảng đình vũ"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "DXG",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Bluemarq Group",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "bluemarq group",
+      "tập đoàn đất xanh",
+      "đất xanh"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "DXS",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Dịch vụ Bất động sản Đất Xanh",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "dịch vụ bất động sản đất xanh"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "DXV",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP VICEM Vật liệu Xây dựng Đà Nẵng",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [
+      "vicem vật liệu xây dựng đà nẵng"
+    ],
+    "tags": [
+      "vật liệu xây dựng"
+    ]
   },
   {
     "ticker": "EIB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "Ngân hàng TMCP Xuất nhập khẩu Việt Nam",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "eximbank",
+      "ngân hàng xuất nhập khẩu",
+      "ngân hàng xuất nhập khẩu việt nam",
+      "xuất nhập khẩu việt nam"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "ELC",
     "exchange": "HOSE",
     "sector": "Công nghệ",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Công Nghệ - Viễn Thông Elcom",
+    "industry": "Công nghệ và thông tin",
+    "name_aliases": [
+      "công nghệ - viễn thông elcom",
+      "công nghệ điện lực miền trung",
+      "điện lực miền trung"
+    ],
+    "tags": [
+      "công nghệ và thông tin"
+    ]
   },
   {
     "ticker": "EVE",
     "exchange": "HOSE",
     "sector": "Dệt may",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Everpia",
+    "industry": "SX Hàng gia dụng",
+    "name_aliases": [
+      "everpia"
+    ],
+    "tags": [
+      "sx hàng gia dụng"
+    ]
   },
   {
     "ticker": "EVF",
     "exchange": "HOSE",
     "sector": "Tài chính",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Công ty Tài chính Tổng hợp Cổ phần Điện lực",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "công ty tài chính tổng hợp cổ phần điện lực"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "EVG",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn EverLand",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "tập đoàn everland"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "FCM",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Vật liệu",
+    "index_member": "HOSE",
+    "company_name": "CTCP Bê tông Phan Vũ Hà Nam",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [
+      "bê tông phan vũ hà nam"
+    ],
+    "tags": [
+      "vật liệu xây dựng"
+    ]
   },
   {
     "ticker": "FCN",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn FECON",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "tập đoàn fecon"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "FDC",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Ngoại thương và Phát triển Đầu tư Thành phố Hồ Chí Minh",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "ngoại thương và phát triển đầu tư thành phố hồ chí minh"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "FIR",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Địa ốc First Real",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "địa ốc first real"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "FIT",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Y tế",
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn F.I.T",
+    "industry": "Chăm sóc sức khỏe",
+    "name_aliases": [
+      "tập đoàn f.i.t"
+    ],
+    "tags": [
+      "chăm sóc sức khỏe"
+    ]
   },
   {
     "ticker": "FMC",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Thực phẩm Sao Ta",
+    "industry": "Chế biến Thủy sản",
+    "name_aliases": [
+      "sao ta",
+      "thực phẩm sao ta"
+    ],
+    "tags": [
+      "chế biến thủy sản",
+      "thủy sản",
+      "thực phẩm",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "FPT",
     "exchange": "HOSE",
     "sector": "Công nghệ",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "CTCP FPT",
+    "industry": "Công nghệ và thông tin",
+    "name_aliases": [
+      "công ty cổ phần fpt",
+      "fpt corporation",
+      "tập đoàn fpt"
+    ],
+    "tags": [
+      "công nghệ và thông tin"
+    ]
   },
   {
     "ticker": "FRT",
     "exchange": "HOSE",
     "sector": "Bán lẻ",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Bán lẻ Kỹ thuật số FPT",
+    "industry": "Bán lẻ",
+    "name_aliases": [
+      "bán lẻ fpt",
+      "bán lẻ kỹ thuật số fpt",
+      "fpt retail",
+      "long châu"
+    ],
+    "tags": [
+      "bán lẻ",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "FTS",
     "exchange": "HOSE",
     "sector": "Chứng khoán",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Chứng khoán FPT",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán fpt",
+      "fp t securities"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "GAS",
     "exchange": "HOSE",
     "sector": "Dầu khí",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Tổng Công ty Khí Việt Nam - CTCP",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "khí việt nam",
+      "petrovietnam gas",
+      "pv gas",
+      "tổng công ty khí việt nam"
+    ],
+    "tags": [
+      "dầu thô",
+      "năng lượng",
+      "tiện ích"
+    ]
   },
   {
     "ticker": "GDT",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Chế biến Gỗ Đức Thành",
+    "industry": "SX Hàng gia dụng",
+    "name_aliases": [
+      "chế biến gỗ đức thành"
+    ],
+    "tags": [
+      "sx hàng gia dụng"
+    ]
   },
   {
     "ticker": "GEE",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Điện lực Gelex",
+    "industry": "Thiết bị điện",
+    "name_aliases": [
+      "điện lực gelex"
+    ],
+    "tags": [
+      "thiết bị điện"
+    ]
   },
   {
     "ticker": "GEG",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Điện Gia Lai",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "điện gia lai"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "GEL",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Hạ tầng GELEX",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "hạ tầng gelex"
+    ],
+    "tags": [
+      "bán buôn",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "GEX",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Tập đoàn GELEX",
+    "industry": "Thiết bị điện",
+    "name_aliases": [
+      "gelex",
+      "tập đoàn gelex"
+    ],
+    "tags": [
+      "năng lượng",
+      "thiết bị điện",
+      "điện"
+    ]
   },
   {
     "ticker": "GHC",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Thủy điện Gia Lai",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "thủy điện gia lai"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "GIL",
     "exchange": "HOSE",
     "sector": "Dệt may",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Sản xuất Kinh doanh và Xuất nhập khẩu Bình Thạnh",
+    "industry": "SX Hàng gia dụng",
+    "name_aliases": [
+      "sản xuất kinh doanh và xuất nhập khẩu bình thạnh"
+    ],
+    "tags": [
+      "sx hàng gia dụng"
+    ]
   },
   {
     "ticker": "GMD",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Tập đoàn Gemadept",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "cảng gemadept",
+      "gemadept",
+      "tập đoàn gemadept"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "GMH",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Vật liệu",
+    "index_member": "HOSE",
+    "company_name": "CTCP Minh Hưng Quảng Trị",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [
+      "minh hưng quảng trị"
+    ],
+    "tags": [
+      "vật liệu xây dựng"
+    ]
   },
   {
     "ticker": "GSP",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Vận tải Sản Phẩm Khí Quốc tế",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "vận tải sản phẩm khí quốc tế"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "GTA",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Chế biến gỗ Thuận An",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "chế biến gỗ thuận an"
+    ],
+    "tags": [
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "GVR",
     "exchange": "HOSE",
     "sector": "Nông nghiệp",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Tập đoàn Công nghiệp Cao su Việt Nam - CTCP",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "cao su việt nam",
+      "công nghiệp cao su việt nam",
+      "tập đoàn cao su việt nam"
+    ],
+    "tags": [
+      "cao su",
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "HAG",
     "exchange": "HOSE",
     "sector": "Nông nghiệp",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Hoàng Anh Gia Lai",
+    "industry": "Nông - Lâm - Ngư",
+    "name_aliases": [
+      "hagl",
+      "hoàng anh gia lai"
+    ],
+    "tags": [
+      "nông - lâm - ngư"
+    ]
   },
   {
     "ticker": "HAH",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Vận tải và Xếp dỡ Hải An",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "vận tải và xếp dỡ hải an"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "HAP",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Hapaco",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "tập đoàn hapaco"
+    ],
+    "tags": [
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "HAR",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Thương mại Bất động sản An Dương Thảo Điền",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "đầu tư thương mại bất động sản an dương thảo điền"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "HAS",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Xây dựng",
+    "index_member": "HOSE",
+    "company_name": "CTCP Hacisco",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "hacisco"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "HAX",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Dịch vụ Ô tô Hàng Xanh",
+    "industry": "Bán lẻ",
+    "name_aliases": [
+      "dịch vụ ô tô hàng xanh"
+    ],
+    "tags": [
+      "bán lẻ",
+      "vận tải"
+    ]
   },
   {
     "ticker": "HCD",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Hóa chất",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Sản xuất và Thương mại HCD",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "đầu tư sản xuất và thương mại hcd"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "HCM",
     "exchange": "HOSE",
     "sector": "Chứng khoán",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Chứng khoán Thành phố Hồ Chí Minh",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán hsc",
+      "chứng khoán thành phố hồ chí minh",
+      "hsc"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "HDB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Ngân hàng TMCP Phát triển Thành phố Hồ Chí Minh",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "hdbank",
+      "ngân hàng phát triển thành phố hồ chí minh",
+      "ngân hàng phát triển tp.hcm",
+      "phát triển thành phố hồ chí minh"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "HDC",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Phát triển Nhà Bà Rịa - Vũng Tàu",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "phát triển nhà bà rịa - vũng tàu"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "HDG",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Tập đoàn Hà Đô",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "hà đô",
+      "tập đoàn hà đô"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "HHP",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP HHP Global",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "hhp global"
+    ],
+    "tags": [
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "HHS",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Dịch vụ Hoàng Huy",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "đầu tư dịch vụ hoàng huy"
+    ],
+    "tags": [
+      "bán buôn"
+    ]
   },
   {
     "ticker": "HHV",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Hạ tầng Giao thông Đèo Cả",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "đầu tư hạ tầng giao thông đèo cả"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "HID",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Tiện ích",
+    "index_member": "HOSE",
+    "company_name": "CTCP Halcom Việt Nam",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "halcom việt nam"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "HII",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Hóa chất",
+    "index_member": "HOSE",
+    "company_name": "CTCP An Tiến Industries",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "an tiến industries"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "HMC",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Kim khí Thành phố Hồ Chí Minh - VNSTEEL",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "kim khí thành phố hồ chí minh - vnsteel"
+    ],
+    "tags": [
+      "bán buôn"
+    ]
   },
   {
     "ticker": "HNA",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Tiện ích",
+    "index_member": "HOSE",
+    "company_name": "CTCP Thủy điện Hủa Na",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "thủy điện hủa na"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "HPA",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Nông nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Phát triển Nông nghiệp Hòa Phát",
+    "industry": "Nông - Lâm - Ngư",
+    "name_aliases": [
+      "phát triển nông nghiệp hòa phát"
+    ],
+    "tags": [
+      "nông - lâm - ngư"
+    ]
   },
   {
     "ticker": "HPG",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "CTCP Tập đoàn Hòa Phát",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [
+      "hòa phát",
+      "tập đoàn hòa phát"
+    ],
+    "tags": [
+      "thép",
+      "vật liệu xây dựng"
+    ]
   },
   {
     "ticker": "HPX",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Hải Phát",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "đầu tư hải phát"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "HQC",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tư vấn Thương mại Dịch vụ Địa Ốc Hoàng Quân",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "tư vấn thương mại dịch vụ địa ốc hoàng quân"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "HRC",
     "exchange": "HOSE",
     "sector": "Nông nghiệp",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Cao su Hòa Bình",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "cao su hòa bình"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "HSG",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Tập đoàn Hoa Sen",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [
+      "hoa sen",
+      "tập đoàn hoa sen"
+    ],
+    "tags": [
+      "thép",
+      "vật liệu xây dựng"
+    ]
   },
   {
     "ticker": "HSL",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Nông nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Phát triển Thực phẩm Hồng Hà",
+    "industry": "Nông - Lâm - Ngư",
+    "name_aliases": [
+      "đầu tư phát triển thực phẩm hồng hà"
+    ],
+    "tags": [
+      "nông - lâm - ngư"
+    ]
   },
   {
     "ticker": "HT1",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Xi Măng Vicem Hà Tiên",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [
+      "hà tiên 1",
+      "xi măng hà tiên",
+      "xi măng vicem hà tiên"
+    ],
+    "tags": [
+      "vật liệu xây dựng",
+      "xi măng"
+    ]
   },
   {
     "ticker": "HTG",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "Tổng Công ty cổ phần Dệt may Hòa Thọ",
+    "industry": "SX Hàng gia dụng",
+    "name_aliases": [
+      "cổ phần dệt may hòa thọ"
+    ],
+    "tags": [
+      "sx hàng gia dụng"
+    ]
   },
   {
     "ticker": "HTI",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Xây dựng",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Phát triển Hạ tầng IDICO",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "đầu tư phát triển hạ tầng idico"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "HTL",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Kỹ thuật và Ô tô Trường Long",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "kỹ thuật và ô tô trường long"
+    ],
+    "tags": [
+      "bán buôn",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "HTN",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Hưng Thịnh Incons",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "hưng thịnh incons"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "HTV",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Logistics",
+    "index_member": "HOSE",
+    "company_name": "CTCP Logistics Vicem",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "logistics vicem"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "HU1",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bất động sản",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư và Xây dựng HUD1",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "đầu tư và xây dựng hud1"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "HUB",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Xây dựng",
+    "index_member": "HOSE",
+    "company_name": "CTCP Xây lắp Thừa Thiên Huế",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "xây lắp thừa thiên huế"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "HVH",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Xây dựng",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư và Công nghệ HVC",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "đầu tư và công nghệ hvc"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "HVN",
     "exchange": "HOSE",
     "sector": "Hàng không",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Tổng Công ty Hàng không Việt Nam - CTCP",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "hàng không quốc gia việt nam",
+      "hàng không việt nam",
+      "vietnam airlines"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "ICT",
     "exchange": "HOSE",
     "sector": "Công nghệ",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Viễn thông - Tin học Bưu điện",
+    "industry": "Công nghệ và thông tin",
+    "name_aliases": [
+      "viễn thông - tin học bưu điện"
+    ],
+    "tags": [
+      "công nghệ và thông tin"
+    ]
   },
   {
     "ticker": "IDI",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư và Phát triển Đa Quốc Gia - IDI",
+    "industry": "Chế biến Thủy sản",
+    "name_aliases": [
+      "i.d.i",
+      "đầu tư và phát triển đa quốc gia",
+      "đầu tư và phát triển đa quốc gia - idi"
+    ],
+    "tags": [
+      "chế biến thủy sản",
+      "thủy sản",
+      "thực phẩm",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "IJC",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Phát triển Hạ tầng Kỹ thuật",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "phát triển hạ tầng kỹ thuật"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "ILB",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Logistics",
+    "index_member": "HOSE",
+    "company_name": "CTCP ICD Tân Cảng - Long Bình",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "icd tân cảng - long bình"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "IMP",
     "exchange": "HOSE",
     "sector": "Y tế",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Dược phẩm Imexpharm",
+    "industry": "Chăm sóc sức khỏe",
+    "name_aliases": [
+      "dược imexpharm",
+      "dược phẩm imexpharm",
+      "imexpharm"
+    ],
+    "tags": [
+      "chăm sóc sức khỏe"
+    ]
   },
   {
     "ticker": "ITC",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư và Kinh doanh Nhà",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "đầu tư và kinh doanh nhà"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "ITD",
     "exchange": "HOSE",
     "sector": "Công nghệ",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Công nghệ ITD",
+    "industry": "Công nghệ và thông tin",
+    "name_aliases": [
+      "công nghệ itd"
+    ],
+    "tags": [
+      "công nghệ và thông tin"
+    ]
   },
   {
     "ticker": "JVC",
     "exchange": "HOSE",
     "sector": "Y tế",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư và Phát triển Y tế Việt Nhật",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "đầu tư và phát triển y tế việt nhật"
+    ],
+    "tags": [
+      "bán buôn"
+    ]
   },
   {
     "ticker": "KBC",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "Tổng Công ty Phát triển Đô thị Kinh Bắc - CTCP",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "phát triển đô thị kinh bắc"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "KDC",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn KIDO",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "kido",
+      "tập đoàn kido"
+    ],
+    "tags": [
+      "thực phẩm",
+      "thực phẩm - đồ uống",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "KDH",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Đầu tư và Kinh doanh Nhà Khang Điền",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "khang điền",
+      "nhà khang điền",
+      "đầu tư và kinh doanh nhà khang điền"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "KHG",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Khải Hoàn Land",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "tập đoàn khải hoàn land"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "KHP",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Điện lực Khánh Hòa",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "điện lực khánh hòa"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "KLB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Ngân hàng TMCP Kiên Long",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "kienlongbank",
+      "kiên long",
+      "ngân hàng kiên long"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "KMR",
     "exchange": "HOSE",
     "sector": "Dệt may",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Mirae",
+    "industry": "SX Hàng gia dụng",
+    "name_aliases": [
+      "mirae"
+    ],
+    "tags": [
+      "sx hàng gia dụng"
+    ]
   },
   {
     "ticker": "KOS",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bất động sản",
+    "index_member": "HOSE",
+    "company_name": "CTCP KOSY",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "kosy"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "KSB",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Khoáng sản và Xây dựng Bình Dương",
+    "industry": "Khai khoáng",
+    "name_aliases": [
+      "khoáng sản và xây dựng bình dương"
+    ],
+    "tags": [
+      "khai khoáng"
+    ]
   },
   {
     "ticker": "L10",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Lilama 10",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "lilama 10"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "LAF",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Chế biến hàng Xuất khẩu Long An",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "chế biến hàng xuất khẩu long an"
+    ],
+    "tags": [
+      "thực phẩm",
+      "thực phẩm - đồ uống",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "LBM",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Khoáng sản và Vật liệu Xây dựng Lâm Đồng",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [
+      "khoáng sản và vật liệu xây dựng lâm đồng"
+    ],
+    "tags": [
+      "vật liệu xây dựng"
+    ]
   },
   {
     "ticker": "LCG",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Lizen",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "lizen"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "LDG",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư LDG",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "đầu tư ldg"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "LGC",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Cầu đường CII",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "đầu tư cầu đường cii"
+    ],
+    "tags": [
+      "năng lượng",
+      "xây dựng",
+      "điện"
+    ]
   },
   {
     "ticker": "LGL",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư và Phát triển Đô thị Long Giang",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "đầu tư và phát triển đô thị long giang"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "LHG",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Long Hậu",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "long hậu"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "LIX",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Hóa chất",
+    "index_member": "HOSE",
+    "company_name": "CTCP Bột Giặt Lix",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "bột giặt lix"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "LM8",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Lilama 18",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "lilama 18"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "LPB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "Ngân hàng TMCP Lộc Phát Việt Nam",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "lienvietpostbank",
+      "liên việt",
+      "lộc phát việt nam",
+      "ngân hàng bưu điện liên việt"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "LPS",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Chứng khoán",
+    "index_member": "HOSE",
+    "company_name": "CTCP Chứng khoán LPS",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán lps"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "LSS",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Mía Đường Lam Sơn",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "mía đường lam sơn"
+    ],
+    "tags": [
+      "thực phẩm",
+      "thực phẩm - đồ uống",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "MBB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Ngân hàng TMCP Quân đội",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "mbbank",
+      "ngân hàng quân đội",
+      "ngân hàng tmcp quân đội",
+      "quân đội"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "MCH",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Hàng tiêu dùng Masan",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "hàng tiêu dùng masan",
+      "masan consumer",
+      "masan tiêu dùng"
+    ],
+    "tags": [
+      "thực phẩm",
+      "thực phẩm - đồ uống",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "MCM",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Thực phẩm & Đồ uống",
+    "index_member": "HOSE",
+    "company_name": "CTCP Giống Bò sữa Mộc Châu",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "giống bò sữa mộc châu"
+    ],
+    "tags": [
+      "thực phẩm",
+      "thực phẩm - đồ uống",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "MCP",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP In và Bao bì Mỹ Châu",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "in và bao bì mỹ châu"
+    ],
+    "tags": [
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "MDG",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Vật liệu",
+    "index_member": "HOSE",
+    "company_name": "CTCP Miền Đông",
+    "industry": "Khai khoáng",
+    "name_aliases": [
+      "miền đông"
+    ],
+    "tags": [
+      "khai khoáng"
+    ]
   },
   {
     "ticker": "MHC",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Logistics",
+    "index_member": "HOSE",
+    "company_name": "CTCP MHC",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "MIG",
     "exchange": "HOSE",
     "sector": "Bảo hiểm",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Tổng Công ty cổ phần Bảo hiểm Quân Đội",
+    "industry": "Bảo hiểm",
+    "name_aliases": [
+      "bảo hiểm quân đội",
+      "cổ phần bảo hiểm quân đội",
+      "mic"
+    ],
+    "tags": [
+      "bảo hiểm"
+    ]
   },
   {
     "ticker": "MSB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "Ngân hàng TMCP Hàng hải Việt Nam",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "hàng hải việt nam",
+      "ngân hàng hàng hải",
+      "ngân hàng tmcp hàng hải"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "MSH",
     "exchange": "HOSE",
     "sector": "Dệt may",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP May Sông Hồng",
+    "industry": "SX Hàng gia dụng",
+    "name_aliases": [
+      "may sông hồng"
+    ],
+    "tags": [
+      "sx hàng gia dụng"
+    ]
   },
   {
     "ticker": "MSN",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "CTCP Tập đoàn Masan",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "masan",
+      "tập đoàn masan"
+    ],
+    "tags": [
+      "thực phẩm",
+      "thực phẩm - đồ uống",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "MWG",
     "exchange": "HOSE",
     "sector": "Bán lẻ",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "CTCP Đầu tư Thế giới Di động",
+    "industry": "Bán lẻ",
+    "name_aliases": [
+      "thế giới di động",
+      "đầu tư thế giới di động"
+    ],
+    "tags": [
+      "bán lẻ",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "MZG",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Miza",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "miza"
+    ],
+    "tags": [
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "NAB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Ngân hàng TMCP Nam Á",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "nam a bank",
+      "nam á",
+      "ngân hàng nam á"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "NAF",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Nafoods Group",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "nafoods group"
+    ],
+    "tags": [
+      "thực phẩm",
+      "thực phẩm - đồ uống",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "NAV",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Nam Việt",
+    "industry": "SX Hàng gia dụng",
+    "name_aliases": [
+      "nam việt"
+    ],
+    "tags": [
+      "sx hàng gia dụng"
+    ]
   },
   {
     "ticker": "NBB",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Năm Bảy Bảy",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "đầu tư năm bảy bảy"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "NCT",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Dịch vụ Hàng hóa Nội Bài",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "dịch vụ hàng hóa nội bài"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "NHA",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Tổng Công ty Đầu tư Phát triển Nhà và Đô thị Nam Hà Nội",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "đầu tư phát triển nhà và đô thị nam hà nội"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "NHH",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Nhựa Hà Nội",
+    "industry": "SX Thiết bị, máy móc",
+    "name_aliases": [
+      "nhựa hà nội"
+    ],
+    "tags": [
+      "sx thiết bị, máy móc"
+    ]
   },
   {
     "ticker": "NHT",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Sản xuất và Thương mại Nam Hoa",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "sản xuất và thương mại nam hoa"
+    ],
+    "tags": [
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "NKG",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Thép Nam Kim",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [
+      "nam kim",
+      "thép nam kim"
+    ],
+    "tags": [
+      "thép",
+      "vật liệu xây dựng"
+    ]
   },
   {
     "ticker": "NLG",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Đầu tư Nam Long",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "nam long",
+      "đầu tư nam long"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "NNC",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đá Núi Nhỏ",
+    "industry": "Khai khoáng",
+    "name_aliases": [
+      "đá núi nhỏ"
+    ],
+    "tags": [
+      "khai khoáng"
+    ]
   },
   {
     "ticker": "NO1",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn 911",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "tập đoàn 911"
+    ],
+    "tags": [
+      "bán buôn",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "NSC",
     "exchange": "HOSE",
     "sector": "Nông nghiệp",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Giống cây trồng Việt Nam",
+    "industry": "Nông - Lâm - Ngư",
+    "name_aliases": [
+      "tập đoàn giống cây trồng việt nam"
+    ],
+    "tags": [
+      "nông - lâm - ngư"
+    ]
   },
   {
     "ticker": "NT2",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Điện lực Dầu khí Nhơn Trạch 2",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "điện lực dầu khí nhơn trạch 2"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "NTC",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Khu Công nghiệp Nam Tân Uyên",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "khu công nghiệp nam tân uyên"
+    ],
+    "tags": [
+      "bất động sản",
+      "vận tải"
+    ]
   },
   {
     "ticker": "NTL",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Phát triển Đô thị Từ Liêm",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "phát triển đô thị từ liêm"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "NVL",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Tập đoàn Đầu tư Địa ốc No Va ",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "novaland",
+      "tập đoàn novaland",
+      "tập đoàn đầu tư địa ốc no va"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "NVT",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Bất động sản Du lịch Ninh Vân Bay",
+    "industry": "Dịch vụ lưu trú, ăn uống, giải trí",
+    "name_aliases": [
+      "bất động sản du lịch ninh vân bay"
+    ],
+    "tags": [
+      "dịch vụ lưu trú, ăn uống, giải trí"
+    ]
   },
   {
     "ticker": "OCB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "Ngân hàng TMCP Phương Đông",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "ngân hàng phương đông",
+      "phương đông"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "OGC",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Tài chính",
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Đại Dương",
+    "industry": "Tài chính khác",
+    "name_aliases": [
+      "tập đoàn đại dương"
+    ],
+    "tags": [
+      "tài chính khác"
+    ]
   },
   {
     "ticker": "OPC",
     "exchange": "HOSE",
     "sector": "Y tế",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Dược phẩm OPC",
+    "industry": "Chăm sóc sức khỏe",
+    "name_aliases": [
+      "dược opc",
+      "dược phẩm opc",
+      "opc pharmaceutical"
+    ],
+    "tags": [
+      "chăm sóc sức khỏe"
+    ]
   },
   {
     "ticker": "ORS",
     "exchange": "HOSE",
     "sector": "Chứng khoán",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Chứng khoán Tiên Phong",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán tiên phong"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "PAC",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Pin Ắc quy Miền Nam",
+    "industry": "Thiết bị điện",
+    "name_aliases": [
+      "pin ắc quy miền nam"
+    ],
+    "tags": [
+      "thiết bị điện"
+    ]
   },
   {
     "ticker": "PAN",
     "exchange": "HOSE",
     "sector": "Nông nghiệp",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn PAN",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "nông nghiệp pan",
+      "pan group",
+      "tập đoàn pan"
+    ],
+    "tags": [
+      "thực phẩm - đồ uống"
+    ]
   },
   {
     "ticker": "PC1",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Tập Đoàn PC1",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "pc1 group",
+      "tập đoàn pc1",
+      "xây lắp điện 1"
+    ],
+    "tags": [
+      "năng lượng",
+      "xây dựng",
+      "điện"
+    ]
   },
   {
     "ticker": "PDN",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Cảng Đồng Nai",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "cảng đồng nai"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "PDR",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "CTCP Phát triển Bất động sản Phát Đạt",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "bất động sản phát đạt",
+      "phát triển bất động sản phát đạt",
+      "phát đạt"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "PDV",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Logistics",
+    "index_member": "HOSE",
+    "company_name": "CTCP Vận Tải Và Tiếp Vận Phương Đông Việt",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "vận tải và tiếp vận phương đông việt"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "PET",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "Tổng Công ty cổ phần Dịch vụ Tổng hợp Dầu khí",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "cổ phần dịch vụ tổng hợp dầu khí"
+    ],
+    "tags": [
+      "bán buôn",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "PGC",
     "exchange": "HOSE",
     "sector": "Dầu khí",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Tổng Công ty Gas Petrolimex - CTCP",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "gas petrolimex"
+    ],
+    "tags": [
+      "dầu thô",
+      "năng lượng",
+      "tiện ích"
+    ]
   },
   {
     "ticker": "PGD",
     "exchange": "HOSE",
     "sector": "Dầu khí",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Phân phối khí thấp áp Dầu khí Việt Nam",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "phân phối khí thấp áp dầu khí",
+      "phân phối khí thấp áp dầu khí việt nam"
+    ],
+    "tags": [
+      "dầu thô",
+      "năng lượng",
+      "tiện ích"
+    ]
   },
   {
     "ticker": "PGI",
     "exchange": "HOSE",
     "sector": "Bảo hiểm",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Tổng Công ty cổ phần Bảo hiểm Petrolimex",
+    "industry": "Bảo hiểm",
+    "name_aliases": [
+      "cổ phần bảo hiểm petrolimex"
+    ],
+    "tags": [
+      "bảo hiểm"
+    ]
   },
   {
     "ticker": "PGV",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Tổng Công ty Phát điện 3 - CTCP",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "phát điện 3"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "PHC",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Xây dựng Phục Hưng Holdings",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "xây dựng phục hưng holdings"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "PHR",
     "exchange": "HOSE",
     "sector": "Nông nghiệp",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Cao su Phước Hòa",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "cao su phước hòa"
+    ],
+    "tags": [
+      "cao su",
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "PIT",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Xuất nhập khẩu Petrolimex",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "xuất nhập khẩu petrolimex"
+    ],
+    "tags": [
+      "bán buôn",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "PJT",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Vận tải Xăng dầu Đường Thủy Petrolimex",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "vận tải xăng dầu đường thủy petrolimex"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "PLP",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Hóa chất",
+    "index_member": "HOSE",
+    "company_name": "CTCP Sản xuất và Công nghệ Nhựa Pha Lê",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "sản xuất và công nghệ nhựa pha lê"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "PLX",
     "exchange": "HOSE",
     "sector": "Dầu khí",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Tập đoàn Xăng Dầu Việt Nam",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "petrolimex",
+      "tập đoàn xăng dầu việt nam",
+      "xăng dầu việt nam"
+    ],
+    "tags": [
+      "bán buôn",
+      "dầu thô",
+      "năng lượng"
+    ]
   },
   {
     "ticker": "PMG",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư và Sản xuất Petro Miền Trung",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "đầu tư và sản xuất petro miền trung"
+    ],
+    "tags": [
+      "bán buôn",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "PNC",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Văn hóa Phương Nam",
+    "industry": "Bán lẻ",
+    "name_aliases": [
+      "văn hóa phương nam"
+    ],
+    "tags": [
+      "bán lẻ",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "PNJ",
     "exchange": "HOSE",
     "sector": "Bán lẻ",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Vàng bạc Đá quý Phú Nhuận",
+    "industry": "Bán lẻ",
+    "name_aliases": [
+      "phú nhuận jewelry",
+      "vàng bạc đá quý phú nhuận"
+    ],
+    "tags": [
+      "bán lẻ",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "POW",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Tổng Công ty Điện lực Dầu khí Việt Nam - CTCP",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "pv power",
+      "tổng công ty điện lực dầu khí",
+      "điện lực dầu khí việt nam"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "PPC",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Nhiệt điện Phả Lại",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "nhiệt điện phả lại"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "PTB",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Phú Tài",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "phú tài"
+    ],
+    "tags": [
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "PTC",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu Tư Icapital",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "đầu tư icapital"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "PTL",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Victory Group",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "victory group"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "PVD",
     "exchange": "HOSE",
     "sector": "Dầu khí",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "Tổng Công ty cổ phần Khoan và Dịch vụ khoan Dầu khí",
+    "industry": "Khai khoáng",
+    "name_aliases": [
+      "cổ phần khoan và dịch vụ khoan dầu khí",
+      "khoan và dịch vụ khoan dầu khí",
+      "pv drilling"
+    ],
+    "tags": [
+      "dầu thô",
+      "khai khoáng",
+      "năng lượng"
+    ]
   },
   {
     "ticker": "PVP",
     "exchange": "HOSE",
     "sector": "Dầu khí",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Vận tải Dầu khí Thái Bình Dương",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "vận tải dầu khí thái bình dương"
+    ],
+    "tags": [
+      "dầu thô",
+      "năng lượng",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "PVT",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Tổng Công ty cổ phần Vận tải Dầu khí",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "cổ phần vận tải dầu khí",
+      "pv trans",
+      "vận tải dầu khí"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "QCG",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Quốc Cường Gia Lai",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "quốc cường gia lai"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "QNP",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Logistics",
+    "index_member": "HOSE",
+    "company_name": "CTCP Cảng Quy Nhơn",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "cảng quy nhơn"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "RAL",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Bóng đèn Phích nước Rạng Đông",
+    "industry": "Thiết bị điện",
+    "name_aliases": [
+      "bóng đèn phích nước rạng đông"
+    ],
+    "tags": [
+      "thiết bị điện"
+    ]
   },
   {
     "ticker": "REE",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Cơ Điện Lạnh",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "cơ điện lạnh",
+      "ree corporation"
+    ],
+    "tags": [
+      "năng lượng",
+      "xây dựng",
+      "điện"
+    ]
   },
   {
     "ticker": "RYG",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Sản xuất và Đầu tư Hoàng Gia",
+    "industry": "SX Hàng gia dụng",
+    "name_aliases": [
+      "sản xuất và đầu tư hoàng gia"
+    ],
+    "tags": [
+      "sx hàng gia dụng"
+    ]
   },
   {
     "ticker": "S4A",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Thủy điện Sê San 4A",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "thủy điện sê san 4a"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "SAB",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Tổng Công ty cổ phần Bia - Rượu - Nước giải khát Sài Gòn",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "bia sài gòn",
+      "cổ phần bia - rượu - nước giải khát sài gòn",
+      "sabeco",
+      "tổng công ty bia rượu nước giải khát sài gòn"
+    ],
+    "tags": [
+      "thực phẩm",
+      "thực phẩm - đồ uống",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "SAM",
     "exchange": "HOSE",
     "sector": "Công nghệ",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP SAM Holdings",
+    "industry": "Thiết bị điện",
+    "name_aliases": [
+      "cáp sài gòn",
+      "sacom",
+      "sam holdings"
+    ],
+    "tags": [
+      "thiết bị điện"
+    ]
   },
   {
     "ticker": "SAV",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Hợp tác Kinh tế và Xuất nhập khẩu Savimex",
+    "industry": "SX Hàng gia dụng",
+    "name_aliases": [
+      "hợp tác kinh tế và xuất nhập khẩu savimex"
+    ],
+    "tags": [
+      "sx hàng gia dụng"
+    ]
   },
   {
     "ticker": "SBA",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Sông Ba",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "sông ba"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "SBG",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Cơ khí Công nghệ cao Siba",
+    "industry": "SX Thiết bị, máy móc",
+    "name_aliases": [
+      "tập đoàn cơ khí công nghệ cao siba"
+    ],
+    "tags": [
+      "sx thiết bị, máy móc"
+    ]
   },
   {
     "ticker": "SBT",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Thành Thành Công - Biên Hòa",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "mía đường thành thành công",
+      "thành thành công - biên hòa",
+      "ttc agris"
+    ],
+    "tags": [
+      "thực phẩm",
+      "thực phẩm - đồ uống",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "SBV",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Siam Brothers Việt Nam",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "siam brothers việt nam"
+    ],
+    "tags": [
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "SC5",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Xây dựng Số 5",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "xây dựng số 5"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "SCR",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Địa ốc Sài Gòn Thương Tín",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "địa ốc sài gòn thương tín"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "SCS",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Dịch vụ Hàng hóa Sài Gòn",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "dịch vụ hàng hóa sài gòn"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "SFC",
     "exchange": "HOSE",
     "sector": "Dầu khí",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Nhiên liệu Sài Gòn",
+    "industry": "Bán lẻ",
+    "name_aliases": [
+      "nhiên liệu sài gòn"
+    ],
+    "tags": [
+      "bán lẻ",
+      "dầu thô",
+      "năng lượng"
+    ]
   },
   {
     "ticker": "SFG",
     "exchange": "HOSE",
     "sector": "Hóa chất",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Phân Bón Miền Nam",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "phân bón miền nam"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "SFI",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đại lý Vận tải SAFI",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "đại lý vận tải safi"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "SGN",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Phục vụ Mặt đất Sài Gòn",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "phục vụ mặt đất sài gòn"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "SGR",
     "exchange": "HOSE",
     "sector": "Du lịch",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tổng CTCP Địa ốc Sài Gòn",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "tổng ctcp địa ốc sài gòn"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "SGT",
     "exchange": "HOSE",
     "sector": "Công nghệ",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Công nghệ Viễn Thông Sài Gòn",
+    "industry": "Công nghệ và thông tin",
+    "name_aliases": [
+      "công nghệ viễn thông sài gòn"
+    ],
+    "tags": [
+      "công nghệ và thông tin"
+    ]
   },
   {
     "ticker": "SHA",
     "exchange": "HOSE",
     "sector": "Du lịch",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Sơn Hà Sài Gòn",
+    "industry": "SX Hàng gia dụng",
+    "name_aliases": [
+      "sơn hà sài gòn"
+    ],
+    "tags": [
+      "sx hàng gia dụng"
+    ]
   },
   {
     "ticker": "SHB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Ngân hàng TMCP Sài Gòn - Hà Nội",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "ngân hàng sài gòn hà nội",
+      "sài gòn - hà nội"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "SHI",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Quốc tế Sơn Hà",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "quốc tế sơn hà"
+    ],
+    "tags": [
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "SHP",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Thủy điện Miền Nam",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "thủy điện miền nam"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "SIP",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Sài Gòn VRG",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "đầu tư sài gòn vrg"
+    ],
+    "tags": [
+      "tiện ích"
+    ]
   },
   {
     "ticker": "SJD",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Thủy điện Cần Đơn",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "thủy điện cần đơn"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "SJS",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP SJ Group",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "sj group"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "SKG",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tàu cao tốc Superdong - Kiên Giang",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "tàu cao tốc superdong - kiên giang"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "SMA",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Thiết bị Phụ tùng Sài Gòn",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "thiết bị phụ tùng sài gòn"
+    ],
+    "tags": [
+      "bán buôn",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "SMB",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Bia Sài Gòn - Miền Trung",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "bia sài gòn - miền trung"
+    ],
+    "tags": [
+      "thực phẩm",
+      "thực phẩm - đồ uống",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "SMC",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Thương mại SMC",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "đầu tư thương mại smc"
+    ],
+    "tags": [
+      "bán buôn"
+    ]
   },
   {
     "ticker": "SPM",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Y tế",
+    "index_member": "HOSE",
+    "company_name": "CTCP SPM",
+    "industry": "Chăm sóc sức khỏe",
+    "name_aliases": [],
+    "tags": [
+      "chăm sóc sức khỏe"
+    ]
   },
   {
     "ticker": "SRC",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Nông nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Cao su Sao Vàng",
+    "industry": "Sản phẩm cao su",
+    "name_aliases": [
+      "cao su sao vàng"
+    ],
+    "tags": [
+      "sản phẩm cao su"
+    ]
   },
   {
     "ticker": "SRF",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Xây dựng",
+    "index_member": "HOSE",
+    "company_name": "CTCP SEAREFICO",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "searefico"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "SSB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Ngân hàng TMCP Đông Nam Á",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "ngân hàng đông nam á",
+      "seabank",
+      "đông nam á"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "SSC",
     "exchange": "HOSE",
     "sector": "Nông nghiệp",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Giống cây trồng Miền Nam",
+    "industry": "Nông - Lâm - Ngư",
+    "name_aliases": [
+      "giống cây trồng miền nam"
+    ],
+    "tags": [
+      "nông - lâm - ngư"
+    ]
   },
   {
     "ticker": "SSI",
     "exchange": "HOSE",
     "sector": "Chứng khoán",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "CTCP Chứng khoán SSI",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán ssi",
+      "công ty chứng khoán ssi"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "ST8",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn ST8",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "tập đoàn st8"
+    ],
+    "tags": [
+      "bán buôn"
+    ]
   },
   {
     "ticker": "STB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Ngân hàng TMCP Sài Gòn Tài Lộc",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "ngân hàng sài gòn thương tín",
+      "sacombank",
+      "sài gòn tài lộc"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "STG",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Kho vận Miền Nam",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "kho vận miền nam"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "STK",
     "exchange": "HOSE",
     "sector": "Dệt may",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Sợi Thế Kỷ",
+    "industry": "SX Hàng gia dụng",
+    "name_aliases": [
+      "sợi thế kỷ"
+    ],
+    "tags": [
+      "sx hàng gia dụng"
+    ]
   },
   {
     "ticker": "SVC",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Dịch vụ Tổng hợp Sài Gòn",
+    "industry": "Bán lẻ",
+    "name_aliases": [
+      "dịch vụ tổng hợp sài gòn"
+    ],
+    "tags": [
+      "bán lẻ",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "SVD",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư & Thương mại Vũ Đăng",
+    "industry": "SX Hàng gia dụng",
+    "name_aliases": [
+      "đầu tư & thương mại vũ đăng"
+    ],
+    "tags": [
+      "sx hàng gia dụng"
+    ]
   },
   {
     "ticker": "SVT",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Công nghệ Sài Gòn Viễn Đông",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "công nghệ sài gòn viễn đông"
+    ],
+    "tags": [
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "SZC",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Sonadezi Châu Đức",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "sonadezi châu đức"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "SZL",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Sonadezi Long Thành",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "sonadezi long thành"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "TAL",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bất động sản",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Bất động sản Taseco",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "đầu tư bất động sản taseco"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "TBC",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Thủy điện Thác Bà",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "thủy điện thác bà"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "TCB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Ngân hàng TMCP Kỹ thương Việt Nam",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "kỹ thương việt nam",
+      "ngân hàng kỹ thương",
+      "ngân hàng kỹ thương việt nam",
+      "techcombank"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "TCH",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Dịch vụ Tài chính Hoàng Huy",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "đầu tư dịch vụ tài chính hoàng huy"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "TCI",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Chứng khoán",
+    "index_member": "HOSE",
+    "company_name": "CTCP Chứng khoán Thành Công",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán thành công"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "TCL",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Logistics",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đại lý Giao nhận Vận tải Xếp dỡ Tân Cảng",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "đại lý giao nhận vận tải xếp dỡ tân cảng"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "TCM",
     "exchange": "HOSE",
     "sector": "Dệt may",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Dệt may - Đầu tư - Thương mại Thành Công",
+    "industry": "SX Hàng gia dụng",
+    "name_aliases": [
+      "dệt may - đầu tư - thương mại thành công",
+      "dệt may thành công"
+    ],
+    "tags": [
+      "sx hàng gia dụng"
+    ]
   },
   {
     "ticker": "TCO",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Logistics",
+    "index_member": "HOSE",
+    "company_name": "CTCP Janus Group",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "janus group"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "TCR",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Vật liệu",
+    "index_member": "HOSE",
+    "company_name": "CTCP Công nghiệp Gốm sứ Taicera",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [
+      "công nghiệp gốm sứ taicera"
+    ],
+    "tags": [
+      "vật liệu xây dựng"
+    ]
   },
   {
     "ticker": "TCT",
     "exchange": "HOSE",
     "sector": "Du lịch",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Cáp treo Núi Bà Tây Ninh",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "cáp treo núi bà tây ninh"
+    ],
+    "tags": [
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "TCX",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Chứng khoán",
+    "index_member": "HOSE",
+    "company_name": "CTCP Chứng khoán Kỹ Thương",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán kỹ thương"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "TDC",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Kinh doanh và Phát triển Bình Dương",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "kinh doanh và phát triển bình dương"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "TDG",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư TDG Global",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "đầu tư tdg global"
+    ],
+    "tags": [
+      "bán buôn",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "TDH",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Phát triển Nhà Thủ Đức",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "phát triển nhà thủ đức"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "TDM",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Nước Thủ Dầu Một",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "nước thủ dầu một"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "TDP",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Hóa chất",
+    "index_member": "HOSE",
+    "company_name": "CTCP Thuận Đức",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "thuận đức"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "TDW",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Cấp nước Thủ Đức",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "cấp nước thủ đức"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "TEG",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Trường Thành Energy Group",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [
+      "trường thành energy group"
+    ],
+    "tags": [
+      "năng lượng",
+      "vật liệu xây dựng",
+      "điện"
+    ]
   },
   {
     "ticker": "THG",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư và Xây dựng Tiền Giang",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [
+      "đầu tư và xây dựng tiền giang"
+    ],
+    "tags": [
+      "vật liệu xây dựng"
+    ]
   },
   {
     "ticker": "TIP",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Phát triển Khu Công nghiệp Tín Nghĩa",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "phát triển khu công nghiệp tín nghĩa"
+    ],
+    "tags": [
+      "bất động sản",
+      "vận tải"
+    ]
   },
   {
     "ticker": "TIX",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Sản xuất Kinh doanh Xuất nhập khẩu Dịch vụ và Đầu tư Tân Bình",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "sản xuất kinh doanh xuất nhập khẩu dịch vụ và đầu tư tân bình"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "TLD",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Xây dựng và Phát triển Đô thị Thăng Long",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "đầu tư xây dựng và phát triển đô thị thăng long"
+    ],
+    "tags": [
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "TLG",
     "exchange": "HOSE",
     "sector": "Dệt may",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Thiên Long",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "tập đoàn thiên long"
+    ],
+    "tags": [
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "TLH",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Thép Tiến Lên",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "thép tiến lên",
+      "tập đoàn thép tiến lên"
+    ],
+    "tags": [
+      "bán buôn",
+      "thép"
+    ]
   },
   {
     "ticker": "TMP",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Thủy điện Thác Mơ",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "thủy điện thác mơ"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "TMS",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Transimex",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "transimex"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "TMT",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Ô tô TMT",
+    "industry": "SX Phụ trợ",
+    "name_aliases": [
+      "ô tô tmt"
+    ],
+    "tags": [
+      "sx phụ trợ"
+    ]
   },
   {
     "ticker": "TN1",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bất động sản",
+    "index_member": "HOSE",
+    "company_name": "CTCP Rox Key Holdings",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "rox key holdings"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "TNC",
     "exchange": "HOSE",
     "sector": "Dệt may",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Cao su Thống Nhất",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "cao su thống nhất"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "TNH",
     "exchange": "HOSE",
     "sector": "Y tế",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Bệnh viện TNH",
+    "industry": "Chăm sóc sức khỏe",
+    "name_aliases": [
+      "tập đoàn bệnh viện tnh"
+    ],
+    "tags": [
+      "chăm sóc sức khỏe"
+    ]
   },
   {
     "ticker": "TNI",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Thành Nam",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "tập đoàn thành nam"
+    ],
+    "tags": [
+      "bán buôn",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "TNT",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Vật liệu",
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn TNT",
+    "industry": "Khai khoáng",
+    "name_aliases": [
+      "tập đoàn tnt"
+    ],
+    "tags": [
+      "khai khoáng"
+    ]
   },
   {
     "ticker": "TPB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Ngân hàng TMCP Tiên Phong",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "ngân hàng tiên phong",
+      "tiên phong",
+      "tpbank"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "TPC",
     "exchange": "HOSE",
     "sector": "Hóa chất",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Nhựa Tân Đại Hưng",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "nhựa tân đại hưng"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "TRA",
     "exchange": "HOSE",
     "sector": "Y tế",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Traphaco",
+    "industry": "Chăm sóc sức khỏe",
+    "name_aliases": [
+      "dược trà vinh",
+      "traphaco"
+    ],
+    "tags": [
+      "chăm sóc sức khỏe"
+    ]
   },
   {
     "ticker": "TRC",
     "exchange": "HOSE",
     "sector": "Nông nghiệp",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Cao su Tây Ninh",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "cao su tây ninh"
+    ],
+    "tags": [
+      "cao su",
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "TSA",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Xây dựng",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư và Xây lắp Trường Sơn",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "đầu tư và xây lắp trường sơn"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "TSC",
     "exchange": "HOSE",
     "sector": "Nông nghiệp",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Vật tư Kỹ thuật nông nghiệp Cần Thơ",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "vật tư kỹ thuật nông nghiệp cần thơ"
+    ],
+    "tags": [
+      "bán buôn"
+    ]
   },
   {
     "ticker": "TTA",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Xây dựng và Phát triển Trường Thành",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "đầu tư xây dựng và phát triển trường thành"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "TTE",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Năng lượng Trường Thịnh",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "đầu tư năng lượng trường thịnh"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "TTF",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Kỹ nghệ gỗ Trường Thành",
+    "industry": "SX Hàng gia dụng",
+    "name_aliases": [
+      "tập đoàn kỹ nghệ gỗ trường thành"
+    ],
+    "tags": [
+      "sx hàng gia dụng"
+    ]
   },
   {
     "ticker": "TV2",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Tư vấn Xây dựng Điện 2",
+    "industry": "Dịch vụ tư vấn, hỗ trợ",
+    "name_aliases": [
+      "tư vấn xây dựng điện 2"
+    ],
+    "tags": [
+      "dịch vụ tư vấn, hỗ trợ",
+      "năng lượng",
+      "điện"
+    ]
   },
   {
     "ticker": "TVB",
     "exchange": "HOSE",
     "sector": "Chứng khoán",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Chứng khoán T-Cap",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán t-cap"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "TVS",
     "exchange": "HOSE",
     "sector": "Chứng khoán",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Chứng khoán Thiên Việt",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán thiên việt"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "TVT",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "Tổng Công ty Việt Thắng - CTCP",
+    "industry": "SX Hàng gia dụng",
+    "name_aliases": [
+      "việt thắng"
+    ],
+    "tags": [
+      "sx hàng gia dụng"
+    ]
   },
   {
     "ticker": "TYA",
     "exchange": "HOSE",
     "sector": "Dệt may",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Dây và Cáp Điện Taya Việt Nam",
+    "industry": "Thiết bị điện",
+    "name_aliases": [
+      "dây và cáp điện taya việt nam"
+    ],
+    "tags": [
+      "thiết bị điện"
+    ]
   },
   {
     "ticker": "UIC",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Phát triển Nhà và Đô thị IDICO",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "đầu tư phát triển nhà và đô thị idico"
+    ],
+    "tags": [
+      "tiện ích"
+    ]
   },
   {
     "ticker": "VAB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Ngân hàng TMCP Việt Á",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "ngân hàng việt á",
+      "vietabank",
+      "việt á"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "VBB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Ngân hàng TMCP Việt Nam Thương Tín",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "ngân hàng việt nam thương tín",
+      "vietbank",
+      "việt nam thương tín"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "VCA",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Vật liệu",
+    "index_member": "HOSE",
+    "company_name": "CTCP Thép VICASA",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [
+      "thép vicasa"
+    ],
+    "tags": [
+      "vật liệu xây dựng"
+    ]
   },
   {
     "ticker": "VCB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Ngân hàng TMCP Ngoại thương Việt Nam",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "ngoại thương việt nam",
+      "ngân hàng ngoại thương",
+      "ngân hàng ngoại thương việt nam",
+      "vietcombank"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "VCF",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Vinacafé Biên Hòa",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "vinacafe",
+      "vinacafé biên hòa"
+    ],
+    "tags": [
+      "thực phẩm",
+      "thực phẩm - đồ uống",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "VCG",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Tổng Công ty cổ phần Xuất nhập khẩu và Xây dựng Việt Nam",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "cổ phần xuất nhập khẩu và xây dựng việt nam",
+      "tổng công ty xây dựng vinaconex",
+      "vinaconex"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "VCI",
     "exchange": "HOSE",
     "sector": "Chứng khoán",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Chứng khoán Vietcap",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán vietcap",
+      "vietcap"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "VCK",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Chứng khoán",
+    "index_member": "HOSE",
+    "company_name": "CTCP Chứng khoán VPS",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán vps"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "VDP",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Y tế",
+    "index_member": "HOSE",
+    "company_name": "CTCP Dược phẩm Trung ương VIDIPHA",
+    "industry": "Chăm sóc sức khỏe",
+    "name_aliases": [
+      "dược phẩm trung ương vidipha"
+    ],
+    "tags": [
+      "chăm sóc sức khỏe"
+    ]
   },
   {
     "ticker": "VDS",
     "exchange": "HOSE",
     "sector": "Chứng khoán",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Chứng khoán Rồng Việt",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán rồng việt",
+      "rồng việt"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "VFG",
     "exchange": "HOSE",
     "sector": "Hóa chất",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Khử trùng Việt Nam",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "khử trùng việt nam"
+    ],
+    "tags": [
+      "bán buôn"
+    ]
   },
   {
     "ticker": "VGC",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Tổng Công ty Viglacera - CTCP",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [
+      "tổng công ty viglacera",
+      "viglacera"
+    ],
+    "tags": [
+      "vật liệu xây dựng"
+    ]
   },
   {
     "ticker": "VHC",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Vĩnh Hoàn",
+    "industry": "Chế biến Thủy sản",
+    "name_aliases": [
+      "thủy sản vĩnh hoàn",
+      "vĩnh hoàn"
+    ],
+    "tags": [
+      "chế biến thủy sản",
+      "thủy sản",
+      "thực phẩm",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "VHM",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "CTCP Vinhomes",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "vinhomes"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "VIB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Ngân hàng TMCP Quốc tế Việt Nam",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "ngân hàng quốc tế",
+      "ngân hàng quốc tế việt nam",
+      "quốc tế việt nam"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "VIC",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Tập đoàn VINGROUP - CTCP",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "tập đoàn vingroup",
+      "vingroup"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "VID",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Phát triển Thương mại Viễn Đông",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "đầu tư phát triển thương mại viễn đông"
+    ],
+    "tags": [
+      "bán buôn",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "VIP",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Vận tải Xăng dầu VIPCO",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "vận tải xăng dầu vipco"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "VIX",
     "exchange": "HOSE",
     "sector": "Chứng khoán",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Chứng khoán VIX",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán vix"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "VJC",
     "exchange": "HOSE",
     "sector": "Hàng không",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "CTCP Hàng không Vietjet",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "hàng không vietjet",
+      "vietjet",
+      "vietjet air"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "VMD",
     "exchange": "HOSE",
     "sector": "Y tế",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Y Dược phẩm Vimedimex",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "y dược phẩm vimedimex"
+    ],
+    "tags": [
+      "bán buôn"
+    ]
   },
   {
     "ticker": "VND",
     "exchange": "HOSE",
     "sector": "Chứng khoán",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Chứng khoán VNDIRECT",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán vndirect",
+      "vndirect"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "VNG",
     "exchange": "HOSE",
     "sector": "Công nghệ",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Du lịch Thành Thành Công",
+    "industry": "Dịch vụ lưu trú, ăn uống, giải trí",
+    "name_aliases": [
+      "công ty cổ phần vng",
+      "du lịch thành thành công",
+      "vng"
+    ],
+    "tags": [
+      "dịch vụ lưu trú, ăn uống, giải trí"
+    ]
   },
   {
     "ticker": "VNL",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Logistics Vinalink",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "logistics vinalink"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "VNM",
     "exchange": "HOSE",
     "sector": "Thực phẩm & Đồ uống",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "CTCP Sữa Việt Nam",
+    "industry": "Thực phẩm - Đồ uống",
+    "name_aliases": [
+      "công ty sữa việt nam",
+      "sữa việt nam",
+      "vinamilk"
+    ],
+    "tags": [
+      "sữa",
+      "thực phẩm",
+      "thực phẩm - đồ uống",
+      "tiêu dùng",
+      "đồ uống"
+    ]
   },
   {
     "ticker": "VNS",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Logistics",
+    "index_member": "HOSE",
+    "company_name": "CTCP Ánh Dương Việt Nam",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "ánh dương việt nam"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "VOS",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Vận tải Biển Việt Nam",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "vận tải biển việt nam"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "VPB",
     "exchange": "HOSE",
     "sector": "Ngân hàng",
-    "index_member": "VN30"
+    "index_member": "VN30",
+    "company_name": "Ngân hàng TMCP Việt Nam Thịnh Vượng",
+    "industry": "Ngân hàng",
+    "name_aliases": [
+      "ngân hàng việt nam thịnh vượng",
+      "việt nam thịnh vượng",
+      "vpbank"
+    ],
+    "tags": [
+      "ngân hàng"
+    ]
   },
   {
     "ticker": "VPD",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Tiện ích",
+    "index_member": "HOSE",
+    "company_name": "CTCP Phát triển Điện lực Việt Nam",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "phát triển điện lực việt nam"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "VPG",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư Thương mại Xuất nhập khẩu Việt Phát",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "đầu tư thương mại xuất nhập khẩu việt phát"
+    ],
+    "tags": [
+      "bán buôn",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "VPH",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Vạn Phát Hưng",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "vạn phát hưng"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "VPI",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Phát triển Bất động sản Văn Phú",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "phát triển bất động sản văn phú"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "VPL",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Vinpearl",
+    "industry": "Dịch vụ lưu trú, ăn uống, giải trí",
+    "name_aliases": [
+      "vinpearl"
+    ],
+    "tags": [
+      "dịch vụ lưu trú, ăn uống, giải trí"
+    ]
   },
   {
     "ticker": "VPS",
     "exchange": "HOSE",
     "sector": "Chứng khoán",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Thuốc sát trùng Việt Nam ",
+    "industry": "SX Nhựa - Hóa chất",
+    "name_aliases": [
+      "thuốc sát trùng việt nam"
+    ],
+    "tags": [
+      "sx nhựa - hóa chất"
+    ]
   },
   {
     "ticker": "VPX",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Chứng khoán VPBank",
+    "industry": "Chứng khoán",
+    "name_aliases": [
+      "chứng khoán vpbank"
+    ],
+    "tags": [
+      "chứng khoán"
+    ]
   },
   {
     "ticker": "VRC",
     "exchange": "HOSE",
     "sector": "Bất động sản",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Bất động sản và Đầu tư VRC",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "bất động sản và đầu tư vrc"
+    ],
+    "tags": [
+      "bất động sản"
+    ]
   },
   {
     "ticker": "VRE",
     "exchange": "HOSE",
     "sector": "Bán lẻ",
-    "index_member": "VN100"
+    "index_member": "VN100",
+    "company_name": "CTCP Vincom Retail",
+    "industry": "Bất động sản",
+    "name_aliases": [
+      "vincom",
+      "vincom retail"
+    ],
+    "tags": [
+      "bất động sản",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "VSC",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Container Việt Nam",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "container việt nam",
+      "cảng vip",
+      "cảng xanh vip"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "VSH",
     "exchange": "HOSE",
     "sector": "Tiện ích",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Thủy điện Vĩnh Sơn - Sông Hinh",
+    "industry": "Tiện ích",
+    "name_aliases": [
+      "thủy điện vĩnh sơn - sông hinh"
+    ],
+    "tags": [
+      "năng lượng",
+      "tiện ích",
+      "điện"
+    ]
   },
   {
     "ticker": "VSI",
     "exchange": "HOSE",
     "sector": "Xây dựng",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư và Xây dựng Cấp thoát nước",
+    "industry": "Xây dựng",
+    "name_aliases": [
+      "đầu tư và xây dựng cấp thoát nước"
+    ],
+    "tags": [
+      "xây dựng"
+    ]
   },
   {
     "ticker": "VTB",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Viettronics Tân Bình",
+    "industry": "Thiết bị điện",
+    "name_aliases": [
+      "viettronics tân bình"
+    ],
+    "tags": [
+      "thiết bị điện"
+    ]
   },
   {
     "ticker": "VTO",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP Vận tải Xăng dầu Vitaco",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "vận tải xăng dầu vitaco"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "VTP",
     "exchange": "HOSE",
     "sector": "Logistics",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "Tổng Công ty cổ phần Bưu chính Viettel",
+    "industry": "Vận tải - kho bãi",
+    "name_aliases": [
+      "cổ phần bưu chính viettel"
+    ],
+    "tags": [
+      "vận tải",
+      "vận tải - kho bãi"
+    ]
   },
   {
     "ticker": "VVS",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Bán lẻ",
+    "index_member": "HOSE",
+    "company_name": "CTCP Đầu tư phát triển máy Việt Nam",
+    "industry": "Bán buôn",
+    "name_aliases": [
+      "đầu tư phát triển máy việt nam"
+    ],
+    "tags": [
+      "bán buôn",
+      "tiêu dùng"
+    ]
   },
   {
     "ticker": "YBM",
     "exchange": "HOSE",
     "sector": "Vật liệu",
-    "index_member": "HOSE"
+    "index_member": "HOSE",
+    "company_name": "CTCP YBM",
+    "industry": "Vật liệu xây dựng",
+    "name_aliases": [],
+    "tags": [
+      "vật liệu xây dựng"
+    ]
   },
   {
     "ticker": "YEG",
     "exchange": "HOSE",
-    "sector": "Unknown",
-    "index_member": "HOSE"
+    "sector": "Công nghiệp",
+    "index_member": "HOSE",
+    "company_name": "CTCP Tập đoàn Yeah1",
+    "industry": "Công nghiệp",
+    "name_aliases": [
+      "tập đoàn yeah1"
+    ],
+    "tags": [
+      "công nghiệp"
+    ]
   }
 ]
