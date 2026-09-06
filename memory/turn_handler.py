@@ -211,8 +211,17 @@ def _build_agent_state(
     state["ticker"] = route.get("ticker", "")
     state["tickers"] = route.get("tickers") or ([state["ticker"]] if state["ticker"] else [])
     state["sector"] = route.get("sector", "")
+    state["screening_filter"] = route.get("screening")
     state["original_query"] = user_message
     state["time_context"] = route.get("time_context")
+    # Reset per-turn critique-loop state — otherwise it leaks from the prior turn's
+    # checkpoint (critique_attempts>0 forces is_retry in synthesize_final, folds the
+    # prior turn's critique_feedback, and blocks the retry path).
+    state["critique_attempts"] = 0
+    state["critique_feedback"] = ""
+    state["critique_pass"] = True
+    state["report_candidates"] = []
+    state["critique_results"] = []
     return state
 
 
@@ -566,8 +575,10 @@ async def stream_turn(
         # ── Agent path: invoke graph with pre-classified intent/ticker ────────
         intent   = route["intent"]
         ticker   = route.get("ticker", "")
+        tickers  = route.get("tickers", [])
 
-        log.info("llm_route.agent conv=%s intent=%s ticker=%s", conversation_id[:8], intent, ticker)
+        log.info("llm_route.agent conv=%s intent=%s ticker=%s tickers=%s",
+                 conversation_id[:8], intent, ticker, tickers)
         yield _sse_status("routing", agent=intent, ticker=ticker or None)
 
         agent_state = _build_agent_state(route, user_message, conversation_id, user_id, tenant_id, history)

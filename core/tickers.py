@@ -134,6 +134,49 @@ def get_sector_peers(ticker: str, max_peers: int = 10) -> list[str]:
         return _SECTOR_FALLBACK.get(ticker, [ticker])
 
 
+# Sector-label alias → securities.sector value(s). Focus labels (agents/focus.py) don't
+# always equal the securities.sector column ("thép" → "Vật liệu", "năng lượng" → "Dầu khí"
+# + "Tiện ích"), and a few labels span several sectors.
+SECTOR_ALIAS: dict[str, list[str]] = {
+    "thép": ["Vật liệu"],
+    "xi măng": ["Vật liệu"],
+    "vật liệu": ["Vật liệu"],
+    "dầu thô": ["Dầu khí"],
+    "năng lượng": ["Dầu khí", "Tiện ích"],
+    "tiêu dùng": ["Thực phẩm & Đồ uống", "Bán lẻ"],
+    "cao su": ["Nông nghiệp"],
+    "thủy sản": ["Thực phẩm & Đồ uống"],
+    "vận tải": ["Logistics", "Hàng không"],
+}
+
+
+def get_sector_tickers(label: str) -> list[str]:
+    """Map a sector label (e.g. "thép", "ngân hàng") to active tickers via securities.sector.
+
+    Labels that don't equal a sector value go through SECTOR_ALIAS; others match the
+    sector column case-insensitively. Returns [] when the label is empty or no DB.
+    """
+    label = (label or "").strip().lower()
+    if not label:
+        return []
+    sectors = SECTOR_ALIAS.get(label) or [label]
+    tickers: list[str] = []
+    try:
+        from core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                for s in sectors:
+                    cur.execute(
+                        "SELECT ticker FROM securities "
+                        "WHERE is_active = true AND sector ILIKE %s ORDER BY ticker",
+                        (f"%{s}%",),
+                    )
+                    tickers.extend(r[0] for r in cur.fetchall())
+    except Exception:
+        pass
+    return list(dict.fromkeys(tickers))
+
+
 # ── Ticker extraction (shared by graph fan-out + cache key) ──────────────────
 
 _TICKER_RE = re.compile(r'\b([A-Z]{2,5})\b')

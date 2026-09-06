@@ -84,11 +84,20 @@ def gather_data(ticker: str, query: str, time_context: dict | None = None) -> st
         signals = scan_ticker(t, market_df)
         mode_label = f"mã {t}"
     else:
-        active = get_active_tickers()
-        if not active:
-            return "[BREAKOUT]\nKhông lấy được danh sách mã từ bảng securities."
+        from agents.focus import extract_focus_sector
+        from core.tickers import get_sector_tickers
+        label = extract_focus_sector(query)
+        if label:
+            active = get_sector_tickers(label)
+            if not active:
+                return f"[BREAKOUT]\nKhông xác định được mã cho ngành '{label}'."
+            mode_label = f"{len(active)} mã ngành {label}"
+        else:
+            active = get_active_tickers()
+            if not active:
+                return "[BREAKOUT]\nKhông lấy được danh sách mã từ bảng securities."
+            mode_label = f"{len(active)} mã trên sàn"
         signals = scan_all(market_df, active)
-        mode_label = f"{len(active)} mã trên sàn"
     if not signals:
         return f"[BREAKOUT {mode_label}]\nKhông phát hiện tín hiệu breakout trong phiên gần nhất."
     by_type: dict[str, list] = {}
@@ -115,11 +124,20 @@ def run(ticker: str, query: str) -> str:
         mode_label = f"mã **{t}**"
         tickers_scanned = 1
     else:
-        active = get_active_tickers()
-        if not active:
-            return "Không lấy được danh sách mã từ bảng `securities`. Kiểm tra kết nối DB."
+        from agents.focus import extract_focus_sector
+        from core.tickers import get_sector_tickers
+        label = extract_focus_sector(query)
+        if label:
+            active = get_sector_tickers(label)
+            if not active:
+                return f"Không xác định được mã cho ngành '{label}'. Kiểm tra bảng `securities`."
+            mode_label = f"**{len(active)} mã** ngành {label}"
+        else:
+            active = get_active_tickers()
+            if not active:
+                return "Không lấy được danh sách mã từ bảng `securities`. Kiểm tra kết nối DB."
+            mode_label = f"**{len(active)} mã** trên sàn"
         signals = scan_all(market_df, active)
-        mode_label = f"**{len(active)} mã** trên sàn"
         tickers_scanned = len(active)
 
     if not signals:

@@ -395,16 +395,24 @@ def _extract_data_table(analysis: str) -> str:
     return "\n".join(table_lines).strip() if table_lines else ""
 
 
-def gather_data(ticker: str | None, query: str, time_context: dict | None = None) -> str:
+def gather_data(ticker: str | None, query: str, time_context: dict | None = None,
+                tickers: list[str] | None = None) -> str:
     """Fetch valuation + peer comparison data — no LLM call.
 
-    Serves the `valuation` intent (and investment_case's gather). Cross-ticker when the
-    query names ≥2 real tickers, otherwise sector peers for the single ticker.
+    Serves the `valuation` intent (and investment_case's gather). `tickers` is the router's
+    authoritative full list — when it names ≥2 tickers, cross-compare them directly (no
+    query re-parse, which could drop a partner ticker the LLM rewrite omitted). Otherwise
+    fall back to query re-extraction, then sector peers.
     time_context accepted for a uniform gather signature; valuation ratios come from
     the latest `stock_ratios` snapshot (no historical period axis) — pass-through.
     """
     if not ticker:
         return "[CƠ BẢN]\nKhông có mã cổ phiếu."
+
+    if tickers and len(tickers) >= 2:
+        peers = list(dict.fromkeys(tickers))
+        rows = [_fetch_valuation(t) for t in peers]
+        return f"[SO SÁNH {' & '.join(peers)}]\n{_build_analysis(ticker, rows)}"
 
     explicit_tickers = _extract_tickers_from_query(query)
     compare_tickers = [t for t in explicit_tickers if t != ticker]

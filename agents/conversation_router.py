@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import TypedDict
 
-from agents.classifier import INTENTS, OUT_OF_SCOPE_REPLY
+from agents.classifier import INTENTS, OUT_OF_SCOPE_REPLY, is_screening_query
 from agents.focus import Focus, extract_focus_entities, extract_focus_sector, resolve_focus
 
 AGENT_RUN_TOOL: dict = {
@@ -54,7 +54,9 @@ AGENT_RUN_TOOL: dict = {
                     "FX/tỷ giá (USD/VND, EUR/VND), interest rates, and commodity prices. "
                     "Use 'price_action' only for a single named stock's price/volume action. "
                     "Use 'market_brief' for broad market overview (VNINDEX, HNX, overall session). "
-                    "Use 'screening' for filter/scan queries (ROE > x, P/E < y). "
+                    "Use 'screening' for filter/scan queries (ROE > x, P/E < y, RSI < z) — "
+                    "any 'lọc/lọc cổ phiếu/filter/screen' query is screening even when it "
+                    "names a technical indicator like RSI. "
                     "Use 'investment_case' when asked buy/sell/hold recommendation for a stock. "
                     "Use 'valuation' for a stock's valuation metric (P/E, P/B, ROE, EPS, EV/EBITDA), "
                     "comparing it against sector peers, or comparing two or more stocks against each other. "
@@ -84,6 +86,29 @@ AGENT_RUN_TOOL: dict = {
             "reason": {
                 "type": "string",
                 "description": "One short sentence explaining this routing decision (for debugging misroutes).",
+            },
+            "screening": {
+                "type": "array",
+                "description": (
+                    "REQUIRED when intent='screening' AND the query names one or more numeric "
+                    "filters (e.g. 'RSI dưới 30', 'ROE > 20%', 'P/E < 10', 'ROE > 20 AND RSI < 30'). "
+                    "One object per filter; multiple filters are AND-ed. Otherwise omit. "
+                    "indicator is the lower-case metric code — ratio: 'pe', 'pb', 'roe', "
+                    "'roa', 'eps', 'ev_ebitda', 'de', 'gross_margin', 'net_margin', "
+                    "'revenue_growth', 'earnings_growth'; absolute (tỷ VND): 'revenue', "
+                    "'profit'; technical: 'rsi', 'macd', 'volume', 'adx', 'ma20', 'ma50', "
+                    "'ma200' (giá so MA, %), 'pct_52w_high', 'pct_52w_low' (%). "
+                    "op is the comparison, threshold the number."
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "indicator": {"type": "string"},
+                        "op": {"type": "string", "enum": ["<", ">", "<=", ">="]},
+                        "threshold": {"type": "number"},
+                    },
+                    "required": ["indicator", "op", "threshold"],
+                },
             },
             "time_context": {
                 "type": "object",
@@ -241,6 +266,7 @@ class RouteResult(TypedDict, total=False):
     tickers: list[str]  # present when type == "agent" — full ticker list (fan-out/comparison)
     sector: str     # present when type == "agent" — sector/index subject (no ticker)
     query: str      # present when type == "agent"
+    screening: list  # present when type == "agent" — [{indicator, op, threshold}, ...] for screening
     time_context: dict  # present when type == "agent" — {anchor, start_date, end_date, explicit}
     text: str       # present when type == "text"
     segments: list[dict]  # present when type == "mixed" — list[Segment]
@@ -396,6 +422,7 @@ def _parse_agent_fields(
         "tickers": tickers,
         "sector": sector,
         "query": q,
+        "screening": inp.get("screening") or None,
         "time_context": time_context,
         "reason": reason,
     }
@@ -454,6 +481,7 @@ def _fallback_classify(query: str, history: list[dict], focus: Focus | None = No
             tickers=tickers,
             sector="" if tickers else extract_focus_sector(query),
             query=query,
+            screening=r.screening,
             time_context=_parse_time_context(None),
             reason=reason,
         )
@@ -472,6 +500,30 @@ def _trace(decision: str, intent: str = "", ticker: str = "", fallback_used: boo
         })
     except Exception:
         pass
+
+
+def _screening_route(query: str) -> RouteResult:
+    """Deterministic screening route for "lọc/filter/screen" queries the LLM misrouted.
+
+    Extracts an RSI filter via regex when present; other indicators are left to gather's
+    fallback. Never calls the LLM.
+    """
+    from agents.intents.screening import _parse_rsi_filter
+    filters = None
+    parsed = _parse_rsi_filter(query)
+    if parsed:
+        filters = [{"indicator": "rsi", "op": parsed[0], "threshold": parsed[1]}]
+    return RouteResult(
+        type="agent",
+        intent="screening",
+        ticker="",
+        tickers=[],
+        sector=extract_focus_sector(query),
+        query=query,
+        screening=filters,
+        time_context=_parse_time_context(None),
+        reason="screening:deterministic",
+    )
 
 
 def llm_route(
@@ -552,6 +604,13 @@ def llm_route(
 
     if resp.tool_calls:
         tc = resp.tool_calls[0]
+        # Deterministic guard: a screening query must route via needs_agent_run(screening),
+        # never decompose/direct_reply — the LLM can misread "lọc nhiều mã" as a multi-task
+        # decompose. out_of_scope is respected (a "lọc cổ phiếu Mỹ" decline must stay a
+        # decline). Force a screening agent route instead.
+        if is_screening_query(query) and tc.name not in ("needs_agent_run", "out_of_scope"):
+            _trace("screening", deterministic=True)
+            return _screening_route(query)
         if tc.name == "needs_agent_run":
             fields = _parse_agent_fields(tc.input, kind=kind, entities=entities, query_fallback=query)
             if fields:

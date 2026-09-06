@@ -35,6 +35,7 @@ class AgentState(TypedDict, total=False):
     # Intent routing (set by classify_node inside graph)
     intent: str              # "price_action" | "technical_analysis" | "rag_qa" | ...
     sector: str              # sector/index subject when no ticker (macro_sector/market_brief)
+    screening_filter: list   # [{indicator, op, threshold}, ...] for screening intents (router/classifier)
     classify_reason: str     # reason string from RouterResult — e.g. "ticker HPG default"
     # Clarification (set by verify_context node; pending saved to Postgres by verify_context)
     needs_clarification: bool

@@ -241,6 +241,8 @@ ROUTE_CASES = [
     ("Tin tức về HPG trong 3 ngày gần nhất",               "news_sentiment",     "HPG"),
     ("HPG có nên mua không? Cho bull case và bear case",   "investment_case",    "HPG"),
     ("Top 5 mã có ROE cao nhất trong database",            "screening",          None),
+    ("Lọc cổ phiếu có RSI dưới 30",                        "screening",          None),
+    ("Lọc cổ phiếu có P/E dưới 10 và ROE trên 20",         "screening",          None),
     ("Quét cổ phiếu đang breakout tạo đỉnh mới",           "breakout_scan",      None),
     ("Doanh thu và lợi nhuận HPG năm 2024 là bao nhiêu?",  "rag_qa",             "HPG"),
     ("Xin chào, bạn tên gì?",                              None,                 None),
@@ -613,6 +615,121 @@ def test_router_time_context_schema_and_parse():
     assert tc4["explicit"] is False, "no start_date must force explicit=False"
 
 
+def test_llm_route_screening_single_filter(monkeypatch):
+    """Screening filter flows through llm_route → RouteResult (single filter)."""
+    from agents import conversation_router as cr
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "HSG", "NKG"])
+    tc = MagicMock()
+    tc.name = "needs_agent_run"
+    tc.input = {
+        "intent": "screening", "ticker": "", "query": "lọc RSI dưới 30 ngành thép",
+        "screening": [{"indicator": "rsi", "op": "<", "threshold": 30}], "reason": "screening",
+    }
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+
+    route = cr.llm_route("lọc RSI dưới 30 ngành thép", [], "sys", client=client)
+
+    assert route["type"] == "agent"
+    assert route["intent"] == "screening"
+    assert route["sector"] == "thép"
+    assert route["screening"] == [{"indicator": "rsi", "op": "<", "threshold": 30}]
+
+
+def test_llm_route_screening_multi_filter_and(monkeypatch):
+    """Multiple filters AND-ed flow through llm_route."""
+    from agents import conversation_router as cr
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "HSG", "NKG"])
+    tc = MagicMock()
+    tc.name = "needs_agent_run"
+    tc.input = {
+        "intent": "screening", "ticker": "", "query": "lọc ROE > 20 và RSI < 30 ngành thép",
+        "screening": [
+            {"indicator": "roe", "op": ">", "threshold": 20},
+            {"indicator": "rsi", "op": "<", "threshold": 30},
+        ],
+        "reason": "screening",
+    }
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+
+    route = cr.llm_route("lọc ROE > 20 và RSI < 30 ngành thép", [], "sys", client=client)
+
+    assert route["type"] == "agent"
+    assert route["intent"] == "screening"
+    assert route["screening"] == [
+        {"indicator": "roe", "op": ">", "threshold": 20},
+        {"indicator": "rsi", "op": "<", "threshold": 30},
+    ]
+
+
+def test_llm_route_screening_overrides_decompose(monkeypatch):
+    """'lọc RSI < 30' misrouted to decompose → deterministic screening agent route."""
+    from agents import conversation_router as cr
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["VCB", "BID", "CTG"])
+    tc = MagicMock()
+    tc.name = "decompose"
+    tc.input = {"segments": [{"kind": "agent", "intent": "technical_analysis",
+                              "ticker": "", "query": "lọc RSI dưới 30 ngành ngân hàng", "reason": ""}]}
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+
+    route = cr.llm_route("lọc RSI dưới 30 ngành ngân hàng", [], "sys", client=client)
+
+    assert route["type"] == "agent"
+    assert route["intent"] == "screening"
+    assert route["sector"] == "ngân hàng"
+    assert route["screening"] == [{"indicator": "rsi", "op": "<", "threshold": 30}]
+
+
+def test_llm_route_comparison_does_not_inherit_prior(monkeypatch):
+    """REPRO: 'so sánh ACB, VNM, FPT' after 'so sánh VCB, TCB' must NOT inherit VCB/TCB.
+
+    The LLM is mocked to HALLUCINATE ticker=VCB (copied from the prior turn), so this
+    isolates whether the deterministic entities override in _parse_agent_fields wins.
+    """
+    from agents import conversation_router as cr
+    from agents.focus import Focus
+    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["VCB", "TCB", "ACB", "VNM", "FPT"])
+    tc = MagicMock()
+    tc.name = "needs_agent_run"
+    tc.input = {"intent": "valuation", "ticker": "VCB", "query": "so sánh VCB và TCB", "reason": ""}
+    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
+    client = MagicMock(); client.generate.return_value = resp
+
+    route = cr.llm_route(
+        "so sánh ACB, VNM, FPT", [], "sys", client=client,
+        focus=Focus(tickers=["VCB", "TCB"], intent="valuation", query="so sánh VCB và TCB"),
+    )
+    assert route["type"] == "agent"
+    assert route["tickers"] == ["ACB", "VNM", "FPT"], f"got {route['tickers']!r} — inherited prior VCB/TCB"
+
+
+def test_classifier_screening_schema():
+    from agents.classifier import _TOOL
+    assert "screening" in _TOOL["input_schema"]["properties"], "classify_intent must expose screening"
+
+
+def test_looks_like_screening_guard():
+    from agents.graph import _looks_like_screening
+    assert _looks_like_screening("lọc RSI < 30")
+    assert _looks_like_screening("lọc cổ phiếu ngành thép có ROE > 20")
+    assert not _looks_like_screening("phân tích kỹ thuật HPG")
+    assert not _looks_like_screening("giá cổ phiếu VCB hôm nay")
+
+
+def test_screening_gather_lambda_not_shadowed():
+    """screening lambda must call the MODULE's gather_data, not a shadowed param."""
+    from agents.graph import _get_gather_map
+    from agents.intents import screening as screening_mod
+    fn = _get_gather_map()["screening"]
+    f = [{"indicator": "rsi", "op": "<", "threshold": 30}]
+    with patch.object(screening_mod, "gather_data", return_value="[SCREENING] ok") as m:
+        out = fn("", "lọc RSI < 30", None, sf=f)
+    assert out == "[SCREENING] ok"
+    assert m.call_args.kwargs["screening"] == f
+
+
 def test_llm_route_llm_error_returns_text():
     """LLM exception → short text error, NOT market_brief."""
     from agents import conversation_router as cr
@@ -912,7 +1029,8 @@ GOLDEN_ROUTES = [
     ("price_action",       "HPG",  "simple"),
     ("investment_case",    "HPG",  "decompose"),
     ("macro_sector",       "",     "decompose"),
-    ("screening",          "",     "decompose"),
+    ("screening",          "",     "simple"),
+    ("breakout_scan",      "",     "simple"),
     ("conversation",       "",     "conversation"),
 ]
 
@@ -1098,6 +1216,21 @@ class TestUnitGatherAndApproval:
         })
         assert out["sub_tasks"][0]["intent"] == "valuation"
         assert out["sub_tasks"][0]["tickers"] == ["HPG", "VCB"]
+        assert out["sub_tasks"][0]["question"] == "so sánh P/E HPG và VCB"
+
+    def test_fast_path_stored_tickers_recovers_question(self, monkeypatch):
+        """Router carried tickers=[HPG,VCB] but LLM query dropped VCB → question recovers."""
+        monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "VCB"])
+        out = build_single_subtask_node({
+            "intent": "valuation",
+            "ticker": "HPG",
+            "tickers": ["HPG", "VCB"],      # router carried full list
+            "query": "P/E HPG",              # LLM rewrite dropped VCB
+            "original_query": "so sánh P/E HPG và VCB",
+        })
+        st = out["sub_tasks"][0]
+        assert st["tickers"] == ["HPG", "VCB"]
+        assert st["question"] == "so sánh P/E HPG và VCB", "question must recover both tickers"
 
     def test_fast_path_single_ticker(self, monkeypatch):
         monkeypatch.setattr("core.tickers.get_tickers", lambda: ["HPG", "VCB"])
@@ -1108,6 +1241,30 @@ class TestUnitGatherAndApproval:
             "original_query": "RSI HPG",
         })
         assert out["sub_tasks"][0]["tickers"] == ["HPG"]
+
+
+def test_valuation_gather_explicit_tickers_compare(monkeypatch):
+    """Root fix: valuation uses the router's tickers list, not query re-parse → no sector peers."""
+    from agents.intents import fundamentals as f
+    monkeypatch.setattr(f, "_fetch_valuation", lambda t: {"ticker": t})
+    monkeypatch.setattr(f, "_build_analysis", lambda ticker, rows: f"analysis({len(rows)})")
+    out = f.gather_data("HPG", "so sánh HPG và VCB", tickers=["HPG", "VCB"])
+    assert "[SO SÁNH HPG & VCB]" in out
+    assert "analysis(2)" in out, "must compare exactly 2 tickers, not sector peers"
+
+
+def test_build_agent_state_resets_critique_loop():
+    """Multi-turn bug: critique-loop state must NOT leak from the prior turn's checkpoint."""
+    from memory.turn_handler import _build_agent_state
+    route = {"intent": "valuation", "ticker": "ACB", "tickers": ["ACB", "VNM"],
+             "query": "so sánh ACB và VNM", "sector": "", "screening": None,
+             "time_context": None}
+    state = _build_agent_state(route, "so sánh ACB, VNM", "cid", "u", "t", [])
+    assert state["critique_attempts"] == 0
+    assert state["critique_feedback"] == ""
+    assert state["critique_pass"] is True
+    assert state["report_candidates"] == []
+    assert state["critique_results"] == []
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1279,6 +1436,20 @@ def test_llm_route_e2e_prior_fpt_bare_continuation_inherits():
     assert route["ticker"] == "FPT", f"bare continuation must inherit FPT, got {route.get('ticker')!r}"
     assert route["tickers"] == ["FPT"], f"got {route.get('tickers')!r}"
     print(f"\n[prior FPT → 'sâu hơn'] ticker={route.get('ticker')!r}")
+
+
+@pytest.mark.e2e
+def test_llm_route_e2e_screening_extracts_filter():
+    """screening with a numeric filter → llm_route extracts the structured filter array."""
+    from agents.conversation_router import llm_route
+    route = llm_route("Lọc RSI dưới 30 ngành thép", [], _ROUTE_SYSTEM)
+    assert route["type"] == "agent", f"expected agent, got {route}"
+    assert route["intent"] == "screening", f"got {route['intent']!r}"
+    filters = route.get("screening") or []
+    rsi = next((f for f in filters if f.get("indicator") == "rsi"), None)
+    assert rsi, f"expected an rsi filter in {filters!r}"
+    assert rsi.get("op") == "<" and rsi.get("threshold") == 30, f"got {rsi!r}"
+    print(f"\n[screening] filters={filters!r}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

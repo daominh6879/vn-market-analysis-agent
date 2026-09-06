@@ -79,6 +79,16 @@ def _resolve_time_context(intent: str, query: str) -> dict:
 # Intents that require multi-angle decomposition — always go through decompose_node.
 # All others use the fast path (build_single_subtask_node) when a ticker is present.
 _COMPLEX_INTENTS = frozenset({"market_brief", "investment_case", "macro_sector"})
+# Leaf intents that are sector-wide (no single ticker): they must NOT decompose, but
+# they also can't take the ticker-gated "simple" branch above. Route them to the fast
+# path with an empty ticker — their gather_data resolves the subject from the query
+# itself (screening resolves its sector; breakout_scan scans sector or full market).
+_SECTOR_LEAF_INTENTS = frozenset({"screening", "breakout_scan"})
+
+def _looks_like_screening(query: str) -> bool:
+    """Alias of agents.classifier.is_screening_query (graph guard + tests)."""
+    from agents.classifier import is_screening_query
+    return is_screening_query(query)
 
 
 # ── Node −1: classify_node ────────────────────────────────────────────────────
@@ -107,6 +117,7 @@ def classify_node(state: AgentState) -> dict:
 
     # Pre-classified by conversation_router reroute — skip LLM classification.
     pre_intent = state.get("intent", "")
+    screening_filter = state.get("screening_filter")
     if pre_intent and pre_intent != "conversation":
         from dataclasses import dataclass
         @dataclass
@@ -121,6 +132,16 @@ def classify_node(state: AgentState) -> dict:
             state.get("query", ""),
             messages=state.get("messages"),
         )
+        screening_filter = result.screening or screening_filter
+
+    # Deterministic guard: "lọc RSI < 30" is screening even when the LLM leans
+    # technical_analysis (RSI keyword) or macro_sector — force it so it routes to the
+    # fast path instead of decompose. Never override a decline. Check both the router's
+    # rewritten query and the verbatim original (a rewrite can drop the "lọc" keyword).
+    q = state.get("query", "") or state.get("original_query", "")
+    if _looks_like_screening(q) and result.intent not in ("out_of_scope", "conversation"):
+        result.intent = "screening"
+        result.reason = f"{result.reason} [screening:lọc]"
 
     try:
         from langfuse import get_client, observe  # noqa: F401
@@ -140,6 +161,7 @@ def classify_node(state: AgentState) -> dict:
     return {
         "intent": result.intent,
         "ticker": result.ticker or "",
+        "screening_filter": screening_filter,
         "classify_reason": result.reason,
         "time_context": time_context,
     }
@@ -342,9 +364,9 @@ def _get_gather_map() -> dict:
             "news_sentiment":     lambda t, q, tc=None: news_sentiment.gather_data(t, q, tc),
             "macro_sector":       lambda t, q, tc=None: macro_sector.gather_data(t, q, tc),
             "investment_case":    lambda t, q, tc=None: investment_case.gather_data(t, q, tc),
-            "screening":          lambda t, q, tc=None: screening.gather_data(t, q, tc),
+            "screening":          lambda t, q, tc=None, sf=None: screening.gather_data(t, q, tc, screening=sf),
             "rag_qa":             lambda t, q, tc=None: _qa.retrieve_only(q, ticker=t),
-            "valuation":          lambda t, q, tc=None: fundamentals.gather_data(t, q, tc),
+            "valuation":          lambda t, q, tc=None, tickers=None: fundamentals.gather_data(t, q, tc, tickers=tickers),
             "breakout_scan":      lambda t, q, tc=None: breakout.gather_data(t, q, tc),
             "market_brief":       lambda t, q, tc=None: "[market_brief: xem riêng]",
         })
@@ -369,16 +391,17 @@ def _is_gather_error(s: str) -> bool:
     return "— lỗi:" in s
 
 
-def _safe_gather(fn, ticker: str, question: str, tc: dict | None = None) -> str:
+def _safe_gather(fn, ticker: str, question: str, tc: dict | None = None, **kw) -> str:
     """Call a gather fn, converting any error to an inline error string (never raises).
 
     tc (time_context) is passed only when non-None, so 2-arg gather fns (unit tests,
-    direct gather_data calls) keep working unchanged.
+    direct gather_data calls) keep working unchanged. Extra kwargs (e.g. screening) are
+    forwarded to fn.
     """
     try:
         if tc is None:
-            return fn(ticker, question) or ""
-        return fn(ticker, question, tc) or ""
+            return fn(ticker, question, **kw) or ""
+        return fn(ticker, question, tc, **kw) or ""
     except Exception as exc:
         return f"[{ticker} — lỗi: {exc}]"
 
@@ -459,11 +482,16 @@ def run_subqueries_node(state: AgentState) -> dict:
             fn = gather.get("macro_sector")
             intent = "macro_sector"
 
-        if intent in _FANOUT_INTENTS:
+        if intent in _FANOUT_INTENTS and tickers:
             data = _gather_tickers(fn, tickers, question, tc)
         else:
             primary = tickers[0] if tickers else fallback_ticker
-            data = _safe_gather(fn, primary, question, tc)
+            if intent == "screening":
+                data = _safe_gather(fn, primary, question, tc, screening=task.get("screening"))
+            elif intent == "valuation":
+                data = _safe_gather(fn, primary, question, tc, tickers=tickers)
+            else:
+                data = _safe_gather(fn, primary, question, tc)
 
         # Judge emptiness on the raw gather output, not the composed label string —
         # the question/label text must not flip a task to "empty".
@@ -783,6 +811,8 @@ def _route_after_clarify(state: AgentState) -> str:
         route = "conversation"
     elif intent == "market_brief":
         route = "market_brief"
+    elif intent in _SECTOR_LEAF_INTENTS:
+        route = "simple"
     elif (intent
             and intent not in _COMPLEX_INTENTS
             and ticker):
@@ -810,18 +840,19 @@ def build_single_subtask_node(state: AgentState) -> dict:
     original = state.get("original_query", "")
 
     stored_tickers = state.get("tickers") or []
+    # Multi-ticker comparison: the LLM-expanded `query` may drop the 2nd/3rd ticker.
+    # original_query is verbatim — when it names ≥2 known tickers, prefer it so gather_data
+    # (e.g. valuation) can cross-compare both. Applies regardless of the ticker-list source:
+    # the `tickers` list can be right (from the router) while `query` is not.
+    if len(extract_tickers(query)) < 2 and len(extract_tickers(original)) >= 2:
+        query = original
+
     if stored_tickers:
         # Router carried the full ticker list end-to-end (via Focus) — trust it, no
         # second independent re-extraction (which would drop a comparison's 2nd/3rd ticker).
         tickers = list(stored_tickers)
     else:
         # Direct-graph-invocation callers (tests) never went through the router: re-extract.
-        # Multi-ticker comparison: the LLM-expanded `query` may drop the 2nd/3rd ticker.
-        # original_query is verbatim — when it names ≥2 known tickers, prefer it so
-        # gather_data (e.g. valuation) can cross-compare both.
-        if len(extract_tickers(query)) < 2:
-            if len(extract_tickers(original)) >= 2:
-                query = original
         tickers = extract_tickers(query) or ([ticker] if ticker else [])
 
     try:
@@ -836,7 +867,12 @@ def build_single_subtask_node(state: AgentState) -> dict:
     except Exception:
         pass
     return {
-        "sub_tasks": [{"intent": intent, "tickers": tickers, "question": query}],
+        "sub_tasks": [{
+            "intent": intent,
+            "tickers": tickers,
+            "question": query,
+            "screening": state.get("screening_filter"),
+        }],
     }
 
 

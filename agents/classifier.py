@@ -19,6 +19,7 @@ class RouterResult:
     intent: str
     ticker: str | None
     reason: str
+    screening: list | None = None  # [{indicator, op, threshold}, ...] for screening intents
 
 
 # ── intents ───────────────────────────────────────────────────────────────────
@@ -36,6 +37,18 @@ OUT_OF_SCOPE_REPLY = (
     "Xin lỗi, tôi chỉ hỗ trợ phân tích chứng khoán Việt Nam (HOSE/HNX/UPCOM). "
     "Tôi chưa hỗ trợ chứng khoán nước ngoài, tiền mã hoá (crypto) hay ngoại hối ngoài VND."
 )
+
+_SCREENING_HINTS = ("lọc", "filter", "screen", "sàng lọc")
+
+
+def is_screening_query(query: str) -> bool:
+    """Deterministic screening signal: "lọc"/"filter"/"screen" → screening.
+
+    Overrides an ambiguous LLM intent (RSI/MACD keywords pull toward technical_analysis)
+    or a misroute to decompose ("lọc nhiều mã" misread as multi-task).
+    """
+    q = (query or "").lower()
+    return any(h in q for h in _SCREENING_HINTS)
 
 
 # ── LLM classifier ────────────────────────────────────────────────────────────
@@ -80,6 +93,12 @@ Rules:
 - If the query mentions a Vietnamese company by name (not ticker), use your knowledge of
   HOSE/HNX listed companies to resolve it to its ticker symbol.
   If you do not know the ticker, leave ticker empty and classify intent based on context.
+- A query that FILTERS/SELECTS stocks by a criterion ("lọc", "lọc cổ phiếu", "filter",
+  "screen", "sàng lọc") → `screening`, even when the criterion is a technical indicator
+  (RSI, MACD) — "lọc RSI < 30" is screening, NOT technical_analysis.
+- For `screening` intent that names numeric filters (e.g. "RSI dưới 30", "ROE > 20%",
+  "P/E < 10", "ROE > 20 AND RSI < 30"), set the `screening` ARRAY with one object per
+  filter {indicator, op, threshold} — multiple filters are AND-ed. Do not leave it out.
 
 Call the classify_intent tool."""
 
@@ -123,6 +142,29 @@ _TOOL = {
                 "type": "string",
                 "description": "One sentence explaining the classification.",
             },
+            "screening": {
+                "type": "array",
+                "description": (
+                    "REQUIRED when intent='screening' AND the query names one or more numeric "
+                    "filters (e.g. 'RSI dưới 30', 'ROE > 20%', 'P/E < 10', 'ROE > 20 AND RSI < 30'). "
+                    "One object per filter; multiple filters are AND-ed. Otherwise omit. "
+                    "indicator is the lower-case metric code — ratio: 'pe', 'pb', 'roe', "
+                    "'roa', 'eps', 'ev_ebitda', 'de', 'gross_margin', 'net_margin', "
+                    "'revenue_growth', 'earnings_growth'; absolute (tỷ VND): 'revenue', "
+                    "'profit'; technical: 'rsi', 'macd', 'volume', 'adx', 'ma20', 'ma50', "
+                    "'ma200' (giá so MA, %), 'pct_52w_high', 'pct_52w_low' (%). "
+                    "op is the comparison, threshold the number."
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "indicator": {"type": "string"},
+                        "op": {"type": "string", "enum": ["<", ">", "<=", ">="]},
+                        "threshold": {"type": "number"},
+                    },
+                    "required": ["indicator", "op", "threshold"],
+                },
+            },
         },
         "required": ["intent", "ticker", "reason"],
     },
@@ -160,11 +202,12 @@ def llm_classify(query: str, client=None, messages: list | None = None) -> Route
             intent = tc.input.get("intent", "conversation")
             ticker = tc.input.get("ticker") or None
             reason = tc.input.get("reason", "llm classification")
+            screening = tc.input.get("screening") or None
             if intent not in INTENTS:
                 intent = "conversation"
             if ticker and not ticker.strip():
                 ticker = None
-            return RouterResult(intent=intent, ticker=ticker, reason=f"llm:{reason}")
+            return RouterResult(intent=intent, ticker=ticker, reason=f"llm:{reason}", screening=screening)
 
         # Text-scan fallback when LLM skips tool call
         text_lower = resp.text.strip().lower()
