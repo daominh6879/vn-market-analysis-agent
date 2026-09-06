@@ -77,11 +77,15 @@ TABLE stock_prices
   volume       BIGINT
 
 TABLE securities
-  ticker       TEXT PRIMARY KEY
-  exchange     TEXT     -- 'HOSE', 'HNX', 'UPCOM'
-  sector       TEXT     -- e.g. 'Thép', 'Ngân hàng', 'Công nghệ'
-  industry     TEXT
-  company_name TEXT
+  ticker        TEXT PRIMARY KEY
+  exchange      TEXT     -- 'HOSE', 'HNX', 'UPCOM'
+  sector        TEXT     -- coarse sector e.g. 'Ngân hàng', 'Vật liệu', 'Công nghệ'
+  industry      TEXT     -- fine-grained e.g. 'Chế biến Thủy sản', 'Vật liệu xây dựng'
+  company_name  TEXT     -- e.g. 'CTCP Sữa Việt Nam'
+  name_aliases  TEXT[]   -- search aliases e.g. 'vinamilk', 'hòa phát'
+  tags          TEXT[]   -- labels e.g. 'thép', 'năng lượng', 'thủy sản'
+  index_member  TEXT[]   -- 'VN30' / 'VN100'
+  is_active     BOOLEAN
 
 Period filter rules:
 - Annual data: WHERE period = '{_LATEST_YEAR}'
