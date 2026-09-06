@@ -139,6 +139,7 @@ class OllamaClient(LLMClient):
             "model": model or self._default_model,
             "messages": msgs,
             "stream": stream,
+            "think": False,
             "options": {"num_predict": max_tokens},
         }
         if tools:
