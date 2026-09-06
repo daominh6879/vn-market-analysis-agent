@@ -305,16 +305,16 @@ def _validate_ticker(raw) -> str:
         return ""
     try:
         from core.tickers import get_tickers
-        if t in get_tickers():
-            return t
+        universe = get_tickers()
     except Exception:
-        # Ticker table unavailable (Postgres down) — fall back to a shape check so a
-        # plausible code survives instead of silently dropping to "" (which would make
-        # every price_action gather fail with "ticker không được rỗng").
-        import re
-        if re.fullmatch(r"[A-Z]{3}", t):
-            return t
-    return ""
+        universe = []
+    if universe:
+        return t if t in universe else ""
+    # Universe unavailable/empty (DB down + no known_tickers on disk) → accept any
+    # well-formed VN code so the tool's DB→API fallback decides availability instead
+    # of silently dropping the ticker (which downstream defaults to HPG).
+    import re
+    return t if re.fullmatch(r"[A-Z]{3}", t) else ""
 
 
 def _validate_ticker_with_reason(raw, reason: str = "") -> tuple[str, str]:
@@ -379,7 +379,16 @@ def _parse_agent_fields(
         if not ticker:
             ticker = tickers[0]
     else:
-        tickers = extract_focus_entities(q) or ([ticker] if ticker else [])
+        # Honor focus.py's deterministic "did the user name a new subject" answer first
+        # (`entities` from resolve_focus), else the raw query. The LLM's rewrite can
+        # swallow a new subject ("còn vnm", bare "FPT" after a prior ticker) into the
+        # prior turn's ticker — never trust it over the deterministic extraction.
+        det = entities or extract_focus_entities(query_fallback)
+        if det:
+            tickers = list(det)
+            ticker = ticker if (ticker and ticker in det) else det[0]
+        else:
+            tickers = extract_focus_entities(q) or ([ticker] if ticker else [])
     sector = "" if tickers else extract_focus_sector(q)
     return {
         "intent": intent,
@@ -431,7 +440,13 @@ def _fallback_classify(query: str, history: list[dict], focus: Focus | None = No
         return RouteResult(type="text", text=OUT_OF_SCOPE_REPLY, reason="out_of_scope")
     if r.intent and r.intent != "conversation":
         ticker, reason = _validate_ticker_with_reason(r.ticker, "fallback_classify")
-        tickers = extract_focus_entities(query) or ([ticker] if ticker else [])
+        tickers = extract_focus_entities(query)
+        if tickers:
+            # Deterministic raw-query ticker wins over the classifier's rewrite — same
+            # new-subject swallow as the main path ("còn vnm", bare "FPT").
+            ticker = tickers[0]
+        elif ticker:
+            tickers = [ticker]
         return RouteResult(
             type="agent",
             intent=r.intent,
@@ -550,7 +565,10 @@ def llm_route(
                     continue
                 seg_kind = raw.get("kind", "")
                 if seg_kind == "agent":
-                    fields = _parse_agent_fields(raw, kind="fresh", entities=None, query_fallback=query)
+                    # query_fallback = the SEGMENT's own query, not the whole message —
+                    # otherwise the raw-query ticker extraction leaks every ticker into
+                    # every segment of a mixed-intent decompose.
+                    fields = _parse_agent_fields(raw, kind="fresh", entities=None, query_fallback=raw.get("query") or query)
                     if fields:
                         segments.append({"kind": "agent", **fields})
                 elif seg_kind == "out_of_scope":

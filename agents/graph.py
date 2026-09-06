@@ -569,14 +569,29 @@ def synthesize_final(state: AgentState) -> dict:
         )
 
     strict_note = " TUYỆT ĐỐI không đưa khuyến nghị mua/bán/nắm giữ." if strict else ""
+    # Block-count-aware synthesis rule: the old fixed prompt forced "synthesize ALL
+    # blocks, miss none" even when the context held a single block, so the model added
+    # an empty "tổng hợp các khối khác" section plus a redundant "kết luận". Scope the
+    # multi-block instruction to multi-block contexts only.
+    n_blocks = len(sub_results)
+    if n_blocks > 1:
+        block_rule = (
+            "Ngữ cảnh chứa NHIỀU khối dữ liệu từ nhiều nguồn khác nhau "
+            "(giá, kỹ thuật, định giá, tin tức, vĩ mô...). "
+            "Tổng hợp ĐẦY ĐỦ TẤT CẢ các khối, mỗi khối thành một phần riêng, "
+            "không bỏ sót khối nào, không chỉ trả lời về một khối duy nhất. "
+        )
+    else:
+        block_rule = (
+            "Ngữ cảnh chỉ có một khối dữ liệu. "
+            "Trả lời trực tiếp câu hỏi bằng chính số liệu trong khối đó. "
+        )
     system_prompt = (
         "Bạn là chuyên gia phân tích tài chính Việt Nam. "
         "Trả lời bằng Markdown, trích dẫn số liệu cụ thể từ ngữ cảnh. "
-        "Ngữ cảnh chứa NHIỀU khối dữ liệu từ nhiều nguồn khác nhau "
-        "(giá, kỹ thuật, định giá, tin tức, vĩ mô...). "
-        "Hãy tổng hợp ĐẦY ĐỦ TẤT CẢ các khối — mỗi khối thành một phần riêng trong câu trả lời — "
-        "không bỏ sót khối nào, không chỉ trả lời về giá. "
-        "KHÔNG thêm phần 'Lưu ý quan trọng' hay disclaimer về nguồn trích xuất. "
+        + block_rule
+        + "KHÔNG thêm mục 'Tổng hợp các khối khác', 'Kết luận', 'Lưu ý', "
+        "hay chú thích rằng ngữ cảnh thiếu/đủ dữ liệu. "
         "KHÔNG nhắc lại các nhãn nội bộ trong ngoặc vuông."
         + strict_note
     )

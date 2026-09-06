@@ -2,7 +2,7 @@
 core/tickers.py — Runtime ticker list from securities table.
 
 Primary: SELECT ticker FROM securities WHERE is_active = true ORDER BY ticker
-Fallback: TICKERS env var (comma-separated), then ["HPG"]
+Fallback: data/known_tickers.txt → TICKERS env → empty (never a single default ticker)
 """
 from __future__ import annotations
 
@@ -33,7 +33,12 @@ _SECTOR_FALLBACK: dict[str, list[str]] = {
 
 
 def get_tickers() -> list[str]:
-    """Return active tickers from securities table. Falls back to TICKERS env var."""
+    """Return active tickers from securities table.
+
+    Fallback order: full known universe on disk → TICKERS env → empty. Never collapse
+    to a single default ticker — a `["HPG"]`-only universe silently drops every other
+    code (e.g. "giá VNM" → HPG) before tools can even try their DB→API fallback.
+    """
     try:
         from core.db import get_conn
         with get_conn() as conn:
@@ -47,7 +52,21 @@ def get_tickers() -> list[str]:
     except Exception:
         pass
 
-    env = os.getenv("TICKERS", "HPG")
+    from pathlib import Path
+    known_path = Path(__file__).resolve().parent.parent / "data" / "known_tickers.txt"
+    try:
+        if known_path.exists():
+            ticks = [
+                ln.strip().upper()
+                for ln in known_path.read_text(encoding="utf-8").splitlines()
+                if ln.strip()
+            ]
+            if ticks:
+                return ticks
+    except Exception:
+        pass
+
+    env = os.getenv("TICKERS", "")
     return [t.strip().upper() for t in env.split(",") if t.strip()]
 
 
