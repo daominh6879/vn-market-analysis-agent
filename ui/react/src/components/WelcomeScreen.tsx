@@ -2,7 +2,7 @@ import React from 'react'
 
 const SUGGESTIONS = [
   { icon: '📊', text: 'HPG giá hôm nay?' },
-  { icon: '🏦', text: 'VCB P/E ngành ngân hàng?' },
+  { icon: '🏦', text: 'VCB P/E so với ngành ngân hàng?' },
   { icon: '🌏', text: 'Thị trường hôm nay?' },
   { icon: '🔍', text: 'Lọc RSI dưới 30 ngành thép?' },
 ]
