@@ -84,7 +84,7 @@ export default function ChatArea({
       <div className="px-4 pb-4 pt-2">
         <form
           onSubmit={handleSubmit}
-          className="max-w-3xl mx-auto bg-surface border border-border rounded-2xl flex items-end gap-2 px-4 py-3 focus-within:border-[#555] transition"
+          className="max-w-3xl mx-auto bg-surface border border-border rounded-2xl flex items-end gap-2 px-4 py-3 focus-within:border-accent/50 focus-within:ring-1 focus-within:ring-accent/30 transition"
         >
           <textarea
             ref={textareaRef}

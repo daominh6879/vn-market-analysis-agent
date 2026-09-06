@@ -46,6 +46,8 @@ export default function App() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [view, setView] = useState<'chat' | 'approvals'>('chat')
   const [pendingCount, setPendingCount] = useState(0)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Load conversations when auth changes
   useEffect(() => {
@@ -80,6 +82,7 @@ export default function App() {
     setConversations([])
     setActiveId(null)
     setMessages([])
+    setSidebarOpen(false)
   }
 
   function handleNew() {
@@ -87,28 +90,36 @@ export default function App() {
     setMessages([])
     setView('chat')
     localStorage.removeItem(LS_CONV)
+    setSidebarOpen(false)
   }
 
   function handleApprovals() {
     setView('approvals')
+    setSidebarOpen(false)
     if (auth?.role === 'admin') {
       getPendingSessions().then(s => setPendingCount(s.length))
     }
   }
 
   async function handleDelete(id: string) {
-    await deleteConversation(id)
-    if (activeId === id) {
-      setActiveId(null)
-      setMessages([])
-      localStorage.removeItem(LS_CONV)
+    setDeletingId(id)
+    try {
+      await deleteConversation(id)
+      if (activeId === id) {
+        setActiveId(null)
+        setMessages([])
+        localStorage.removeItem(LS_CONV)
+      }
+      setConversations(prev => prev.filter(c => c.conversation_id !== id))
+    } finally {
+      setDeletingId(null)
     }
-    setConversations(prev => prev.filter(c => c.conversation_id !== id))
   }
 
-  async function handleSelect(id: string) {
+  function handleSelect(id: string) {
     if (id === activeId) return
     setActiveId(id)
+    setSidebarOpen(false)
   }
 
   const handleSend = useCallback(async (text: string) => {
@@ -206,19 +217,50 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-bg overflow-hidden">
-      <Sidebar
-        auth={auth}
-        conversations={conversations}
-        activeId={activeId}
-        view={view}
-        pendingCount={pendingCount}
-        onSelect={handleSelect}
-        onNew={handleNew}
-        onDelete={handleDelete}
-        onLogout={handleLogout}
-        onApprovals={handleApprovals}
-      />
-      <main className="flex-1 flex flex-col overflow-hidden">
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div
+        className={`fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-200 lg:static lg:translate-x-0 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <Sidebar
+          auth={auth}
+          conversations={conversations}
+          activeId={activeId}
+          view={view}
+          pendingCount={pendingCount}
+          deletingId={deletingId}
+          onSelect={handleSelect}
+          onNew={handleNew}
+          onDelete={handleDelete}
+          onLogout={handleLogout}
+          onApprovals={handleApprovals}
+        />
+      </div>
+
+      <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {/* Mobile top bar */}
+        <div className="lg:hidden flex items-center gap-3 px-3 py-2 border-b border-border bg-sidebar flex-shrink-0">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 rounded-lg text-muted hover:text-text hover:bg-surface transition"
+            aria-label="Mở menu"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <span className="text-sm font-semibold text-text">📈 VN Stock Chat</span>
+        </div>
+
         {view === 'approvals' && auth.role === 'admin'
           ? <ApprovalPanel />
           : <ChatArea

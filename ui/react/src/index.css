@@ -12,6 +12,16 @@
     box-sizing: border-box;
   }
 
+  ::selection {
+    background: rgba(16, 163, 127, 0.35);
+    color: #ececec;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   ::-webkit-scrollbar {
     width: 5px;
     height: 5px;
@@ -48,7 +58,8 @@
   .prose-chat ol {
     @apply list-decimal list-outside pl-5 mb-3 space-y-1;
   }
-  .prose-chat li { @apply text-text-muted; }
+  .prose-chat li { @apply text-text; }
+  .prose-chat strong { @apply text-text font-semibold; }
   .prose-chat code {
     @apply bg-[#1a1a1a] text-[#e2b96f] rounded px-1.5 py-0.5 text-sm font-mono;
   }
