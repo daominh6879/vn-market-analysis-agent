@@ -487,7 +487,7 @@ def run_subqueries_node(state: AgentState) -> dict:
         else:
             primary = tickers[0] if tickers else fallback_ticker
             if intent == "screening":
-                data = _safe_gather(fn, primary, question, tc, screening=task.get("screening"))
+                data = _safe_gather(fn, primary, question, tc, sf=task.get("screening"))
             elif intent == "valuation":
                 data = _safe_gather(fn, primary, question, tc, tickers=tickers)
             else:
