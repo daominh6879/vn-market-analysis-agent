@@ -137,7 +137,11 @@ def get_sector_peers(ticker: str, max_peers: int = 10) -> list[str]:
 # ── Ticker extraction (shared by graph fan-out + cache key) ──────────────────
 
 _TICKER_RE = re.compile(r'\b([A-Z]{2,5})\b')
-_TICKER_STOPWORDS = frozenset({"VE", "VA", "LA", "CO", "DE", "VS", "ROE", "ROA", "EPS", "PE", "PB"})
+_TICKER_STOPWORDS = frozenset({
+    "VE", "VA", "LA", "CO", "DE", "VS", "ROE", "ROA", "EPS", "PE", "PB",
+    # Currency codes — never VN stock tickers. "USD/VND" is an FX query, not a stock pair.
+    "USD", "VND", "EUR", "JPY", "GBP", "CNY", "KRW", "CHF", "AUD", "CAD", "SGD",
+})
 
 
 def raw_tickers(query: str) -> list[str]:
