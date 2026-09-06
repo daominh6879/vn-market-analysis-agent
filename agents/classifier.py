@@ -189,9 +189,18 @@ def llm_classify(query: str, client=None, messages: list | None = None) -> Route
                     history_msgs.append(Message(role=role, content=str(content)[:400]))
         history_msgs.append(Message(role="user", content=query))
 
+        system = _SYSTEM
+        from core.tickers import _load_sector_labels
+        sector_labels = sorted(_load_sector_labels())
+        if sector_labels:
+            system += (
+                "\n\nAvailable sector/industry labels (when routing macro_sector/screening, "
+                "use these exact names): " + ", ".join(sector_labels) + "."
+            )
+
         resp = client.generate(
             messages=history_msgs,
-            system=_SYSTEM,
+            system=system,
             tools=[_TOOL],
             max_tokens=256,
             temperature=0,

@@ -8,28 +8,7 @@ from __future__ import annotations
 
 import os
 import re
-
-# Fallback hardcoded when securities table is unavailable
-_RATIO_FALLBACK = [
-    "VCB", "BID", "CTG", "MBB", "TCB", "VPB", "ACB", "STB",
-    "HPG", "HSG", "NKG", "TLH",
-    "FPT", "CMG", "VGI",
-    "VHM", "VIC", "NVL", "PDR", "DXG",
-]
-
-_SECTOR_FALLBACK: dict[str, list[str]] = {
-    t: ["VCB", "BID", "CTG", "MBB", "TCB", "VPB", "ACB", "STB"]
-    for t in ["VCB", "BID", "CTG", "MBB", "TCB", "VPB", "ACB", "STB"]
-} | {
-    t: ["HPG", "HSG", "NKG", "TLH"]
-    for t in ["HPG", "HSG", "NKG", "TLH"]
-} | {
-    t: ["FPT", "CMG", "VGI"]
-    for t in ["FPT", "CMG", "VGI"]
-} | {
-    t: ["VHM", "VIC", "NVL", "PDR", "DXG"]
-    for t in ["VHM", "VIC", "NVL", "PDR", "DXG"]
-}
+import unicodedata
 
 
 def get_tickers() -> list[str]:
@@ -71,7 +50,7 @@ def get_tickers() -> list[str]:
 
 
 def get_ratio_tickers() -> list[str]:
-    """Return VN30+VN100 active tickers for daily ratio pre-fetch. Falls back to hardcoded list."""
+    """Return VN30+VN100 active tickers for daily ratio pre-fetch. Falls back to hose_universe data."""
     try:
         from core.db import get_conn
         with get_conn() as conn:
@@ -91,11 +70,29 @@ def get_ratio_tickers() -> list[str]:
             return [r[0] for r in rows]
     except Exception:
         pass
-    return list(_RATIO_FALLBACK)
+    try:
+        from data.hose_universe import load_hose_universe
+        return [u["ticker"] for u in load_hose_universe() if u.get("index_member") in ("VN30", "VN100")]
+    except Exception:
+        return []
+
+
+def _sector_peers_fallback(ticker: str, max_peers: int = 10) -> list[str]:
+    """Derive same-sector peers from hose_universe data when securities is unavailable."""
+    try:
+        from data.hose_universe import load_hose_universe
+        universe = load_hose_universe()
+        sector = next((u["sector"] for u in universe if u["ticker"] == ticker), "")
+        if sector and sector not in ("Unknown", ""):
+            peers = [u["ticker"] for u in universe if u["sector"] == sector and u["ticker"] != ticker]
+            return ([ticker] + peers)[:max_peers]
+    except Exception:
+        pass
+    return [ticker]
 
 
 def get_sector_peers(ticker: str, max_peers: int = 10) -> list[str]:
-    """Return active VN30/VN100 tickers in the same sector. Falls back to hardcoded map."""
+    """Return active VN30/VN100 tickers in the same sector. Falls back to hose_universe data."""
     try:
         from core.db import get_conn
         with get_conn() as conn:
@@ -106,7 +103,7 @@ def get_sector_peers(ticker: str, max_peers: int = 10) -> list[str]:
                 )
                 row = cur.fetchone()
         if not row or row[0] in ("Unknown", ""):
-            return _SECTOR_FALLBACK.get(ticker, [ticker])
+            return _sector_peers_fallback(ticker, max_peers)
         sector = row[0]
         with get_conn() as conn:
             with conn.cursor() as cur:
@@ -125,56 +122,114 @@ def get_sector_peers(ticker: str, max_peers: int = 10) -> list[str]:
                 rows = cur.fetchall()
         peers = [r[0] for r in rows]
         if not peers:
-            return _SECTOR_FALLBACK.get(ticker, [ticker])
+            return _sector_peers_fallback(ticker, max_peers)
         # Ensure query ticker is included
         if ticker not in peers:
             peers = [ticker] + peers[: max_peers - 1]
         return peers
     except Exception:
-        return _SECTOR_FALLBACK.get(ticker, [ticker])
-
-
-# Sector-label alias → securities.sector value(s). Focus labels (agents/focus.py) don't
-# always equal the securities.sector column ("thép" → "Vật liệu", "năng lượng" → "Dầu khí"
-# + "Tiện ích"), and a few labels span several sectors.
-SECTOR_ALIAS: dict[str, list[str]] = {
-    "thép": ["Vật liệu"],
-    "xi măng": ["Vật liệu"],
-    "vật liệu": ["Vật liệu"],
-    "dầu thô": ["Dầu khí"],
-    "năng lượng": ["Dầu khí", "Tiện ích"],
-    "tiêu dùng": ["Thực phẩm & Đồ uống", "Bán lẻ"],
-    "cao su": ["Nông nghiệp"],
-    "thủy sản": ["Thực phẩm & Đồ uống"],
-    "vận tải": ["Logistics", "Hàng không"],
-}
+        return _sector_peers_fallback(ticker, max_peers)
 
 
 def get_sector_tickers(label: str) -> list[str]:
-    """Map a sector label (e.g. "thép", "ngân hàng") to active tickers via securities.sector.
+    """Map a sector label (e.g. "thép", "ngân hàng") to active tickers.
 
-    Labels that don't equal a sector value go through SECTOR_ALIAS; others match the
-    sector column case-insensitively. Returns [] when the label is empty or no DB.
+    Direct labels match the sector column case-insensitively; alias labels ("thép",
+    "năng lượng", "tiêu dùng", …) match a stored `tags` entry. Data-driven — no
+    label→sector mapping here.
     """
     label = (label or "").strip().lower()
     if not label:
         return []
-    sectors = SECTOR_ALIAS.get(label) or [label]
     tickers: list[str] = []
     try:
         from core.db import get_conn
         with get_conn() as conn:
             with conn.cursor() as cur:
-                for s in sectors:
-                    cur.execute(
-                        "SELECT ticker FROM securities "
-                        "WHERE is_active = true AND sector ILIKE %s ORDER BY ticker",
-                        (f"%{s}%",),
-                    )
-                    tickers.extend(r[0] for r in cur.fetchall())
+                cur.execute(
+                    "SELECT DISTINCT ticker FROM securities "
+                    "WHERE is_active = true AND "
+                    "(sector ILIKE %s OR industry ILIKE %s OR tags @> %s) "
+                    "ORDER BY ticker",
+                    (f"%{label}%", f"%{label}%", [label]),
+                )
+                tickers = [r[0] for r in cur.fetchall()]
     except Exception:
         pass
-    return list(dict.fromkeys(tickers))
+    return tickers
+
+
+def _load_sector_labels() -> list[str]:
+    """Distinct lowercased sector values + tags (longest first).
+
+    Source of truth for focus-sector matching in agents/focus.py — replaces the old
+    hardcoded _SECTOR_KEYWORDS gazetteer. Reads securities; falls back to the
+    hose_universe data file when the DB is unavailable.
+    """
+    labels: list[str] = []
+    try:
+        from core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT DISTINCT lower(sector) FROM securities "
+                    "WHERE sector IS NOT NULL AND sector != 'Unknown'"
+                )
+                labels = [r[0] for r in cur.fetchall() if r[0]]
+                cur.execute(
+                    "SELECT DISTINCT lower(industry) FROM securities "
+                    "WHERE industry IS NOT NULL AND industry != 'Unknown'"
+                )
+                labels.extend(r[0] for r in cur.fetchall() if r[0])
+                cur.execute("SELECT DISTINCT unnest(tags) FROM securities")
+                labels.extend(r[0] for r in cur.fetchall() if r[0])
+    except Exception:
+        pass
+    if not labels:
+        try:
+            from data.hose_universe import load_hose_universe
+            for u in load_hose_universe():
+                s = (u.get("sector") or "").lower()
+                if s and s != "unknown":
+                    labels.append(s)
+                i = (u.get("industry") or "").lower()
+                if i and i != "unknown":
+                    labels.append(i)
+                labels.extend(t for t in (u.get("tags") or []) if t)
+        except Exception:
+            pass
+    return sorted(set(labels), key=len, reverse=True)
+
+
+def _load_sectors() -> list[str]:
+    """Distinct lowercased `sector` values from securities (coarse only, no tags/industry).
+
+    Used where a downstream filter matches the coarse sector taxonomy — e.g. Qdrant
+    `payload.sector` (BCTC chunks), which stores the lowercased `securities.sector`.
+    """
+    sectors: list[str] = []
+    try:
+        from core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT DISTINCT lower(sector) FROM securities "
+                    "WHERE sector IS NOT NULL AND sector != 'Unknown'"
+                )
+                sectors = [r[0] for r in cur.fetchall() if r[0]]
+    except Exception:
+        pass
+    if not sectors:
+        try:
+            from data.hose_universe import load_hose_universe
+            sectors = sorted({
+                (u.get("sector") or "").lower()
+                for u in load_hose_universe()
+                if u.get("sector") and u["sector"] != "Unknown"
+            })
+        except Exception:
+            pass
+    return sorted(set(sectors))
 
 
 # ── Ticker extraction (shared by graph fan-out + cache key) ──────────────────
@@ -209,15 +264,73 @@ def extract_tickers(query: str) -> list[str]:
 
     Universe filter drops currency codes and other non-VN uppercase tokens. Falls back
     to raw_tickers() (no universe filter) when the securities table is unavailable, so
-    a degraded DB never silently drops valid tickers.
+    a degraded DB never silently drops valid tickers. When no valid ticker code is
+    present, falls through to company-name/alias resolution ("vinamilk" → VNM).
     """
     hits = raw_tickers(query)
-    if not hits:
-        return []
     try:
         known = set(get_tickers())
     except Exception:
         known = set()
-    if not known:
-        return list(dict.fromkeys(hits))
-    return list(dict.fromkeys(t for t in hits if t in known))
+    if known:
+        code_hits = [t for t in hits if t in known]
+        return list(dict.fromkeys(code_hits)) if code_hits else resolve_name_tickers(query)
+    return list(dict.fromkeys(hits)) if hits else resolve_name_tickers(query)
+
+
+# ── Company-name/alias → ticker resolution ────────────────────────────────────
+
+_MIN_ALIAS_LEN = 4
+
+
+def _normalize(s: str) -> str:
+    """Lowercase + strip diacritics, so "Hòa Phát" and "hoa phat" match."""
+    return "".join(c for c in unicodedata.normalize("NFKD", (s or "").lower())
+                   if not unicodedata.combining(c))
+
+
+def _load_name_index() -> dict[str, str]:
+    """Map {normalized alias/company_name: ticker} for active securities."""
+    index: dict[str, str] = {}
+    try:
+        from core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT ticker, name_aliases, company_name "
+                    "FROM securities WHERE is_active = true"
+                )
+                rows = cur.fetchall()
+        for ticker, aliases, company in rows:
+            for a in (aliases or []):
+                a = _normalize(a)
+                if len(a) >= _MIN_ALIAS_LEN:
+                    index.setdefault(a, ticker)
+            c = _normalize(company)
+            if len(c) >= _MIN_ALIAS_LEN:
+                index.setdefault(c, ticker)
+    except Exception:
+        pass
+    return index
+
+
+def resolve_name_tickers(query: str) -> list[str]:
+    """Resolve company names/aliases in `query` to tickers (diacritic-insensitive)."""
+    q = _normalize(query)
+    if not q:
+        return []
+    index = _load_name_index()
+    if not index:
+        return []
+    matched: list[tuple[int, str]] = []
+    for alias in sorted(index, key=len, reverse=True):  # longest phrase wins
+        pos = q.find(alias)
+        if pos >= 0:
+            matched.append((pos, index[alias]))
+    out: list[str] = []
+    seen: set[str] = set()
+    for _, t in sorted(matched):
+        if t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out

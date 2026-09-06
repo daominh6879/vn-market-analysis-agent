@@ -22,19 +22,7 @@ from dataclasses import dataclass, field
 
 from llm.types import Message
 
-# Vietnamese sector values from securities table
-_SECTOR_EXAMPLES = (
-    "vật liệu (thép, sắt, kim loại), "
-    "ngân hàng (tài chính, tín dụng), "
-    "công nghệ (phần mềm, IT), "
-    "bất động sản, "
-    "tiêu dùng, "
-    "bán lẻ, "
-    "thực phẩm đồ uống, "
-    "năng lượng (dầu khí, điện)"
-)
-
-_SYSTEM = f"""\
+_SYSTEM = """\
 Bạn là query interpreter cho hệ thống phân tích tài chính Việt Nam.
 Phân tích câu hỏi của người dùng và gọi tool interpret_query.
 
@@ -91,10 +79,7 @@ Quy tắc tickers:
   - Không giới hạn HPG/VCB/FPT — mọi mã CK Việt Nam đều hợp lệ
   - Nếu không đề cập cụ thể → []
 
-Quy tắc sector (dùng tiếng Việt từ danh sách): {_SECTOR_EXAMPLES}
-  - "ngành thép" → "vật liệu"
-  - "ngành ngân hàng / tài chính" → "ngân hàng"
-  - "ngành công nghệ / IT" → "công nghệ"
+Quy tắc sector (dùng đúng tên ngành trong danh sách cuối prompt, viết thường):
   - Nếu hỏi về ticker cụ thể (không phải ngành) → null
   - Nếu không đề cập ngành → null
 
@@ -173,9 +158,15 @@ def interpret(question: str, client=None) -> QueryIntent:
         from llm.factory import create_client
         client = create_client()
 
+    system = _SYSTEM
+    from core.tickers import _load_sectors
+    sectors = _load_sectors()
+    if sectors:
+        system += "\n\nCác ngành có dữ liệu (dùng đúng tên, viết thường): " + ", ".join(sectors) + "."
+
     resp = client.generate(
         messages=[Message(role="user", content=question)],
-        system=_SYSTEM,
+        system=system,
         tools=[_TOOL],
         max_tokens=512,
     )

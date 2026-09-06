@@ -59,16 +59,17 @@ def _fetch_price_and_indicators(ticker: str) -> tuple[str | None, str | None]:
 
 
 def _lookup_sector(ticker: str) -> str | None:
-    """Lookup sector from securities table. Returns lowercase sector string or None."""
+    """Lookup sector from securities table. Returns lowercase sector+industry+tags string or None."""
     try:
         from core.db import get_conn
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT sector, industry FROM securities WHERE ticker = %s", (ticker,))
+                cur.execute("SELECT sector, industry, tags FROM securities WHERE ticker = %s", (ticker,))
                 row = cur.fetchone()
                 if row:
-                    sector, industry = row
-                    return f"{sector} {industry}".lower()
+                    sector, industry, tags = row
+                    tag_text = " ".join(tags or [])
+                    return f"{sector} {industry} {tag_text}".lower()
     except Exception:
         pass
     return None

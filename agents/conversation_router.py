@@ -72,7 +72,8 @@ AGENT_RUN_TOOL: dict = {
                 "type": "string",
                 "description": (
                     "Stock ticker (2-5 uppercase letters), or empty string if not applicable. "
-                    "Resolve from conversation context when the current query is implicit."
+                    "A company name (e.g. 'vinamilk', 'hòa phát') is acceptable — it resolves "
+                    "to the ticker. Resolve from conversation context when the current query is implicit."
                 ),
             },
             "query": {
@@ -324,7 +325,8 @@ def _validate_ticker(raw) -> str:
     (VNINDEX, VN30, ...) are NOT stock tickers — the router LLM handles them via
     market_brief/macro_sector intent (ticker=""), so they drop to "" here and the
     graph's clarify/fan-out path re-resolves the subject instead of fetching a
-    nonexistent code. Company names, "NGANHANG", and foreign codes drop too.
+    nonexistent code. Company names ("vinamilk") resolve to their ticker; "NGANHANG",
+    ambiguous names, and foreign codes drop too.
     """
     t = (raw or "").strip().upper()
     if not t:
@@ -335,7 +337,12 @@ def _validate_ticker(raw) -> str:
     except Exception:
         universe = []
     if universe:
-        return t if t in universe else ""
+        if t in universe:
+            return t
+        # Not a code — try company name/alias resolution (only when unambiguous).
+        from core.tickers import resolve_name_tickers
+        names = resolve_name_tickers(raw)
+        return names[0] if len(names) == 1 else ""
     # Universe unavailable/empty (DB down + no known_tickers on disk) → accept any
     # well-formed VN code so the tool's DB→API fallback decides availability instead
     # of silently dropping the ticker (which downstream defaults to HPG).
@@ -568,6 +575,16 @@ def llm_route(
     # Anchor time resolution to today so the router can map relative phrases to dates.
     from datetime import date as _date
     system_prompt = f"Hôm nay là {_date.today().isoformat()}.\n" + system_prompt
+
+    # Ground sector routing in the real securities vocabulary (sector/industry/tags),
+    # so a sector/screening query uses the exact labels that get_sector_tickers matches.
+    from core.tickers import _load_sector_labels
+    sector_labels = sorted(_load_sector_labels())
+    if sector_labels:
+        system_prompt += (
+            "\n\nCác nhóm ngành/lĩnh vực đang có dữ liệu (khi câu hỏi về ngành, dùng đúng "
+            "tên trong danh sách này để viết query): " + ", ".join(sector_labels) + "."
+        )
 
     if client is None:
         from llm.factory import create_client

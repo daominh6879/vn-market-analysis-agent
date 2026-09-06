@@ -49,32 +49,8 @@ def extract_focus_entities(query: str) -> list[str]:
     return extract_tickers(query or "")
 
 
-# Sector/index subject gazetteer → canonical short label. First match wins (more-specific
-# keywords listed before their broader parent). Bounded heuristic: a query with no keyword
-# (or an unaccented spelling) returns "" — the turn still carries the intent; only the short
-# subject label is dropped.
-_SECTOR_KEYWORDS = (
-    ("công nghệ thông tin", "công nghệ"),
-    ("bất động sản", "bất động sản"),
-    ("chứng khoán", "chứng khoán"),
-    ("ngân hàng", "ngân hàng"),
-    ("bảo hiểm", "bảo hiểm"),
-    ("năng lượng", "năng lượng"),
-    ("dầu khí", "năng lượng"),
-    ("dầu thô", "năng lượng"),
-    ("thép", "thép"),
-    ("vật liệu", "vật liệu"),
-    ("xi măng", "vật liệu"),
-    ("bán lẻ", "bán lẻ"),
-    ("thực phẩm", "tiêu dùng"),
-    ("đồ uống", "tiêu dùng"),
-    ("tiêu dùng", "tiêu dùng"),
-    ("vận tải", "vận tải"),
-    ("hàng không", "vận tải"),
-    ("cao su", "cao su"),
-    ("dệt may", "dệt may"),
-    ("thủy sản", "thủy sản"),
-    ("xây dựng", "xây dựng"),
+# Market-index subjects (not in securities data — checked before sector labels).
+_INDEX_SUBJECTS = (
     ("vnindex", "VNINDEX"),
     ("vn-index", "VNINDEX"),
     ("vn30", "VN30"),
@@ -85,13 +61,20 @@ _SECTOR_KEYWORDS = (
 def extract_focus_sector(query: str) -> str:
     """Deterministic sector/index subject for macro_sector / market_brief queries.
 
-    Returns a canonical short label (e.g. "ngân hàng", "thép", "VNINDEX") or "" when the
-    query names no known sector/index. Used to carry the subject across turns when there
-    is no specific ticker.
+    Returns the longest known sector label/tag present in the query — sourced from
+    `securities.sector` + `securities.tags` (data-driven, no hardcoded gazetteer) — or
+    "" when the query names no known sector/index. Used to carry the subject across
+    turns when there is no specific ticker.
     """
     q = (query or "").lower()
-    for kw, label in _SECTOR_KEYWORDS:
+    if not q:
+        return ""
+    for kw, label in _INDEX_SUBJECTS:
         if kw in q:
+            return label
+    from core.tickers import _load_sector_labels
+    for label in _load_sector_labels():
+        if label in q:
             return label
     return ""
 
