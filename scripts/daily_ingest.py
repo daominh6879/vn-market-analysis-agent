@@ -2,14 +2,17 @@
 scripts/daily_ingest.py — One-command daily data refresh for all active securities.
 
 Runs every table's incremental fetch in order:
-  1. ohlcv_daily + foreign_flows (Fireant, single pass per ticker)
-  2. foreign_flows latest session (VCI price board — real traded value)
-  3. market_index_daily (VCI index provider)
-  4. market_quotes (global quotes — commodity/fx/crypto)
+  1. corporate_events (CafeF/TCBS calendar)
+  2. ohlcv_daily + foreign_flows (Fireant, single pass per ticker)
+  3. foreign_flows latest session (VCI price board — real traded value)
+  4. market_index_daily (VCI index provider)
+  5. stock_prices (vnstock, incremental)
+  6. stock_ratios (vnstock KBS)
+  7. market_quotes (global quotes — commodity/fx/crypto)
 
-Step 1 derives foreign value from volume x close because Fireant only exposes
+Step 2 derives foreign value from volume x close because Fireant only exposes
 foreign volume, and it writes with ON CONFLICT DO NOTHING so it never clobbers
-a better source. Step 2 is that better source: VCI reports the real traded
+a better source. Step 3 is that better source: VCI reports the real traded
 value, but only for the current session. Mirrors the Dagster pair
 foreign_flows_1730 (VCI) / ohlcv_daily_1830 (Fireant).
 
@@ -84,8 +87,38 @@ def main() -> None:
             "Market index daily (365 days)",
         )
 
+        # Stock prices (1-year backfill)
+        ok &= run(
+            [PYTHON, "ingest/fetch_prices.py", "--all-securities", "--days-back", "365"],
+            "Stock prices (vnstock, 1-year backfill)",
+        )
+
+        # Stock ratios (vnstock KBS)
+        ok &= run(
+            [PYTHON, "ingest/fetch_ratios.py"],
+            "Stock ratios (vnstock KBS)",
+        )
+
+        # Corporate events (populate once)
+        ok &= run(
+            [PYTHON, "ingest/fetch_corporate_events.py"],
+            "Corporate events (CafeF/TCBS)",
+        )
+
+        # Global quotes (populate once)
+        ok &= run(
+            [PYTHON, "ingest/fetch_global_quotes.py"],
+            "Global quotes (market_quotes)",
+        )
+
     else:
         print(f"=== DAILY INGEST — {today} ===")
+
+        # Corporate events (morning calendar — CafeF/TCBS)
+        ok &= run(
+            [PYTHON, "ingest/fetch_corporate_events.py"],
+            "Corporate events (CafeF/TCBS)",
+        )
 
         # OHLCV + foreign flows (incremental, all active tickers)
         ok &= run(
@@ -100,6 +133,24 @@ def main() -> None:
         ok &= run(
             [PYTHON, "ingest/fetch_index.py", "--days", "5"],
             "Market index daily",
+        )
+
+        # Stock prices (vnstock, incremental)
+        ok &= run(
+            [PYTHON, "ingest/fetch_prices.py", "--all-securities"],
+            "Stock prices (vnstock)",
+        )
+
+        # Stock ratios (vnstock KBS)
+        ok &= run(
+            [PYTHON, "ingest/fetch_ratios.py"],
+            "Stock ratios (vnstock KBS)",
+        )
+
+        # Global quotes (commodity/fx/crypto/gold)
+        ok &= run(
+            [PYTHON, "ingest/fetch_global_quotes.py"],
+            "Global quotes (market_quotes)",
         )
 
     # Audit at end

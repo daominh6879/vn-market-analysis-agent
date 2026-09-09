@@ -33,16 +33,25 @@ def _latest_price_date(ticker: str) -> str | None:
         return None
 
 
+def _last_weekday(d: date) -> date:
+    """Most recent Mon–Fri on/before `d` (market-closed weekend guard)."""
+    from datetime import date, timedelta
+    while d.weekday() >= 5:
+        d -= timedelta(days=1)
+    return d
+
+
 def fetch_and_insert(ticker: str, from_date: str, to_date: str) -> int:
-    from datetime import date
+    from datetime import date, timedelta
 
     latest = _latest_price_date(ticker)
-    today = date.today().isoformat()
-    if latest and latest >= today:
+    # "Up to date" = latest covers the last weekday, not calendar today — on
+    # weekends the market is closed, so a Saturday run must skip rather than
+    # re-fetch every ticker and burn the vnstock rate limit for nothing.
+    if latest and latest >= _last_weekday(date.today()).isoformat():
         return 0  # already up to date
 
     if latest and latest > from_date:
-        from datetime import timedelta
         from_date = (date.fromisoformat(latest) + timedelta(days=1)).isoformat()  # skip already-fetched day
 
     try:
@@ -95,14 +104,47 @@ def fetch_and_insert(ticker: str, from_date: str, to_date: str) -> int:
 
 
 def main() -> None:
+    import time
+    from datetime import date, timedelta
+
     parser = argparse.ArgumentParser(description="Tải giá cổ phiếu vào Postgres")
-    parser.add_argument("--ticker", default="HPG")
+    parser.add_argument("--ticker", default="")
+    parser.add_argument("--all-securities", action="store_true",
+                        help="Dùng tất cả active tickers từ securities table")
+    parser.add_argument("--days-back", type=int, default=2,
+                        help="Số ngày lùi cho --all-securities (default 2)")
     parser.add_argument("--from",   dest="from_date", default="2022-01-01")
     parser.add_argument("--to",     dest="to_date",   default="2024-12-31")
     args = parser.parse_args()
 
-    print(f"Tải giá {args.ticker} ({args.from_date} → {args.to_date})...")
-    n = fetch_and_insert(args.ticker, args.from_date, args.to_date)
+    today = date.today().isoformat()
+
+    if args.all_securities:
+        from core.tickers import get_tickers
+        tickers = get_tickers()
+        from_date = str(date.today() - timedelta(days=args.days_back))
+        print(f"INCREMENTAL: {len(tickers)} active tickers ({from_date} → {today})")
+        total = 0
+        failed = []
+        for t in tickers:
+            try:
+                n = fetch_and_insert(t, from_date, today)
+                total += n
+                if n:
+                    print(f"  {t}: {n} rows")
+            except Exception as e:
+                print(f"  {t}: FAILED — {e}", file=sys.stderr)
+                failed.append(t)
+            time.sleep(3.2)  # stay under vnstock 20 req/min rate limit
+        print(f"\nTotal: {total} rows upserted")
+        if failed:
+            print(f"Failed ({len(failed)}): {', '.join(failed)}", file=sys.stderr)
+            sys.exit(1)
+        return
+
+    ticker = args.ticker or "HPG"
+    print(f"Tải giá {ticker} ({args.from_date} → {args.to_date})...")
+    n = fetch_and_insert(ticker, args.from_date, args.to_date)
     print(f"Đã insert {n} rows vào stock_prices")
 
 

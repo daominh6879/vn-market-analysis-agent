@@ -1,4 +1,4 @@
-.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-fetch-ticker news-backfill news-reindex test-sentiment mcp-server mcp-inspect test-tools test-chaos migrate-b28 test-b28 api-b28 test-b30 eval-b30 eval-b30-notes test-b31 api-b31 curl-stream-b31 ui-b31 ui-chainlit ui-react test-b32 test-b32-unit api-b32 ingest-migrate ingest-daily ingest-ohlcv ingest-foreign ingest-index audit test-fireant test-intents expose
+.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-fetch-ticker news-backfill news-reindex test-sentiment mcp-server mcp-inspect test-tools test-chaos migrate-b28 test-b28 api-b28 test-b30 eval-b30 eval-b30-notes test-b31 api-b31 curl-stream-b31 ui-b31 ui-chainlit ui-react test-b32 test-b32-unit api-b32 ingest-migrate ingest-daily ingest-ohlcv ingest-foreign ingest-index ingest-prices ingest-ratios ingest-quotes ingest-events audit test-fireant test-intents expose
 
 up:
 	docker compose up -d
@@ -206,6 +206,10 @@ test-b29:
 migrate-b32:
 	python -c "from core.db import run_migration; run_migration('infra/migrations/030_pending_context.sql')"
 
+# Bài 33 — per-message trace + graph metadata
+migrate-b33:
+	python -c "from core.db import run_migration; run_migration('infra/migrations/033_messages_trace_meta.sql')"
+
 test-b29-load:
 	pytest tests/test_bai29_episodic.py::test_load_20_episodes_no_context_bloat -v -s
 
@@ -289,6 +293,22 @@ ingest-foreign-live:
 # Market index daily (VNINDEX/HNX/UPCOM/VN30/HNX30)
 ingest-index:
 	python ingest/fetch_index.py --days $(or $(DAYS),30)
+
+# Stock prices (vnstock Quote, incremental, all active tickers)
+ingest-prices:
+	python ingest/fetch_prices.py --all-securities
+
+# Stock ratios (vnstock KBS — VN30+VN100)
+ingest-ratios:
+	python ingest/fetch_ratios.py
+
+# Global quotes (indices/commodity/crypto/FX/gold → market_quotes)
+ingest-quotes:
+	python ingest/fetch_global_quotes.py
+
+# Corporate events (CafeF/TCBS calendar → corporate_events)
+ingest-events:
+	python ingest/fetch_corporate_events.py
 
 # DB completeness audit (all active tickers)
 audit:
