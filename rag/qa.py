@@ -35,50 +35,31 @@ def _get_bm25(collection: str):
     return _bm25_cache[collection]
 
 
-def _sql_answer(question: str, client) -> str:
-    """Generate + execute SQL, return formatted answer.
+def _sql_answer_from_rows(question: str, rows_text: str, client) -> str:
+    """Synthesize the final answer from SQL rows already fetched by retrieve_only().
 
-    Retries up to 2 times when the LLM hallucinates a forbidden table name —
-    each retry appends the bad table name so the LLM knows to avoid it.
+    Does NOT call execute_safe() itself — text-to-SQL is nondeterministic, so a second
+    independent call here could silently generate a different query than the one whose
+    rows are shown as "context", making the cited context diverge from the answer.
     """
-    import re as _re
-    from rag.sql_agent import execute_safe, SQLAgentError, SecurityError
-
-    extra_ctx = ""
-    for attempt in range(3):
-        q = question if not extra_ctx else f"{question}\n\n[CORRECTION: {extra_ctx}]"
-        try:
-            result = execute_safe(q, client=client)
-            rows_text = result.format_answer()
-            resp = client.generate(
-                messages=[Message(
-                    role="user",
-                    content=(
-                        f"Câu hỏi: {question}\n\n"
-                        f"Dữ liệu từ DB:\n{rows_text}\n\n"
-                        "Trả lời ngắn gọn bằng tiếng Việt, trích dẫn số liệu cụ thể. "
-                        "Đổi đơn vị cho dễ đọc (chia 1e9 → tỷ đồng)."
-                    ),
-                )],
-                system=(
-                    "Bạn là trợ lý phân tích tài chính. Dựa vào dữ liệu đã cho, trả lời câu hỏi. "
-                    "KHÔNG giải thích cách làm, KHÔNG suy luận, KHÔNG nhắc tên cột hay metric_code. "
-                    "Trả lời TRỰC TIẾP bằng 1-3 câu sạch."
-                ),
-                max_tokens=512,
-            )
-            return resp.text.strip()
-        except SecurityError as exc:
-            m = _re.search(r"Access to table '(\w+)'", str(exc))
-            if m:
-                bad = m.group(1)
-                extra_ctx += (
-                    f"Table '{bad}' does NOT exist. "
-                    "Use ONLY: financial_facts, stock_prices, securities. "
-                )
-        except Exception as exc:
-            return f"Lỗi truy vấn DB: {exc}"
-    return "Không thể tạo SQL hợp lệ sau 3 lần thử. Hãy thử câu hỏi khác."
+    resp = client.generate(
+        messages=[Message(
+            role="user",
+            content=(
+                f"Câu hỏi: {question}\n\n"
+                f"Dữ liệu từ DB:\n{rows_text}\n\n"
+                "Trả lời ngắn gọn bằng tiếng Việt, trích dẫn số liệu cụ thể. "
+                "Đổi đơn vị cho dễ đọc (chia 1e9 → tỷ đồng)."
+            ),
+        )],
+        system=(
+            "Bạn là trợ lý phân tích tài chính. Dựa vào dữ liệu đã cho, trả lời câu hỏi. "
+            "KHÔNG giải thích cách làm, KHÔNG suy luận, KHÔNG nhắc tên cột hay metric_code. "
+            "Trả lời TRỰC TIẾP bằng 1-3 câu sạch."
+        ),
+        max_tokens=512,
+    )
+    return resp.text.strip()
 
 
 def _rag_answer(question: str, ticker: Optional[str], client) -> str:
@@ -158,23 +139,39 @@ def _rag_answer(question: str, ticker: Optional[str], client) -> str:
             return resp.text.strip()
 
 
-def retrieve_only(question: str, ticker: Optional[str] = None) -> str:
+def _fetch_sql_rows_text(question: str, client) -> str:
+    """Run text-to-SQL once and format the rows. Single source of truth for the SQL
+    path — retrieve_only() and answer() both call this so the context shown to the
+    caller is always exactly what the SQL answer is synthesized from (text-to-SQL is
+    nondeterministic, so calling execute_safe() a second time for the same question
+    can silently return different rows and make the cited context diverge from the
+    generated answer)."""
+    try:
+        from rag.sql_agent import execute_safe
+        result = execute_safe(question, client=client)
+        if result.rows:
+            return f"[DỮ LIỆU SQL]\n{result.format_answer()}"
+        return ""
+    except Exception as exc:
+        return f"[DỮ LIỆU SQL]\nLỗi: {exc}"
+
+
+def retrieve_only(question: str, ticker: Optional[str] = None, client=None) -> str:
     """Retrieve context (SQL rows + RAG chunks) without LLM synthesis."""
     route = route_classify(question)
     if route.label == "ngoài_phạm_vi":
         return f"Ngoài phạm vi: {route.reason}"
 
+    if client is None:
+        from llm.factory import create_client as _create
+        client = _create()
+
     parts: list[str] = []
 
     if route.label in ("số_liệu", "cả_hai"):
-        try:
-            from rag.sql_agent import execute_safe
-            from llm.factory import create_client as _create
-            result = execute_safe(question, client=_create())
-            if result.rows:
-                parts.append(f"[DỮ LIỆU SQL]\n{result.format_answer()}")
-        except Exception as exc:
-            parts.append(f"[DỮ LIỆU SQL]\nLỗi: {exc}")
+        sql_part = _fetch_sql_rows_text(question, client)
+        if sql_part:
+            parts.append(sql_part)
 
     if route.label in ("diễn_giải", "cả_hai"):
         try:
@@ -211,13 +208,20 @@ def answer(question: str, ticker: Optional[str] = None, client=None) -> str:
         )
 
     if route.label == "số_liệu":
-        return _sql_answer(question, client)
+        rows_text = _fetch_sql_rows_text(question, client)
+        if not rows_text:
+            return "Không tìm thấy dữ liệu liên quan trong cơ sở dữ liệu."
+        return _sql_answer_from_rows(question, rows_text, client)
 
     if route.label == "diễn_giải":
         return _rag_answer(question, ticker, client)
 
     if route.label == "cả_hai":
-        sql_part = _sql_answer(question, client)
+        rows_text = _fetch_sql_rows_text(question, client)
+        sql_part = (
+            _sql_answer_from_rows(question, rows_text, client)
+            if rows_text else "Không tìm thấy dữ liệu liên quan trong cơ sở dữ liệu."
+        )
         rag_part = _rag_answer(question, ticker, client)
         return f"**Dữ liệu số:**\n{sql_part}\n\n**Ngữ cảnh tài liệu:**\n{rag_part}"
 
