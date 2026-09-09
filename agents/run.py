@@ -60,8 +60,10 @@ def main() -> None:
           f"({'market query' if initial.get('is_market_query') else 'stock query'})")
     print("Running graph: classify → clarify → decompose → synthesize\n")
 
+    from tracing import graph_callbacks
+
     t0 = time.perf_counter()
-    final = app.invoke(initial)
+    final = app.invoke(initial, {"callbacks": graph_callbacks()})
     wall_time = time.perf_counter() - t0
 
     report = final.get("report") or "[Không có báo cáo]"

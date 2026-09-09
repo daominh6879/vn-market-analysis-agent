@@ -40,6 +40,23 @@ def _conn():
         conn.close()
 
 
+_has_trace_meta: Optional[bool] = None
+
+
+def _supports_trace_meta() -> bool:
+    """True when the messages.trace_meta column exists (migration 033 applied)."""
+    global _has_trace_meta
+    if _has_trace_meta is None:
+        try:
+            with _conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT trace_meta FROM messages LIMIT 0")
+            _has_trace_meta = True
+        except Exception:
+            _has_trace_meta = False
+    return _has_trace_meta
+
+
 def create_conversation(user_id: str, tenant_id: str = "default") -> str:
     """Insert a new conversation row and return its UUID string."""
     cid = str(uuid.uuid4())
@@ -53,21 +70,39 @@ def create_conversation(user_id: str, tenant_id: str = "default") -> str:
 
 
 def load_history(conversation_id: str, limit: int = 10) -> list[dict]:
-    """Return the last `limit` message pairs as [{role, content}] ordered oldest→newest."""
+    """Return the last `limit` message pairs ordered oldest→newest.
+
+    Each dict is {role, content, trace_meta} where trace_meta is the per-message
+    observability payload (graph node path) or None.
+    """
     with _conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(
-                """
-                SELECT role, content FROM messages
-                WHERE conversation_id = %s
-                ORDER BY seq DESC
-                LIMIT %s
-                """,
-                (conversation_id, limit * 2),  # each turn = 2 messages
-            )
+            if _supports_trace_meta():
+                cur.execute(
+                    """
+                    SELECT role, content, trace_meta FROM messages
+                    WHERE conversation_id = %s
+                    ORDER BY seq DESC
+                    LIMIT %s
+                    """,
+                    (conversation_id, limit * 2),  # each turn = 2 messages
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT role, content FROM messages
+                    WHERE conversation_id = %s
+                    ORDER BY seq DESC
+                    LIMIT %s
+                    """,
+                    (conversation_id, limit * 2),  # each turn = 2 messages
+                )
             rows = cur.fetchall()
     # Reverse so oldest first
-    return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
+    return [
+        {"role": r["role"], "content": r["content"], "trace_meta": r.get("trace_meta")}
+        for r in reversed(rows)
+    ]
 
 
 def save_turn(
@@ -75,18 +110,40 @@ def save_turn(
     user_msg: str,
     assistant_msg: str,
     session_id: Optional[str] = None,
+    trace_meta: Optional[dict] = None,
 ) -> None:
-    """Persist one (user, assistant) exchange to the messages table."""
+    """Persist one (user, assistant) exchange to the messages table.
+
+    `trace_meta` is stored on the assistant message only (graph node path etc.).
+    """
+    use_meta = _supports_trace_meta() and trace_meta is not None
     with _conn() as conn:
         with conn.cursor() as cur:
             for role, content in [("user", user_msg), ("assistant", assistant_msg)]:
-                cur.execute(
-                    """
-                    INSERT INTO messages (message_id, conversation_id, role, content, agent_session_id)
-                    VALUES (%s, %s, %s, %s, %s)
-                    """,
-                    (str(uuid.uuid4()), conversation_id, role, content, session_id),
-                )
+                if use_meta:
+                    meta = trace_meta if role == "assistant" else None
+                    cur.execute(
+                        """
+                        INSERT INTO messages (message_id, conversation_id, role, content, agent_session_id, trace_meta)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            str(uuid.uuid4()),
+                            conversation_id,
+                            role,
+                            content,
+                            session_id,
+                            psycopg2.extras.Json(meta) if meta else None,
+                        ),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO messages (message_id, conversation_id, role, content, agent_session_id)
+                        VALUES (%s, %s, %s, %s, %s)
+                        """,
+                        (str(uuid.uuid4()), conversation_id, role, content, session_id),
+                    )
 
 
 def list_conversations(user_id: str, tenant_id: str = "default", limit: int = 50) -> list[dict]:

@@ -6,20 +6,20 @@
 flowchart TD
     UM([User Message]) --> IT{graph\ninterrupted?}
 
-    IT -->|yes — fresh clarify interrupt| RESUME["Command(resume=user_message)\n→ graph continues from clarify_node"]
+    IT -->|"yes — fresh clarify interrupt"| RESUME["Command(resume=user_message)\n→ graph continues from clarify_node"]
     RESUME --> GOUT
 
-    IT -->|yes — stale (>10 min)| ORPHAN["orphan thread_id\n(abandon abandoned clarify)\nroute fresh"]
+    IT -->|"yes — stale (>10 min)"| ORPHAN["orphan thread_id\n(abandon abandoned clarify)\nroute fresh"]
     ORPHAN --> LLM
 
     IT -->|no| LLM["llm_route(query, history, system_prompt,\n  focus)\nSingle LLM call with 4 tools:\n• needs_agent_run(intent, ticker, query, reason)\n• direct_reply(text, reason)\n• out_of_scope(text, reason)\n• decompose(segments[{kind,text|intent,ticker,query}])\nfocus = prior turn's Focus (tickers+sector+intent)\ncarry-forward resolved via resolve_focus()"]
 
-    LLM -->|needs_agent_run (valid intent)| PRE["Build state\nintent + ticker + tickers (plural) pre-set\nticker validated vs VN universe\nclassify_node skips LLM"]
+    LLM -->|"needs_agent_run (valid intent)"| PRE["Build state\nintent + ticker + tickers (plural) pre-set\nticker validated vs VN universe\nclassify_node skips LLM"]
     LLM -->|direct_reply| VERIFY{"re-classify\nwith history"}
     VERIFY -->|financial| PRE
     VERIFY -->|social| TEXT([Stream tool text\nno graph invoked])
     LLM -->|out_of_scope| OOS([Stream decline text\ncrypto/foreign/forex — no graph])
-    LLM -->|decompose (mixed intent)| MIX["type=mixed, segments=[...]\n_mixed_parts loop:\n• agent seg → graph.invoke\n• general/out_of_scope → drafted text\njoin non-empty parts with blank line"]
+    LLM -->|"decompose (mixed intent)"| MIX["type=mixed, segments=[...]\n_mixed_parts loop:\n• agent seg → graph.invoke\n• general/out_of_scope → drafted text\njoin non-empty parts with blank line"]
     MIX --> GRAPH
     LLM -->|no / invalid tool call| FALLBACK["re-classify\nwith history"]
     FALLBACK -->|agent| PRE

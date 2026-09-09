@@ -60,6 +60,7 @@ MIGRATION_ORDER = [
     "030_pending_context.sql",
     "031_stock_ratios.sql",
     "032_enrich_securities.sql",
+    "033_messages_trace_meta.sql",
     "004_readonly_role.sql",  # last: GRANTs need tables to exist
 ]
 

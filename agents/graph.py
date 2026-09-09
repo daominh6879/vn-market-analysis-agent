@@ -100,7 +100,8 @@ def classify_node(state: AgentState) -> dict:
     conv_id = state.get("conversation_id", "")
     try:
         from tracing import current_request_id
-        rid = f"{conv_id[:8]}-{uuid.uuid4().hex[:6]}"
+        # Reuse a rid already set before invoke (start_request_id), else generate.
+        rid = current_request_id.get("") or f"{conv_id[:8]}-{uuid.uuid4().hex[:6]}"
         current_request_id.set(rid)
     except Exception:
         rid = uuid.uuid4().hex[:12]

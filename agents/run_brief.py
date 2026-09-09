@@ -66,8 +66,10 @@ def main() -> None:
     app = build_brief_graph()
     initial = make_initial_state(date=date_str, output_path=out_path)
 
+    from tracing import graph_callbacks
+
     t0 = time.perf_counter()
-    final = app.invoke(initial)
+    final = app.invoke(initial, {"callbacks": graph_callbacks()})
     elapsed = time.perf_counter() - t0
 
     report = final.get("report_text", "[Không có báo cáo]")

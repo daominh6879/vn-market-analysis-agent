@@ -27,7 +27,9 @@ import contextvars
 import json
 import os
 import re
+import threading
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -307,6 +309,107 @@ def compose(*observers: Observer) -> Observer:
             except Exception:
                 pass
     return _combined
+
+
+# ── LangGraph node instrumentation ────────────────────────────────────────────
+
+try:
+    from langchain_core.callbacks import BaseCallbackHandler as _BaseCallbackHandler
+except Exception:  # pragma: no cover — langchain_core ships with langgraph
+    class _BaseCallbackHandler:  # type: ignore
+        pass
+
+
+class _NodeTracer(_BaseCallbackHandler):
+    """LangChain callback: emit node_start/node_end for every LangGraph node.
+
+    Attach via ``config={"callbacks": graph_callbacks()}`` on ``app.invoke()``.
+    ``on_chain_start`` carries ``metadata["langgraph_node"]``; ``on_chain_end``/
+    ``on_chain_error`` do not, so the node name and start time are keyed by
+    ``run_id`` here. The graph root (no ``langgraph_node`` in its metadata) is
+    skipped, so only real node executions produce events.
+    """
+
+    def __init__(self):
+        self._nodes: dict = {}
+        self._starts: dict = {}
+
+    def on_chain_start(self, serialized, inputs, *, run_id, parent_run_id=None,
+                       tags=None, metadata=None, **kwargs):
+        node = (metadata or {}).get("langgraph_node")
+        if not node:
+            return
+        self._nodes[run_id] = node
+        self._starts[run_id] = time.perf_counter()
+        _emit("node_start", {"node": node, "step": (metadata or {}).get("langgraph_step", 0)})
+
+    def on_chain_end(self, outputs, *, run_id, parent_run_id=None, **kwargs):
+        node = self._nodes.pop(run_id, None)
+        if not node:
+            return
+        t0 = self._starts.pop(run_id, None)
+        _emit("node_end", {"node": node, "ms": round((time.perf_counter() - t0) * 1000) if t0 else 0})
+        _record_node(node)
+
+    def on_chain_error(self, error, *, run_id, parent_run_id=None, **kwargs):
+        node = self._nodes.pop(run_id, None)
+        if not node:
+            return
+        t0 = self._starts.pop(run_id, None)
+        _emit("node_end", {"node": node, "ms": round((time.perf_counter() - t0) * 1000) if t0 else 0,
+                           "error": str(error)})
+        _record_node(node)
+
+
+_node_tracer = _NodeTracer()
+
+# Per-turn node path, keyed by request_id — lets the sync turn path (run_turn)
+# reconstruct the graph path after invoke without a live observer.
+_node_path_lock = threading.Lock()
+_turn_node_paths: dict[str, list[str]] = {}
+
+
+def _record_node(node: str) -> None:
+    rid = current_request_id.get("")
+    if not rid:
+        return
+    with _node_path_lock:
+        _turn_node_paths.setdefault(rid, []).append(node)
+
+
+def take_node_path(request_id: str) -> list[str]:
+    """Pop and return the graph node path collected for a request_id."""
+    with _node_path_lock:
+        return _turn_node_paths.pop(request_id, [])
+
+
+def start_request_id(conv_id: str = "") -> str:
+    """Generate + set the per-turn request_id in the current context.
+
+    Must be called in the thread that runs ``app.invoke`` (BEFORE the invoke), so
+    LangGraph's callback context — which snapshots the context at invoke time —
+    can read it. Setting it inside ``classify_node`` (the node body) does NOT work:
+    node bodies run in a copied context, so the change is invisible to the
+    ``_NodeTracer`` callbacks.
+    """
+    rid = f"{conv_id[:8]}-{uuid.uuid4().hex[:6]}"
+    current_request_id.set(rid)
+    return rid
+
+
+def graph_callbacks() -> list:
+    """Callback handlers for a LangGraph run: the local node tracer (always) plus the
+    Langfuse handler (only when LANGFUSE_* keys are set). Never raises if Langfuse is
+    unavailable — local tracing always works. A fresh handler list is returned per call
+    so each turn owns its own Langfuse trace."""
+    callbacks: list = [_node_tracer]
+    if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+        try:
+            from langfuse.langchain import CallbackHandler
+            callbacks.append(CallbackHandler())
+        except Exception:
+            pass
+    return callbacks
 
 
 # ── LLM wrapper ───────────────────────────────────────────────────────────────

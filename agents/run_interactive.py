@@ -47,9 +47,12 @@ def run(query: str, auto_decision: str | None = None) -> None:
     print(f"[run_interactive] ticker={ticker}  session_id={session_id}")
     print("Phase 1: classify -> clarify -> decompose -> request_approval\n")
 
+    from tracing import graph_callbacks
+
     checkpointer = PostgresCheckpointer()
     app = build_interactive_graph(checkpointer)
-    thread_cfg = {"configurable": {"thread_id": session_id}}
+    thread_cfg = {"configurable": {"thread_id": session_id},
+                  "callbacks": graph_callbacks()}
 
     # Run until interrupt — LangGraph returns a snapshot with __interrupt__ key
     result: Any = app.invoke(initial, config=thread_cfg)

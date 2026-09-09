@@ -227,6 +227,8 @@ def _build_agent_state(
 
 def _invoke_agent(app, state, thread_config) -> str:
     """Invoke the agent graph synchronously and return the report text ('' if none)."""
+    from tracing import start_request_id
+    start_request_id(state.get("conversation_id", ""))
     final = app.invoke(state, thread_config)
     return final.get("report") or ""
 
@@ -257,7 +259,9 @@ def _mixed_parts(
             cfg = thread_config
             if agent_i > 0:
                 base_tid = thread_config.get("configurable", {}).get("thread_id", "conv")
-                cfg = {"configurable": {"thread_id": f"{base_tid}:mix{agent_i}"}}
+                from tracing import graph_callbacks
+                cfg = {"configurable": {"thread_id": f"{base_tid}:mix{agent_i}"},
+                       "callbacks": graph_callbacks()}
             agent_i += 1
             state = _build_agent_state(seg, user_message, conversation_id, user_id, tenant_id, history)
             report = _invoke_agent(app, state, cfg)
@@ -309,16 +313,20 @@ def run_turn(
     from agents.graph import build_graph
     from agents.checkpointer import PostgresCheckpointer
 
+    from tracing import graph_callbacks, current_request_id, take_node_path
+
     checkpointer = PostgresCheckpointer()
     app = build_graph(checkpointer=checkpointer)
-    thread_config = {"configurable": {"thread_id": conversation_id}}
+    thread_config = {"configurable": {"thread_id": conversation_id},
+                     "callbacks": graph_callbacks()}
 
     # Prior-turn focus + stuck-interrupt detection.
     prior = _read_prior(app, thread_config)
     if prior["stale"]:
         # Abandon the stuck clarify interrupt: fresh thread orphans it so this turn
         # routes + runs normally instead of being swallowed by the old interrupt.
-        thread_config = {"configurable": {"thread_id": f"{conversation_id}:stale:{int(time.time())}"}}
+        thread_config = {"configurable": {"thread_id": f"{conversation_id}:stale:{int(time.time())}"},
+                         "callbacks": graph_callbacks()}
 
     route = llm_route(
         user_message, history, system_prompt, client,
@@ -328,9 +336,11 @@ def run_turn(
     if route.get("type") == "agent":
         agent_state = _build_agent_state(route, user_message, conversation_id, user_id, tenant_id, history)
         assistant_reply = _invoke_agent(app, agent_state, thread_config)
+        node_path = take_node_path(current_request_id.get())
     elif route.get("type") == "mixed":
         parts = _mixed_parts(app, route.get("segments"), user_message, conversation_id, user_id, tenant_id, history, thread_config)
         assistant_reply = "\n\n".join(p for p in parts if p)
+        node_path = []
     else:
         text = route.get("text") or ""
         if text:
@@ -340,11 +350,12 @@ def run_turn(
             lm_messages.append(Message(role="user", content=user_message))
             resp = client.generate(messages=lm_messages, system=system_prompt, max_tokens=3500)
             assistant_reply = resp.text.strip()
+        node_path = []
 
     if not assistant_reply:
         return assistant_reply
 
-    save_turn(conversation_id, user_message, assistant_reply)
+    save_turn(conversation_id, user_message, assistant_reply, trace_meta={"node_path": node_path})
 
     try:
         from memory.consolidation import maybe_consolidate
@@ -401,6 +412,10 @@ def _sse_tool(data: dict) -> str:
 
 def _sse_gate(data: dict) -> str:
     return f"event: gate\ndata: {json.dumps({'node': data.get('node', ''), 'route': data.get('route', '')})}\n\n"
+
+
+def _sse_node(phase: str, data: dict) -> str:
+    return f"event: node\ndata: {json.dumps({'node': data.get('node', ''), 'phase': phase, 'ms': data.get('ms', 0)})}\n\n"
 
 
 async def _stream_via_queue(
@@ -512,10 +527,12 @@ async def stream_turn(
     from agents.graph import build_graph
     from agents.checkpointer import PostgresCheckpointer
     from langgraph.types import Command
+    from tracing import graph_callbacks
 
     checkpointer = PostgresCheckpointer()
     app = build_graph(checkpointer=checkpointer)
-    thread_config = {"configurable": {"thread_id": conversation_id}}
+    thread_config = {"configurable": {"thread_id": conversation_id},
+                     "callbacks": graph_callbacks()}
 
     # ── Clarification resume: graph is waiting for user answer ────────────────
     prior = await asyncio.to_thread(_read_prior, app, thread_config)
@@ -523,16 +540,21 @@ async def stream_turn(
         # Abandon the stuck clarify interrupt (older than INTERRUPT_STALE_SECONDS):
         # a fresh thread orphans it, and this turn routes + runs normally instead
         # of being swallowed by the old interrupt.
-        thread_config = {"configurable": {"thread_id": f"{conversation_id}:stale:{int(time.time())}"}}
+        thread_config = {"configurable": {"thread_id": f"{conversation_id}:stale:{int(time.time())}"},
+                         "callbacks": graph_callbacks()}
     is_interrupted = prior["interrupted"] and not prior["stale"]
 
     if is_interrupted:
         # Resume graph directly — skip llm_route, clarify_node owns this turn.
         yield _sse_status("routing")
         try:
-            task = asyncio.create_task(
-                asyncio.to_thread(app.invoke, Command(resume=user_message), thread_config)
-            )
+            from tracing import start_request_id
+
+            def _resume_invoke():
+                start_request_id(conversation_id)
+                return app.invoke(Command(resume=user_message), thread_config)
+
+            task = asyncio.create_task(asyncio.to_thread(_resume_invoke))
             while not task.done():
                 try:
                     await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
@@ -570,6 +592,8 @@ async def stream_turn(
     )
 
     assistant_reply = ""
+    node_path: list[str] = []
+    node_ms: dict[str, int] = {}
 
     if route.get("type") == "agent":
         # ── Agent path: invoke graph with pre-classified intent/ticker ────────
@@ -599,7 +623,9 @@ async def stream_turn(
                 pass
 
         def _run() -> None:
+            from tracing import start_request_id
             current_observer.set(_observer)
+            start_request_id(conversation_id)
             try:
                 stream_final["v"] = app.invoke(agent_state, thread_config)
             except Exception as exc:
@@ -634,6 +660,12 @@ async def stream_turn(
                     yield _sse_tool(data)
                 elif kind == "gate":
                     yield _sse_gate(data)
+                elif kind == "node_start":
+                    yield _sse_node("start", data)
+                elif kind == "node_end":
+                    node_path.append(data.get("node", ""))
+                    node_ms[data.get("node", "")] = data.get("ms", 0)
+                    yield _sse_node("end", data)
         except asyncio.CancelledError:
             thread.join(timeout=1)
             return
@@ -710,7 +742,8 @@ async def stream_turn(
 
     # ── Persist + extract preferences ─────────────────────────────────────────
     try:
-        save_turn(conversation_id, user_message, assistant_reply)
+        save_turn(conversation_id, user_message, assistant_reply,
+                  trace_meta={"node_path": node_path, "node_ms": node_ms})
 
         from memory.consolidation import maybe_consolidate
         full = load_history(conversation_id, limit=10000)
