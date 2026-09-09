@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import type { AuthState, Conversation, ChatMessage, TraceStep } from './types'
+import type { AuthState, Conversation, ChatMessage, TraceStep, GraphTopology } from './types'
 import {
   getConversations,
   createConversation,
@@ -8,11 +8,13 @@ import {
   streamMessage,
   buildTraceStep,
   getPendingSessions,
+  getGraphTopology,
 } from './api'
 import Login from './components/Login'
 import Sidebar from './components/Sidebar'
 import ChatArea from './components/ChatArea'
 import ApprovalPanel from './components/ApprovalPanel'
+import ObservabilityView from './components/ObservabilityView'
 
 const LS_AUTH = 'vn_stock_auth'
 const LS_CONV = 'vn_stock_conv'
@@ -44,10 +46,15 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [streamingMsg, setStreamingMsg] = useState<ChatMessage | null>(null)
   const [isStreaming, setIsStreaming] = useState(false)
-  const [view, setView] = useState<'chat' | 'approvals'>('chat')
+  const [view, setView] = useState<'chat' | 'approvals' | 'observability'>('chat')
   const [pendingCount, setPendingCount] = useState(0)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Workflow graph state: topology (static) + live node events (during a turn)
+  const [graphTopology, setGraphTopology] = useState<GraphTopology | null>(null)
+  const [activeNodes, setActiveNodes] = useState<string[]>([])
+  const [completedNodes, setCompletedNodes] = useState<string[]>([])
 
   // Load conversations when auth changes
   useEffect(() => {
@@ -57,6 +64,11 @@ export default function App() {
       getPendingSessions().then(s => setPendingCount(s.length))
     }
   }, [auth])
+
+  // Load graph topology once
+  useEffect(() => {
+    getGraphTopology().then(setGraphTopology)
+  }, [])
 
   // Load history when active conversation changes
   useEffect(() => {
@@ -99,6 +111,11 @@ export default function App() {
     if (auth?.role === 'admin') {
       getPendingSessions().then(s => setPendingCount(s.length))
     }
+  }
+
+  function handleObservability() {
+    setView('observability')
+    setSidebarOpen(false)
   }
 
   async function handleDelete(id: string) {
@@ -146,9 +163,13 @@ export default function App() {
     // Prepare streaming assistant message
     let assistantContent = ''
     const traceSteps: TraceStep[] = []
+    const nodePath: string[] = []
+    const nodeMs: Record<string, number> = {}
     const streamMsg: ChatMessage = { role: 'assistant', content: '', trace: [] }
     setStreamingMsg({ ...streamMsg })
     setIsStreaming(true)
+    setActiveNodes([])
+    setCompletedNodes([])
 
     await streamMessage(
       convId!,
@@ -175,6 +196,16 @@ export default function App() {
             : null
           )
         },
+        onNode(node, phase, ms) {
+          if (phase === 'start') {
+            setActiveNodes(prev => prev.includes(node) ? prev : [...prev, node])
+          } else {
+            setActiveNodes(prev => prev.filter(n => n !== node))
+            setCompletedNodes(prev => prev.includes(node) ? prev : [...prev, node])
+            nodePath.push(node)
+            nodeMs[node] = ms
+          }
+        },
         onDone(agent) {
           // Mark all steps for this agent as done
           traceSteps.forEach(s => {
@@ -197,6 +228,8 @@ export default function App() {
             role: 'assistant',
             content: assistantContent,
             trace: [...traceSteps],
+            nodePath: [...nodePath],
+            nodeMs: { ...nodeMs },
           }
           setMessages(prev => [...prev, finalMsg])
           setStreamingMsg(null)
@@ -243,6 +276,7 @@ export default function App() {
           onDelete={handleDelete}
           onLogout={handleLogout}
           onApprovals={handleApprovals}
+          onObservability={handleObservability}
         />
       </div>
 
@@ -263,13 +297,22 @@ export default function App() {
 
         {view === 'approvals' && auth.role === 'admin'
           ? <ApprovalPanel />
-          : <ChatArea
-              auth={auth}
-              messages={messages}
-              streamingMessage={streamingMsg}
-              isStreaming={isStreaming}
-              onSend={handleSend}
-            />
+          : view === 'observability' && auth.role === 'admin'
+            ? <ObservabilityView
+                topology={graphTopology}
+                activeNodes={activeNodes}
+                completedNodes={completedNodes}
+              />
+            : <ChatArea
+                auth={auth}
+                messages={messages}
+                streamingMessage={streamingMsg}
+                isStreaming={isStreaming}
+                onSend={handleSend}
+                graphTopology={graphTopology}
+                activeNodes={activeNodes}
+                completedNodes={completedNodes}
+              />
         }
       </main>
     </div>

@@ -6,7 +6,7 @@ interface Props {
   auth: AuthState
   conversations: Conversation[]
   activeId: string | null
-  view: 'chat' | 'approvals'
+  view: 'chat' | 'approvals' | 'observability'
   pendingCount: number
   deletingId: string | null
   onSelect: (id: string) => void
@@ -14,6 +14,7 @@ interface Props {
   onDelete: (id: string) => void
   onLogout: () => void
   onApprovals: () => void
+  onObservability: () => void
 }
 
 export default function Sidebar({
@@ -28,6 +29,7 @@ export default function Sidebar({
   onDelete,
   onLogout,
   onApprovals,
+  onObservability,
 }: Props) {
   return (
     <aside className="w-64 flex-shrink-0 bg-sidebar flex flex-col h-full border-r border-border">
@@ -46,6 +48,21 @@ export default function Sidebar({
           </svg>
           Cuộc trò chuyện mới
         </button>
+        {auth.role === 'admin' && (
+          <button
+            onClick={onObservability}
+            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm font-medium transition ${
+              view === 'observability'
+                ? 'bg-surface text-text border-accent'
+                : 'text-text-muted hover:bg-surface hover:text-text'
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            Quan sát
+          </button>
+        )}
         {auth.role === 'admin' && (
           <button
             onClick={onApprovals}

@@ -1,4 +1,13 @@
-import type { Conversation, ChatMessage, TraceStep, PendingSession } from './types'
+import type {
+  Conversation,
+  ChatMessage,
+  TraceStep,
+  PendingSession,
+  GraphTopology,
+  DashboardStats,
+  TraceRun,
+  TraceRunDetail,
+} from './types'
 
 const BASE = '/api'
 
@@ -32,7 +41,13 @@ export async function getHistory(conversation_id: string): Promise<ChatMessage[]
   const r = await fetch(`${BASE}/conversations/${conversation_id}/history?limit=50`)
   if (!r.ok) return []
   const data = await r.json()
-  return (data.messages ?? []) as ChatMessage[]
+  return (data.messages ?? []).map((m: any): ChatMessage => ({
+    role: m.role,
+    content: m.content,
+    trace: m.trace_meta?.trace ?? [],
+    nodePath: m.trace_meta?.node_path ?? [],
+    nodeMs: m.trace_meta?.node_ms ?? {},
+  }))
 }
 
 export async function deleteConversation(conversation_id: string): Promise<void> {
@@ -42,6 +57,7 @@ export async function deleteConversation(conversation_id: string): Promise<void>
 export interface StreamCallbacks {
   onText: (text: string) => void
   onStatus: (agent: string, step: string) => void
+  onNode: (node: string, phase: 'start' | 'end', ms: number) => void
   onDone: (agent: string) => void
   onError: (error: string) => void
   onFinish: () => void
@@ -97,6 +113,8 @@ export async function streamMessage(
               callbacks.onText(payload.text)
             } else if (currentEvent === 'status') {
               callbacks.onStatus(payload.agent ?? '', payload.step ?? '')
+            } else if (currentEvent === 'node') {
+              callbacks.onNode(payload.node ?? '', payload.phase === 'end' ? 'end' : 'start', payload.ms ?? 0)
             } else if (currentEvent === 'done') {
               callbacks.onDone(payload.agent ?? '')
             } else if (currentEvent === 'error') {
@@ -191,4 +209,30 @@ export async function approveSession(
 export async function rejectSession(session_id: string): Promise<void> {
   const r = await fetch(`${BASE}/sessions/${session_id}/reject`, { method: 'POST' })
   if (!r.ok) throw new Error(`Reject failed: ${r.status}`)
+}
+
+// --- Observability (graph / dashboard / trace) ---
+
+export async function getGraphTopology(): Promise<GraphTopology> {
+  const r = await fetch(`${BASE}/graph`)
+  if (!r.ok) return { nodes: [], edges: [], error: `HTTP ${r.status}` }
+  return r.json()
+}
+
+export async function getDashboardStats(): Promise<DashboardStats | null> {
+  const r = await fetch(`${BASE}/dashboard/stats`)
+  if (!r.ok) return null
+  return r.json()
+}
+
+export async function getTraceRuns(limit = 50): Promise<{ runs: TraceRun[]; error?: string }> {
+  const r = await fetch(`${BASE}/trace/runs?limit=${limit}`)
+  if (!r.ok) return { runs: [] }
+  return r.json()
+}
+
+export async function getTraceRunDetail(traceId: string): Promise<TraceRunDetail | null> {
+  const r = await fetch(`${BASE}/trace/runs/${encodeURIComponent(traceId)}`)
+  if (!r.ok) return null
+  return r.json()
 }

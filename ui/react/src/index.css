@@ -101,4 +101,14 @@
     0%, 100% { opacity: 0.3; transform: scale(0.8); }
     50% { opacity: 1; transform: scale(1.1); }
   }
+
+  /* Workflow graph: pulse the active (running) node */
+  .graph-node-active {
+    animation: graph-node-pulse 1.1s ease-in-out infinite;
+  }
+
+  @keyframes graph-node-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
 }

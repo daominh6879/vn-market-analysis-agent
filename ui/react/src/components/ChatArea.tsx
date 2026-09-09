@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
-import type { ChatMessage, AuthState } from '../types'
+import type { ChatMessage, AuthState, GraphTopology } from '../types'
 import MessageBubble from './MessageBubble'
 import WelcomeScreen from './WelcomeScreen'
+import TraceDock from './TraceDock'
 
 interface Props {
   auth: AuthState
@@ -9,6 +10,9 @@ interface Props {
   streamingMessage: ChatMessage | null
   isStreaming: boolean
   onSend: (text: string) => void
+  graphTopology: GraphTopology | null
+  activeNodes: string[]
+  completedNodes: string[]
 }
 
 export default function ChatArea({
@@ -17,12 +21,24 @@ export default function ChatArea({
   streamingMessage,
   isStreaming,
   onSend,
+  graphTopology,
+  activeNodes,
+  completedNodes,
 }: Props) {
   const [input, setInput] = useState('')
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const isAdmin = auth.role === 'admin'
   const isEmpty = messages.length === 0 && !streamingMessage
+
+  // selected assistant message for the dock (default: latest)
+  const assistantMessages = messages.filter(m => m.role === 'assistant')
+  const selectedMessage =
+    selectedIndex != null && messages[selectedIndex]?.role === 'assistant'
+      ? messages[selectedIndex]
+      : assistantMessages[assistantMessages.length - 1] ?? null
+  const dockMessage = isStreaming ? (streamingMessage ?? selectedMessage) : selectedMessage
 
   // Auto-scroll on new content
   useEffect(() => {
@@ -54,69 +70,83 @@ export default function ChatArea({
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden">
-      {/* Message area */}
-      <div className="flex-1 overflow-y-auto">
-        {isEmpty ? (
-          <WelcomeScreen onSuggest={text => { onSend(text) }} />
-        ) : (
-          <div className="max-w-3xl mx-auto py-4">
-            {messages.map((msg, i) => (
-              <MessageBubble
-                key={i}
-                message={msg}
-                isAdmin={isAdmin}
-              />
-            ))}
-            {streamingMessage && (
-              <MessageBubble
-                message={streamingMessage}
-                isStreaming={true}
-                isAdmin={isAdmin}
-              />
-            )}
-          </div>
-        )}
-        <div ref={bottomRef} />
+    <div className="flex-1 flex h-full overflow-hidden">
+      {/* Chat column */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
+        {/* Message area */}
+        <div className="flex-1 overflow-y-auto">
+          {isEmpty ? (
+            <WelcomeScreen onSuggest={text => { onSend(text) }} />
+          ) : (
+            <div className="max-w-3xl mx-auto py-2">
+              {messages.map((msg, i) => (
+                <MessageBubble
+                  key={i}
+                  message={msg}
+                  isSelected={selectedIndex === i}
+                  onSelect={() => setSelectedIndex(i)}
+                />
+              ))}
+              {streamingMessage && (
+                <MessageBubble
+                  message={streamingMessage}
+                  isStreaming={true}
+                />
+              )}
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input bar */}
+        <div className="px-4 pb-4 pt-2">
+          <form
+            onSubmit={handleSubmit}
+            className="max-w-3xl mx-auto bg-surface border border-border rounded-2xl flex items-end gap-2 px-4 py-3 focus-within:border-accent/50 focus-within:ring-1 focus-within:ring-accent/30 transition"
+          >
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Hỏi về HPG, VCB, FPT, thị trường..."
+              rows={1}
+              disabled={isStreaming}
+              className="flex-1 bg-transparent text-text placeholder-muted text-sm resize-none focus:outline-none leading-6 max-h-48 overflow-y-auto disabled:opacity-60"
+            />
+            <button
+              type="submit"
+              disabled={isStreaming || !input.trim()}
+              className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent hover:bg-accent-hover disabled:bg-[#3d3d3d] disabled:text-muted text-white flex items-center justify-center transition self-end"
+            >
+              {isStreaming ? (
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+              )}
+            </button>
+          </form>
+          <p className="text-center text-[11px] text-muted mt-2">
+            Enter gửi · Shift+Enter xuống dòng
+          </p>
+        </div>
       </div>
 
-      {/* Input bar */}
-      <div className="px-4 pb-4 pt-2">
-        <form
-          onSubmit={handleSubmit}
-          className="max-w-3xl mx-auto bg-surface border border-border rounded-2xl flex items-end gap-2 px-4 py-3 focus-within:border-accent/50 focus-within:ring-1 focus-within:ring-accent/30 transition"
-        >
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Hỏi về HPG, VCB, FPT, thị trường..."
-            rows={1}
-            disabled={isStreaming}
-            className="flex-1 bg-transparent text-text placeholder-muted text-sm resize-none focus:outline-none leading-6 max-h-48 overflow-y-auto disabled:opacity-60"
-          />
-          <button
-            type="submit"
-            disabled={isStreaming || !input.trim()}
-            className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent hover:bg-accent-hover disabled:bg-[#3d3d3d] disabled:text-muted text-white flex items-center justify-center transition self-end"
-          >
-            {isStreaming ? (
-              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            )}
-          </button>
-        </form>
-        <p className="text-center text-[11px] text-muted mt-2">
-          Enter gửi · Shift+Enter xuống dòng
-        </p>
-      </div>
+      {/* Trace dock (admin only) */}
+      {isAdmin && (
+        <TraceDock
+          message={dockMessage}
+          isStreaming={isStreaming}
+          graphTopology={graphTopology}
+          activeNodes={activeNodes}
+          completedNodes={completedNodes}
+        />
+      )}
     </div>
   )
 }

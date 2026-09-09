@@ -4,15 +4,20 @@ import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import type { ChatMessage } from '../types'
-import TracePanel from './TracePanel'
 
 interface Props {
   message: ChatMessage
   isStreaming?: boolean
-  isAdmin: boolean
+  isSelected?: boolean
+  onSelect?: () => void
 }
 
-export default function MessageBubble({ message, isStreaming = false, isAdmin }: Props) {
+export default function MessageBubble({
+  message,
+  isStreaming = false,
+  isSelected = false,
+  onSelect,
+}: Props) {
   const isUser = message.role === 'user'
 
   if (isUser) {
@@ -26,7 +31,10 @@ export default function MessageBubble({ message, isStreaming = false, isAdmin }:
   }
 
   return (
-    <div className="px-4 py-4">
+    <div
+      className={`px-4 py-3 cursor-pointer transition ${isSelected ? 'bg-accent/5' : ''}`}
+      onClick={onSelect}
+    >
       <div className="flex gap-4 max-w-3xl mx-auto">
         {/* Avatar */}
         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center text-sm mt-0.5">
@@ -81,14 +89,6 @@ export default function MessageBubble({ message, isStreaming = false, isAdmin }:
 
           {isStreaming && message.content && (
             <span className="inline-block w-0.5 h-4 bg-text-muted ml-0.5 animate-pulse" />
-          )}
-
-          {/* Admin trace */}
-          {isAdmin && (
-            <TracePanel
-              steps={message.trace ?? []}
-              streaming={isStreaming}
-            />
           )}
         </div>
       </div>
