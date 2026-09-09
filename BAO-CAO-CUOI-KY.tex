@@ -1,0 +1,806 @@
+\documentclass[12pt, a4paper]{report}
+
+% ============================================================
+% PACKAGES
+% ============================================================
+\usepackage[vietnamese]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{multirow}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{enumitem}
+\usepackage{setspace}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usetikzlibrary{
+  shapes.geometric, shapes.symbols,
+  arrows.meta, positioning, fit,
+  backgrounds, shadows, decorations.pathreplacing,
+  patterns, calc, matrix, chains
+}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins, breakable, theorems}
+\usepackage{mdframed}
+\usepackage{pifont}
+\usepackage{fontawesome5}
+
+% ============================================================
+% PAGE GEOMETRY
+% ============================================================
+\geometry{
+    top=2.5cm, bottom=2.5cm,
+    left=3.0cm, right=2.0cm
+}
+
+% ============================================================
+% COLORS
+% ============================================================
+\definecolor{ttuorange}{RGB}{211,84,0}
+\definecolor{ttugold}{RGB}{243,156,18}
+\definecolor{ttugreen}{RGB}{39,174,96}
+\definecolor{ttublue}{RGB}{41,128,185}
+\definecolor{ttured}{RGB}{192,57,43}
+\definecolor{ttugray}{RGB}{80,80,80}
+\definecolor{rowgray}{RGB}{245,245,245}
+\definecolor{lightblue}{RGB}{214,234,248}
+\definecolor{lightorange}{RGB}{253,237,226}
+\definecolor{lightgreen}{RGB}{212,239,223}
+\definecolor{lightred}{RGB}{250,219,216}
+\definecolor{lightyellow}{RGB}{254,249,231}
+
+% ============================================================
+% TCOLORBOX STYLES
+% ============================================================
+\newtcolorbox{casebox}[1]{
+  colback=lightorange, colframe=ttuorange,
+  fonttitle=\bfseries\color{white}, coltitle=white, colbacktitle=ttuorange,
+  title={#1}, boxrule=0.8pt, arc=4pt, left=6pt, right=6pt, top=4pt, bottom=4pt
+}
+\newtcolorbox{keybox}[1]{
+  colback=lightblue, colframe=ttublue,
+  fonttitle=\bfseries, coltitle=white, colbacktitle=ttublue,
+  title={#1}, boxrule=0.8pt, arc=4pt
+}
+\newtcolorbox{warnbox}[1]{
+  colback=lightred, colframe=ttured,
+  fonttitle=\bfseries, coltitle=white, colbacktitle=ttured,
+  title={#1}, boxrule=0.8pt, arc=4pt
+}
+\newtcolorbox{greenbox}[1]{
+  colback=lightgreen, colframe=ttugreen,
+  fonttitle=\bfseries, coltitle=white, colbacktitle=ttugreen,
+  title={#1}, boxrule=0.8pt, arc=4pt
+}
+
+% ============================================================
+% CHAPTER / SECTION FORMATTING
+% ============================================================
+\titleformat{\chapter}[block]
+  {\normalfont\Large\bfseries\color{ttuorange}}
+  {CHƯƠNG \thechapter:}{0.8em}{}
+  [\vspace{-0.4em}\color{ttuorange}\rule{\linewidth}{1.5pt}\vspace{0.2em}]
+
+\titlespacing*{\chapter}{0pt}{8pt}{12pt}
+
+\titleformat{\section}
+  {\normalfont\large\bfseries\color{ttuorange}}
+  {\thesection}{0.8em}{}
+
+\titleformat{\subsection}
+  {\normalfont\normalsize\bfseries\color{ttugray}}
+  {\thesubsection}{0.8em}{}
+
+% ============================================================
+% HEADER / FOOTER
+% ============================================================
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textit{Project Agent -- Trợ lý phân tích thị trường}}
+\fancyhead[R]{\small\textit{Đề tài 4: RAG-Fusion}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \fancyhead[L]{\small\textit{Project Agent -- Trợ lý phân tích thị trường}}
+  \fancyhead[R]{\small\textit{Đề tài 4: RAG-Fusion}}
+  \fancyfoot[C]{\thepage}
+  \renewcommand{\headrulewidth}{0.4pt}
+}
+
+% ============================================================
+% MISC
+% ============================================================
+\setstretch{1.35}
+\hypersetup{
+  colorlinks=true, linkcolor=ttuorange,
+  citecolor=ttuorange, urlcolor=ttublue,
+  pdftitle={De tai 4 - Tro ly phan tich thi truong RAG-Fusion}
+}
+\setlist[itemize]{leftmargin=*, topsep=3pt, itemsep=2pt}
+\setlist[enumerate]{leftmargin=*, topsep=3pt, itemsep=2pt}
+
+% ============================================================
+% TIKZ SHORTCUTS
+% ============================================================
+\tikzset{
+  boxt/.style={rectangle, rounded corners=4pt, draw=#1, fill=#1!15,
+    text width=3.2cm, align=center, minimum height=1cm, font=\small\bfseries},
+  arrowt/.style={->, >=Stealth, thick, color=#1},
+  process/.style={rectangle, rounded corners=3pt, draw=ttublue,
+    fill=lightblue, minimum height=0.8cm, text width=3cm,
+    align=center, font=\small},
+  decision/.style={diamond, aspect=2, draw=ttuorange,
+    fill=lightorange, minimum height=0.8cm, text width=2.5cm,
+    align=center, font=\scriptsize},
+  startstop/.style={rectangle, rounded corners=15pt, draw=ttugreen,
+    fill=lightgreen, minimum height=0.8cm, text width=2.5cm,
+    align=center, font=\small\bfseries},
+  gnode/.style={rectangle, rounded corners=3pt, draw=#1, fill=#1!18,
+    minimum height=0.9cm, text width=3.0cm, align=center, font=\footnotesize}
+}
+
+\begin{document}
+
+% ============================================================
+% TITLE PAGE
+% ============================================================
+\begin{titlepage}
+\centering
+
+\begin{tabular}{ccc}
+  \includegraphics[width=3cm]{TTUlogo.png}
+  & \hspace{2.5cm} &
+  \includegraphics[width=3cm]{TTUITlogo.png}
+\end{tabular}
+
+\vspace{0.4cm}
+{\Large\textbf{TRƯỜNG ĐẠI HỌC TÂN TẠO}} \\[3pt]
+{\normalsize KHOA CÔNG NGHỆ THÔNG TIN}\\[3pt]
+{\small Học phần: \textbf{PROJECT AGENT}}
+
+\vspace{0.3cm}
+{\color{ttuorange}\rule{\linewidth}{2pt}}
+\vspace{1.2cm}
+
+{\LARGE\textbf{\color{ttuorange}TIỂU LUẬN CUỐI KỲ}}\\[10pt]
+{\Large\textbf{Đề tài 4}}\\[8pt]
+{\large\textbf{TRỢ LÝ PHÂN TÍCH THỊ TRƯỜNG -- RAG-FUSION}}\\[6pt]
+{\normalsize\textit{Market Analysis Assistant -- Reciprocal Rank Fusion}}
+
+\vspace{1.5cm}
+
+\begin{tabular}{ll}
+  \textbf{Nhóm thực hiện:} & Nhóm F \\[5pt]
+  \textbf{Thành viên:}
+      & Đào Minh Hùng \quad -- \quad MSHV: 2632006 \\
+      & Vương Thảo Nguyên -- MSHV: 2532013 \\
+      & Phạm Thị Kim Ngọc -- MSHV: 2532005 \\
+      & Nguyễn Khánh Hòa -- MSHV: 2532018 \\[5pt]
+  \textbf{Giảng viên hướng dẫn:} & Trần Quốc Huy \\[5pt]
+\end{tabular}
+
+\vfill
+{\color{ttuorange}\rule{\linewidth}{2pt}}\\[5pt]
+{\normalsize Tây Ninh, tháng 9 năm 2026}
+\end{titlepage}
+
+% ============================================================
+% MỤC LỤC
+% ============================================================
+\tableofcontents
+\newpage
+
+% ============================================================
+% TÓM TẮT
+% ============================================================
+\chapter*{Tóm tắt}
+\addcontentsline{toc}{chapter}{Tóm tắt}
+
+Tiểu luận này trình bày \textbf{Trợ lý phân tích thị trường chứng khoán Việt Nam} xây dựng trên \textbf{LangGraph}, với kỹ thuật truy hồi trọng tâm là \textbf{RAG-Fusion}: phân rã một câu hỏi thành nhiều truy vấn con, truy hồi song song từng truy vấn, rồi hợp nhất thứ hạng bằng \textbf{Reciprocal Rank Fusion (RRF)}. Trọng tâm báo cáo là \textbf{luồng graph trạng thái} -- cách một câu hỏi ngôn ngữ tự nhiên chảy qua graph để thành báo cáo Markdown.
+
+\medskip\noindent Các đóng góp chính:
+\begin{enumerate}
+  \item \textbf{Kiến trúc 3 tầng}: \texttt{conversation\_router} (phân loại, LLM-on-top) $\rightarrow$ graph LangGraph $\rightarrow$ intent modules + tools lấy dữ liệu thực.
+  \item \textbf{Graph trạng thái đầy đủ}: \texttt{classify} $\rightarrow$ \texttt{clarify} $\rightarrow$ \texttt{decompose/fast-path} $\rightarrow$ \texttt{run\_subqueries} $\rightarrow$ \texttt{synthesize} $\rightarrow$ \texttt{critique} $\rightarrow$ \texttt{finalize}, với hai vòng lặp có trần (replan, critique).
+  \item \textbf{RAG-Fusion}: graph 5 node \texttt{decompose} $\rightarrow$ \texttt{multi\_retrieve} $\rightarrow$ \texttt{rrf\_fuse} $\rightarrow$ \texttt{analyze} $\rightarrow$ \texttt{report}, hợp nhất BM25 + vector bằng RRF ($k=60$).
+  \item \textbf{Ràng buộc trung lập}: cờ \texttt{STRICT\_NEUTRAL} cấm khuyến nghị mua/bán/nắm giữ trong bước tổng hợp.
+\end{enumerate}
+
+\medskip\noindent\textbf{Từ khóa:} RAG-Fusion, Reciprocal Rank Fusion, LangGraph, agent, BM25, Qdrant, Postgres, DeepSeek, RAGAS.
+
+\newpage
+
+% ============================================================
+% CHƯƠNG 1: GIỚI THIỆU
+% ============================================================
+\chapter{Giới thiệu}
+
+\section{Bối cảnh và Động lực}
+
+Phân tích thị trường đòi hỏi trả lời những câu hỏi \textbf{phức hợp, đa góc nhìn}: diễn biến giá, tin tức ảnh hưởng, số liệu tài chính, so sánh nhiều mã. Một câu hỏi như \textit{``Đánh giá HPG hôm nay''} thực chất gồm nhiều intent con (giá, kỹ thuật, định giá, tin tức). RAG truyền thống -- một query, một lần truy hồi -- không đủ bao phủ một câu hỏi phức hợp.
+
+\begin{casebox}{Vấn đề của truy hồi đơn lẻ}
+Một query \textit{``HPG quý gần nhất''} không thể tối ưu đồng thời cho ``xu hướng giá'', ``tin ngành thép'', ``kết quả kinh doanh'' và ``vĩ mô''. Kết quả truy hồi lệch về một khía cạnh, bỏ sót phần còn lại -- độ phủ (recall) thấp.
+\end{casebox}
+
+Hệ thống giải quyết bằng hai cơ chế bổ trợ: (1) \textbf{decompose} -- tách câu hỏi thành các sub-task có intent riêng; (2) \textbf{RAG-Fusion} -- sinh nhiều truy vấn con và hợp nhất thứ hạng bằng RRF.
+
+\section{Phạm vi và Mục tiêu}
+
+\noindent\textbf{Đối tượng}: Trợ lý phân tích thị trường chứng khoán Việt Nam (cổ phiếu HOSE/HNX/UPCOM), triển khai theo \textbf{Đề tài 4 -- RAG-Fusion}.
+
+\medskip\noindent\textbf{Mục tiêu cụ thể}:
+\begin{enumerate}
+  \item Dựng graph trạng thái LangGraph điều phối toàn bộ một lượt (turn): phân loại, làm rõ, phân rã, thu thập, tổng hợp, tự kiểm.
+  \item Cài kỹ thuật RAG-Fusion: nhiều truy vấn con + RRF hợp nhất thứ hạng.
+  \item Lấy dữ liệu thực qua tầng tools (giá, tin, định giá, vĩ mô, RAG) và tổng hợp trung lập.
+  \item Chặn mọi vòng lặp (ngân sách turn) để chi phí và độ trễ bị giới hạn.
+\end{enumerate}
+
+\section{Cấu trúc Báo cáo}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.6cm, every node/.style={font=\small}]
+  \node[startstop] (ch1) {Chương 1\\Giới thiệu};
+  \node[process, right=0.5cm of ch1] (ch2) {Chương 2\\Kiến trúc\\tổng quan};
+  \node[process, right=0.5cm of ch2] (ch3) {Chương 3\\Graph LangGraph\\(luồng chính)};
+  \node[process, right=0.5cm of ch3] (ch4) {Chương 4\\RAG-Fusion \&\\RRF};
+  \node[process, below=0.6cm of ch4] (ch5) {Chương 5\\Tầng tools \&\\dữ liệu};
+  \node[process, left=0.5cm of ch5] (ch6) {Chương 6\\Cơ chế\\vận hành};
+  \node[startstop, left=0.5cm of ch6] (ch7) {Chương 7\\Kết luận};
+
+  \draw[arrowt=ttuorange] (ch1) -- (ch2);
+  \draw[arrowt=ttuorange] (ch2) -- (ch3);
+  \draw[arrowt=ttuorange] (ch3) -- (ch4);
+  \draw[arrowt=ttuorange] (ch4) -- (ch5);
+  \draw[arrowt=ttuorange] (ch5) -- (ch6);
+  \draw[arrowt=ttuorange] (ch6) -- (ch7);
+\end{tikzpicture}
+\caption{Cấu trúc tổng thể của báo cáo}
+\end{figure}
+
+\newpage
+
+% ============================================================
+% CHƯƠNG 2: KIẾN TRÚC TỔNG QUAN
+% ============================================================
+\chapter{Kiến trúc tổng quan}
+
+\section{Ba tầng xử lý}
+
+Một lượt đi qua ba tầng, trong đó \textbf{LangGraph là tầng giữa} -- nơi toàn bộ trạng thái được điều phối (chi tiết Chương 3):
+
+\begin{enumerate}
+  \item \textbf{Tầng 1 -- \texttt{conversation\_router}}: một lần gọi LLM ép chọn tool, đổ kết quả (\texttt{intent}, \texttt{ticker}) vào \texttt{AgentState}.
+  \item \textbf{Tầng 2 -- graph LangGraph}: điều phối toàn bộ luồng \texttt{classify} $\rightarrow$ \texttt{clarify} $\rightarrow$ \texttt{decompose} $\rightarrow$ \texttt{run\_subqueries} $\rightarrow$ \texttt{synthesize} $\rightarrow$ \texttt{critique} $\rightarrow$ \texttt{finalize}.
+  \item \textbf{Tầng 3 -- intent modules + tools}: \texttt{gather\_data}/\texttt{run} lấy dữ liệu thực (giá, chỉ báo, định giá, tin, vĩ mô, RAG).
+\end{enumerate}
+
+\section{Stack công nghệ}
+
+\begin{table}[H]
+\centering
+\caption{Stack công nghệ}
+\small
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Layer} & \textbf{Công nghệ} \\
+\midrule
+LLM & DeepSeek (default) $\cdot$ Anthropic $\cdot$ OpenAI $\cdot$ Ollama $\cdot$ Gemini -- qua \texttt{create\_client()} \\
+\rowcolor{rowgray}
+Embedding & bge-m3 (dim 1024) $\cdot$ nomic-embed-text (dim 768) \\
+Vector store & Qdrant \\
+\rowcolor{rowgray}
+Relational DB & Postgres (\texttt{financial\_facts}, \texttt{stock\_prices}, \texttt{news\_articles}, \ldots) \\
+Object storage & MinIO (PDF BCTC) \\
+\rowcolor{rowgray}
+Orchestration & Dagster (schedules + sensor) \\
+Graph & LangGraph \\
+\rowcolor{rowgray}
+Reranker & CrossEncoder ms-marco-MiniLM-L-6-v2 \\
+Observability & Langfuse (tracing) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{keybox}{LLM Factory -- create\_client()}
+Mọi node gọi model qua \texttt{from llm.factory import create\_client} -- không import provider trực tiếp. \texttt{create\_client()} đọc \texttt{LLM\_PROVIDER} từ \texttt{.env} (default \texttt{deepseek}) và trả đúng \texttt{LLMClient}. Đổi provider = một dòng \texttt{.env}, không đổi code.
+\end{keybox}
+
+\section{Nguồn dữ liệu}
+
+\begin{table}[H]
+\centering
+\caption{Nguồn dữ liệu và nơi lưu trữ}
+\small
+\begin{tabularx}{\textwidth}{lXXl}
+\toprule
+\textbf{Nguồn} & \textbf{Nội dung} & \textbf{Lưu ở đâu} & \textbf{Tag} \\
+\midrule
+PDF BCTC (HPG) & BCTC kiểm toán & Qdrant \texttt{hpg\_b7\_structural\_meta} & RAG corpus \\
+\rowcolor{rowgray}
+CafeF / VnExpress RSS & Tin tài chính, thép, TTCK & Postgres + Qdrant \texttt{news\_chunks} & TIN TỨC \\
+vnstock Finance & KQKD, CDKT, LCTT & Postgres \texttt{financial\_facts} & GIÁ LỊCH SỬ \\
+\rowcolor{rowgray}
+vnstock Prices & Giá đóng cửa điều chỉnh & Postgres \texttt{stock\_prices} & GIÁ LỊCH SỬ \\
+Tavily web search & Kết quả real-time & Không lưu & WEB \\
+\rowcolor{rowgray}
+VCI / SSI iBoard & OHLCV, khối ngoại, index & Postgres & -- \\
+yfinance / CoinGecko & World, commodity, crypto, FX & Không lưu & -- \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\newpage
+
+% ============================================================
+% CHƯƠNG 3: GRAPH LANGGRAPH
+% ============================================================
+\chapter{Graph LangGraph -- Luồng chính}
+
+\section{LangGraph -- nền tảng điều phối}
+
+LangGraph là framework \textbf{điều phối mức thấp}: thay vì một chuỗi gọi LLM tuyến tính, toàn bộ một lượt được mô hình thành \textbf{đồ thị trạng thái} gồm các \emph{node} (hàm Python) và \emph{edge} (cung nối). Dự án khai thác trực tiếp ba cơ chế nền tảng sau:
+
+\begin{enumerate}
+  \item \textbf{State chung -- \texttt{AgentState}}. Mọi node đọc/ghi cùng một state (\texttt{TypedDict}, \texttt{agents/state.py}). Mỗi node chỉ trả \emph{một phần} dict các trường nó thay đổi; LangGraph \textbf{merge} phần đó vào state trước khi chạy node kế tiếp. Vì state chỉ chứa text/đường dẫn (không chứa DataFrame), nó tuần tự hoá được -- điều kiện để checkpoint lưu xuống Postgres.
+  \item \textbf{Điều hướng bằng hàm thuần}. Hai loại cung: \texttt{add\_edge} (cố định) và \texttt{add\_conditional\_edges} (hàm nhận state, trả \emph{key} $\rightarrow$ node đích). Mọi điểm rẽ trong dự án -- \texttt{check\_conversation}, \texttt{\_route\_after\_clarify}, \texttt{route\_after\_subqueries}, \texttt{route\_after\_critique} -- đều là \textbf{code thuần if/else}, \emph{không} gọi LLM. Đây là cốt lõi khiến chi phí mỗi lượt dự đoán được.
+  \item \textbf{Checkpoint + interrupt}. \texttt{g.compile(checkpointer=PostgresCheckpointer())} khiến mỗi bước tự lưu snapshot state theo \texttt{thread\_id}. Nhờ đó \texttt{interrupt()} treo graph giữa chừng (clarify hỏi người dùng) và \texttt{Command(resume=...)} nối lại đúng chỗ; một hội thoại có thể khôi phục trạng thái sau hàng phút/giờ.
+\end{enumerate}
+
+Chọn LangGraph thay vì chuỗi prompt tuần tự vì hai lý do: \textbf{(1) luồng có vòng lặp} -- replan (quay \texttt{decompose}) và critique-retry (quay \texttt{synthesize}) là chu trình mà chuỗi tuyến tính không biểu diễn được; \textbf{(2) cần dừng/khôi phục} -- clarify xen người dùng vào giữa luồng, đòi hỏi \texttt{interrupt} + checkpoint mà chỉ graph có trạng thái bền mới đáp ứng.
+
+\medskip\noindent\textbf{StateGraph và conditional edge -- nhìn từ \texttt{build\_graph()}}. Toàn bộ graph được dựng trong một hàm duy nhất \texttt{agents/graph.py::build\_graph()}:
+
+{\small
+\begin{verbatim}
+g = StateGraph(AgentState)                   # graph chung một state
+g.add_node("classify_node", classify_node)   # node = hàm Python
+g.set_entry_point("classify_node")           # node bắt đầu
+g.add_conditional_edges("classify_node", check_conversation,
+    {"skip": END, "out_of_scope": "node_out_of_scope",
+     "verify": "clarify_node"})
+g.add_edge("decompose_node", "run_subqueries_node")   # cung cố định
+app = g.compile(checkpointer=checkpointer)   # biên dịch + gắn checkpoint
+\end{verbatim}
+}
+
+Ba chi tiết cần nắm về \texttt{add\_conditional\_edges}: nó nhận \emph{(node gốc, hàm điều kiện, bảng ánh xạ \texttt{key $\rightarrow$ node đích})}. Hàm điều kiện đọc state rồi trả \textbf{một key}; LangGraph tra bảng để chọn node kế tiếp. Bảng phải liệt kê \emph{đủ} mọi nhánh có thể -- thiếu một key sẽ bị lỗi lúc chạy. Trong dự án, hàm điều kiện luôn là \textbf{code thuần} (\texttt{if/else}), không gọi LLM: \texttt{check\_conversation} trả \texttt{skip}/\texttt{out\_of\_scope}/\texttt{verify}, \texttt{route\_after\_subqueries} trả \texttt{replan}/\texttt{synthesize}, \texttt{route\_after\_critique} trả \texttt{save}/\texttt{retry}.
+
+\section{Tổng quan luồng}
+
+\texttt{agents/graph.py build\_graph()} tạo \texttt{StateGraph(AgentState)}, đăng ký node, nối edge, rồi \texttt{g.compile(checkpointer=checkpointer)}. Điểm vào là \texttt{classify\_node}. Luồng đầy đủ:
+
+\begin{figure}[H]
+\centering
+\tikzset{
+  bignode/.style={rectangle, rounded corners=3pt, draw=#1, fill=#1!18,
+    minimum height=1.15cm, text width=3.4cm, align=center, font=\small}
+}
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[every node/.style={font=\small}]
+  % Terminal: user input
+  \node[startstop, text width=3.4cm] (start) at (0,2.3) {USER INPUT\\câu hỏi người dùng};
+
+  % Main spine (x = 0), top to bottom
+  \node[bignode=ttublue]  (cls)   at (0,0)       {classify\\intent + ticker + trace};
+  \node[bignode=ttuorange] (clar) at (0,-2.3)    {clarify\\interrupt() nếu thiếu};
+  \node[bignode=ttugreen] (fast)  at (-5.0,-4.6) {fast-path\\build\_single\_subtask};
+  \node[bignode=ttublue]  (dec)   at (0,-4.6)    {decompose\\generate\_sub\_tasks};
+  \node[bignode=ttugreen] (run)   at (0,-6.9)    {run\_subqueries\\gather\_data, no LLM};
+  \node[bignode=ttugold]  (syn)   at (0,-9.2)    {synthesize\_final\\LLM stream};
+  \node[bignode=ttugold]  (crit)  at (0,-11.5)   {critique\_report\\LLM self-check};
+  \node[bignode=ttugreen] (fin)   at (0,-13.8)   {finalize\\turn\_end};
+
+  % Terminal: output
+  \node[startstop, text width=3.4cm] (result) at (0,-16.1) {OUTPUT\\báo cáo / trả lời (SSE)};
+
+  % Side exits (right column)
+  \node[bignode=ttured]  (oos)   at (5.2,-2.3)  {out\_of\_scope\\từ chối};
+  \node[bignode=ttugreen] (brief) at (5.2,-4.6) {market\_brief\\graph con};
+
+  % User input -> classify
+  \draw[arrowt=ttugreen] (start) -- node[right, font=\tiny]{query} (cls);
+
+  % classify: check_conversation (3 branches)
+  \draw[arrowt=ttuorange] (cls) -- node[right, font=\tiny]{verify} (clar);
+  \draw[arrowt=ttured] (cls.south east) -- node[above, font=\tiny, sloped]{out\_of\_scope} (oos.north);
+  \draw[arrowt=ttured] (cls.west) -- node[above, font=\tiny]{skip} (-8.6,0) -- (-8.6,-16.1) -- (result.west);
+
+  % clarify: _route_after_clarify (5 branches)
+  \draw[arrowt=ttuorange] (clar.south) -- node[right, font=\tiny]{decompose} (dec.north);
+  \draw[arrowt=ttublue] (clar.south west) -- node[above, font=\tiny]{simple} (fast.north);
+  \draw[arrowt=ttured] (clar.east) -- node[above, font=\tiny]{out\_of\_scope} (oos.west);
+  \draw[arrowt=ttured] (clar.south east) to[out=-15, in=160] node[below, font=\tiny, near start]{market\_brief} (brief.west);
+  \draw[arrowt=ttured] (clar.west) -- node[above, font=\tiny]{conversation} (-7.6,-2.3) -- (-7.6,-13.8) -- (fin.west);
+
+  % Merge to run
+  \draw[arrowt=ttublue] (fast.south) |- (run.west);
+  \draw[arrowt=ttuorange] (dec.south) -- (run.north);
+
+  % run -> synthesize -> critique -> finalize
+  \draw[arrowt=ttuorange] (run) -- node[right, font=\tiny]{synthesize} (syn);
+  \draw[arrowt=ttuorange] (syn) -- (crit);
+  \draw[arrowt=ttuorange] (crit) -- node[right, font=\tiny]{save} (fin);
+  \draw[arrowt=ttuorange] (fin) -- (result);
+
+  % Loops (dashed)
+  \draw[arrowt=ttured, dashed] (run.west) to[bend left=10] node[left, font=\tiny]{replan} (dec.west);
+  \draw[arrowt=ttured, dashed] (crit.east) to[bend right=10] node[right, font=\tiny]{retry} (syn.east);
+
+  % Exits to output (right lanes)
+  \draw[arrowt=ttured] (oos.east) -- (9.2,-2.3) -- (9.2,-16.1) -- (result.east);
+  \draw[arrowt=ttured] (brief.east) -- (8.0,-4.6) -- (8.0,-13.8) -- (fin.east);
+\end{tikzpicture}}
+\caption{Luồng graph trạng thái LangGraph của trợ lý: từ câu hỏi người dùng đến báo cáo. Nhãn trên cung là \emph{key} mà hàm điều kiện trả về (\texttt{check\_conversation}, \texttt{\_route\_after\_clarify}, \texttt{route\_after\_subqueries}, \texttt{route\_after\_critique}); cung nét đứt là vòng lặp.}
+\label{fig:graph}
+\end{figure}
+
+\section{Bảng node -- vai trò và LLM call}
+
+\begin{table}[H]
+\centering
+\caption{Các node và nhiệm vụ}
+\small
+\begin{tabularx}{\textwidth}{lXl}
+\toprule
+\textbf{Node} & \textbf{Nhiệm vụ} & \textbf{Gọi LLM?} \\
+\midrule
+\texttt{classify\_node} & Gán intent + ticker + time\_context; mở trace Langfuse & Không (production) \\
+\rowcolor{rowgray}
+\texttt{clarify\_node} & \texttt{interrupt()} hỏi khi thiếu intent/ticker; resume thì phân loại lại & Có (phân loại lại) \\
+\texttt{node\_out\_of\_scope} & Từ chối crypto/ngoại/forex bằng câu cố định & Không \\
+\rowcolor{rowgray}
+\texttt{node\_market\_brief} & Gọi \texttt{build\_brief\_graph()} (graph con) sinh market brief & Có (graph con) \\
+\texttt{decompose\_node} & Phân rã query thành ≤4 sub-task, mỗi task có intent & Có \\
+\rowcolor{rowgray}
+\texttt{build\_single\_subtask\_node} & Fast-path: gói intent+ticker thành 1 sub-task, bỏ decompose & Không \\
+\texttt{run\_subqueries\_node} & Chạy \texttt{gather\_data} từng sub-task; fan-out song song & \textbf{Không} \\
+\rowcolor{rowgray}
+\texttt{synthesize\_final} & Gộp dữ liệu thành báo cáo cuối; stream token ra SSE & Có \\
+\texttt{critique\_report\_node} & LLM tự chấm báo cáo theo checklist, trả \texttt{\{pass, feedback\}} & Có \\
+\rowcolor{rowgray}
+\texttt{finalize\_node} & Đóng trace span của turn & Không \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Bảng edge -- điều hướng}
+
+\begin{table}[H]
+\centering
+\caption{Conditional edges (hàm trả key → node đích)}
+\small
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Hàm} & \textbf{Keys → đích} \\
+\midrule
+\texttt{check\_conversation} & \texttt{skip → END}, \texttt{out\_of\_scope → node\_out\_of\_scope}, \texttt{verify → clarify\_node} \\
+\rowcolor{rowgray}
+\texttt{\_route\_after\_clarify} & \texttt{market\_brief}, \texttt{simple → build\_single\_subtask}, \texttt{decompose}, \texttt{conversation}, \texttt{out\_of\_scope} \\
+\texttt{route\_after\_subqueries} & \texttt{replan → decompose\_node}, \texttt{synthesize → synthesize\_final} \\
+\rowcolor{rowgray}
+\texttt{route\_after\_critique} & \texttt{save → finalize\_node}, \texttt{retry → synthesize\_final} \\
+\texttt{\_check\_approval\_decision} (human\_approval) & \texttt{end → END}, \texttt{synthesize\_final} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Điều hướng thuần logic}
+
+Ba quyết định điều hướng cốt lõi là \textbf{code thuần} (if/else), không gọi LLM:
+
+\begin{enumerate}
+  \item \texttt{route\_after\_subqueries}: nếu tỷ lệ sub-task rỗng \texttt{> 0.5} và chưa replan → \texttt{replan} (quay \texttt{decompose\_node} đúng một lần); ngược lại \texttt{synthesize}.
+  \item \texttt{route\_after\_critique}: nếu \texttt{critique\_pass} → \texttt{save}; chưa quá \texttt{MAX\_CRITIQUE} → \texttt{retry} (gấp \texttt{critique\_feedback} vào prompt synthesize); quá → \texttt{save}.
+  \item \texttt{\_route\_after\_clarify}: intent phức hợp (\texttt{market\_brief}, \texttt{investment\_case}, \texttt{macro\_sector}) → \texttt{decompose}; intent leaf có ticker → \texttt{simple} (fast-path); leaf ngành (\texttt{screening}, \texttt{breakout\_scan}) → \texttt{simple}; còn lại \texttt{decompose}.
+\end{enumerate}
+
+\section{Walkthrough -- ``Đánh giá HPG hôm nay''}
+
+\begin{table}[H]
+\centering
+\caption{Chuyển trạng thái theo node cho câu hỏi ``đánh giá HPG hôm nay''}
+\small
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+\textbf{Bước} & \textbf{Node} & \textbf{Hành động} \\
+\midrule
+1 & router (ngoài graph) & LLM gọi \texttt{needs\_agent\_run(intent=investment\_case, ticker=HPG)} \\
+\rowcolor{rowgray}
+2 & \texttt{classify\_node} & Dùng kết quả router, mở trace \\
+3 & \texttt{clarify\_node} & \texttt{detect\_ambiguity} → \texttt{None} (đủ intent+ticker) → đi tiếp \\
+\rowcolor{rowgray}
+4 & \texttt{\_route\_after\_clarify} & \texttt{investment\_case ∈ complex} → \texttt{decompose} \\
+5 & \texttt{decompose\_node} & \texttt{generate\_sub\_tasks(n=4)} → 4 sub-task \\
+\rowcolor{rowgray}
+6 & \texttt{run\_subqueries\_node} & Chạy 4 \texttt{gather\_data}; intent fan-out song song \\
+7 & \texttt{route\_after\_subqueries} & \texttt{empty\_ratio ≤ 0.5} → \texttt{synthesize} \\
+\rowcolor{rowgray}
+8 & \texttt{synthesize\_final} & 1 LLM call tổng hợp, stream ra SSE \\
+9 & \texttt{critique\_report\_node} & LLM chấm checklist → \texttt{pass=True} \\
+\rowcolor{rowgray}
+10 & \texttt{finalize\_node} & Đóng trace \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\newpage
+
+% ============================================================
+% CHƯƠNG 4: RAG-FUSION & RRF
+% ============================================================
+\chapter{RAG-Fusion và Reciprocal Rank Fusion}
+
+\section{Ý tưởng}
+
+RAG-Fusion thay truy hồi đơn lẻ bằng hai bước: (1) \textbf{sinh nhiều truy vấn con} đa góc nhìn; (2) \textbf{hợp nhất thứ hạng} từ nhiều danh sách kết quả bằng RRF. Graph độc lập \texttt{rag/rag\_fusion\_graph.py} cài đặt kỹ thuật này với 5 node:
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.55cm, every node/.style={font=\small}]
+  \node[process] (d) {decompose\\LLM sinh N sub-query};
+  \node[process, below=0.55cm of d] (m) {multi\_retrieve\\BM25 + vector + news\\+ Postgres + Tavily};
+  \node[process, below=0.55cm of m] (r) {rrf\_fuse\\RRF fold → top-K};
+  \node[process, below=0.55cm of r] (a) {analyze\\LLM, guard\\không mua/bán};
+  \node[startstop, below=0.55cm of a] (p) {report\\format + trích nguồn};
+
+  \draw[arrowt=ttublue] (d) -- (m);
+  \draw[arrowt=ttublue] (m) -- (r);
+  \draw[arrowt=ttublue] (r) -- (a);
+  \draw[arrowt=ttuorange] (a) -- (p);
+\end{tikzpicture}
+\caption{Graph RAG-Fusion: decompose → multi\_retrieve → rrf\_fuse → analyze → report}
+\label{fig:ragfusion}
+\end{figure}
+
+\section{Sinh truy vấn con}
+
+\texttt{rag/multi\_query.py} cung cấp hai hàm sinh truy vấn con:
+
+\begin{keybox}{generate\_sub\_queries vs generate\_sub\_tasks}
+\texttt{generate\_sub\_queries(query, n=4)}: sinh N truy vấn con thuần -- dùng cho graph RAG-Fusion.\\
+\texttt{generate\_sub\_tasks(query, n=4)}: sinh N sub-task \textbf{gắn intent} (\texttt{price\_action}, \texttt{technical\_analysis}, \texttt{valuation}, \ldots) -- dùng cho graph agent chính. Cả hai đều giới hạn ≤5 mã tiêu biểu mỗi câu, lọc \texttt{<think>}, bỏ số thứ tự, và fallback về query gốc khi LLM trả rỗng.
+\end{keybox}
+
+\section{Reciprocal Rank Fusion}
+
+\texttt{rag/fusion.py rrf\_fusion} hợp nhất hai danh sách đã chấm điểm chỉ bằng thứ hạng:
+
+\begin{equation}
+\text{score}(d) = \sum_{i} \frac{1}{k + \text{rank}_i(d)},
+\qquad k = 60
+\label{eq:rrf}
+\end{equation}
+
+Trong đó $\text{rank}_i(d)$ là vị trí (1-based) của tài liệu $d$ trong danh sách truy hồi thứ $i$, $k$ là hằng số làm trơn (Cormack 2009).
+
+\begin{keybox}{Tại sao dùng thứ hạng, không cộng điểm tương đồng?}
+Điểm BM25 (unbounded, phụ thuộc corpus) và cosine (bounded $0$--$1$) không cộng trực tiếp được: BM25 luôn áp đảo cosine. RRF bỏ score, chỉ dùng rank -- đại lượng cộng được xuyên danh sách, không cần chuẩn hoá, không cần huấn luyện.
+\end{keybox}
+
+RRF áp dụng ở \textbf{hai vị trí}:
+
+\begin{enumerate}
+  \item \texttt{\_hybrid\_retrieve}: BM25 + Qdrant vector của \textbf{một} sub-query → RRF → top-k (fusion trong một query).
+  \item \texttt{rrf\_fuse\_node}: N danh sách kết quả của N sub-query → RRF fold tuần tự → top-k (fusion xuyên query).
+\end{enumerate}
+
+\begin{warnbox}{Ràng buộc trung lập (analyze node)}
+System prompt của \texttt{analyze} chứa \texttt{GUARD 1}: \textit{``TUYỆT ĐỐI không đưa ra lời khuyên mua, bán, hoặc nắm giữ bất kỳ cổ phiếu nào.''} Kết quả web (\texttt{[WEB]}) phải gắn nhãn \textit{``Chưa được kiểm chứng''}; nguồn BCTC/tin tức phải ghi rõ nguồn.
+\end{warnbox}
+
+\newpage
+
+% ============================================================
+% CHƯƠNG 5: TẦNG TOOLS & DỮ LIỆU
+% ============================================================
+\chapter{Tầng tools và dữ liệu}
+
+\section{Hợp đồng ToolResult}
+
+Mọi tool trả \texttt{ToolResult(status, data, message)} -- \textbf{không raise, không trả list rỗng trần}. \texttt{status ∈ \{ ok, no\_data, invalid\_input, upstream\_error, rate\_limited \}}. Nhờ vậy \texttt{\_safe\_gather} chỉ cần bọc \texttt{try/except} là đủ -- lỗi tool không bao giờ làm sập node.
+
+\section{Tầng provider giá}
+
+\texttt{PriceProvider} (ABC) + chuỗi fallback cho cổ phiếu VN: \textbf{Fireant → VCI → TCBS}; chỉ số VN → \texttt{SsiIndexProvider}; mã ngoại → \texttt{YFinanceProvider}. \texttt{\_detect\_provider} quyết định theo hình thái ticker và universe \texttt{securities}.
+
+\section{Intent module -- gather\_data / run}
+
+Mỗi intent tách hai hàm:
+
+\begin{itemize}
+  \item \texttt{gather\_data}: thuần Python, trả dữ liệu text cho graph -- không gọi LLM. Đây chính là thứ làm \texttt{run\_subqueries\_node} ``không cần LLM''.
+  \item \texttt{run}: có LLM, theo market-brief pattern (Python tính số → LLM viết slot → Python lắp Markdown).
+\end{itemize}
+
+\section{Dữ liệu trong graph}
+
+Bảng \texttt{securities} (ticker, exchange, name\_aliases, tags) là universe để phân giải mã/ngành/tên. Các bảng Postgres còn lại cấp số liệu cho từng intent: \texttt{financial\_facts} (KQKD/CDKT/LCTT), \texttt{stock\_prices} + \texttt{ohlcv\_daily} (giá), \texttt{news\_articles} (tin), \texttt{market\_index\_daily} (index), \texttt{foreign\_flows} (khối ngoại), \texttt{corporate\_events} (sự kiện quyền), \texttt{broker\_views} (nhận định CTCK).
+
+\newpage
+
+% ============================================================
+% CHƯƠNG 6: CƠ CHẾ VẬN HÀNH
+% ============================================================
+\chapter{Cơ chế vận hành}
+
+\section{State -- text, không DataFrame}
+
+\texttt{AgentState} là \texttt{TypedDict(total=False)}. Mỗi node trả một dict con (chỉ các trường nó thay đổi); LangGraph merge vào state. \textbf{State chỉ chứa text/đường dẫn, không chứa DataFrame} -- để checkpoint tuần tự hoá được và không phình.
+
+Các trường then chốt: routing (\texttt{intent}, \texttt{ticker}, \texttt{tickers}, \texttt{sector}, \texttt{original\_query}), decompose/replan (\texttt{sub\_tasks}, \texttt{sub\_results}, \texttt{sub\_results\_empty\_ratio}, \texttt{replan\_attempted}), critique (\texttt{critique\_pass}, \texttt{critique\_feedback}, \texttt{critique\_attempts}, \texttt{report\_candidates}), ngân sách (\texttt{llm\_calls}, \texttt{turn\_started\_at}).
+
+\section{Ngân sách turn -- chống loop vô hạn}
+
+\begin{table}[H]
+\centering
+\caption{Các vòng lặp và giới hạn}
+\small
+\begin{tabularx}{\textwidth}{lXl}
+\toprule
+\textbf{Vòng lặp} & \textbf{Điều kiện} & \textbf{Giới hạn} \\
+\midrule
+Replan & \texttt{empty\_ratio > 0.5} và chưa replan & $\leq 1$ lần \\
+\rowcolor{rowgray}
+Critique retry & \texttt{critique\_pass == False} & $\leq \texttt{MAX\_CRITIQUE}$ (1) \\
+Ngân sách turn & \texttt{llm\_calls ≥ 8} hoặc quá 180s & chặn mọi vòng \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\texttt{\_llm\_budget\_exceeded(state)} được gọi ở mọi điểm rẽ nhánh có thể quay vòng (\texttt{route\_after\_subqueries}, \texttt{route\_after\_critique}) -- hết ngân sách thì đi thẳng đến synthesize/save, không thêm LLM call.
+
+\section{Interrupt \& checkpoint}
+
+\begin{itemize}
+  \item \texttt{clarify\_node} gọi \texttt{interrupt(question)} treo graph khi thiếu intent/ticker; resume bằng \texttt{Command(resume=...)}.
+  \item \texttt{human\_approval} (tùy chọn) chèn \texttt{request\_approval} trước synthesize để người duyệt trước khi viết báo cáo.
+  \item Checkpoint: \texttt{thread\_id = conversation\_id} → mỗi hội thoại một luồng checkpoint riêng (Postgres).
+\end{itemize}
+
+\begin{warnbox}{Bug tinh tế khi resume}
+Resume khôi phục state \textbf{từ thời điểm interrupt tạo} -- có thể cũ hàng phút/giờ. Hai hệ quả đã xử lý: (1) reset \texttt{turn\_started\_at}/\texttt{llm\_calls} khi resume để ngân sách turn không bị sai; (2) interrupt quá hạn (\texttt{INTERRUPT\_STALE\_SECONDS}) bị bỏ rơi bằng \texttt{thread\_id} mới.
+\end{warnbox}
+
+\section{Streaming ra SSE}
+
+\texttt{synthesize\_final} stream token qua \texttt{emit\_llm\_delta} → observer → \texttt{asyncio.Queue} → SSE. Chỉ lượt đầu stream; critique-retry dùng \texttt{generate()} để SSE không nhận \texttt{draft1 + draft2} nối nhau.
+
+\section{Đánh giá chất lượng -- RAGAS + Langfuse}
+
+Hai lớp quan sát tách biệt: \textbf{Langfuse} theo dõi từng lượt chạy thật (trace/span, chi phí, độ trễ); \textbf{RAGAS} đo chất lượng câu trả lời trên nhánh \texttt{rag\_qa} bằng 4 tiêu chí chuẩn của thư viện.
+
+\subsection{Tracing -- Langfuse}
+
+\texttt{llm.factory.create\_client()} bọc client LLM theo thứ tự \texttt{\_wrap\_langfuse()} → \texttt{tracing.instrument\_llm()} (\texttt{llm/factory.py}). Khi \texttt{LANGFUSE\_PUBLIC\_KEY}/\texttt{LANGFUSE\_SECRET\_KEY} có trong \texttt{.env}, mọi lệnh gọi \texttt{generate()} -- kể cả \texttt{classify\_hybrid}/\texttt{llm\_classify} (phân loại intent) và \texttt{conversation\_router.llm\_route} (định tuyến) -- tự động lên trace Langfuse; thiếu key thì rơi về ghi cục bộ \texttt{traces/latest.jsonl} (\texttt{tracing.\_emit}), không lỗi. \texttt{graph\_callbacks()} (\texttt{tracing.py}) gắn thêm \texttt{langfuse.langchain.CallbackHandler} cho từng node LangGraph khi chạy \texttt{app.invoke(..., config={"callbacks": graph\_callbacks()})}.
+
+\subsection{Chất lượng câu trả lời -- RAGAS trên nhánh rag\_qa}
+
+Script \texttt{evals/eval\_rag\_qa\_ragas.py} đo pipeline \texttt{rag\_qa} thật, không mock: \texttt{rag.qa.retrieve\_only()} lấy ngữ cảnh (SQL rows + chunk RAG), \texttt{rag.qa.answer()} sinh câu trả lời qua DeepSeek. \texttt{ground\_truth} không hard-code -- lấy trực tiếp từ \texttt{rag.sql\_agent.execute\_safe()} trên cùng câu hỏi, tức số liệu thật trong Postgres tại thời điểm chạy.
+
+\begin{table}[H]
+\centering
+\caption{4 tiêu chí RAGAS áp dụng}
+\small
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Tiêu chí} & \textbf{Ý nghĩa} \\
+\midrule
+\texttt{faithfulness} & Câu trả lời có bám sát ngữ cảnh truy hồi, không bịa thêm \\
+\rowcolor{rowgray}
+\texttt{answer\_relevancy} & Câu trả lời có đúng trọng tâm câu hỏi \\
+\texttt{context\_precision} & Ngữ cảnh truy hồi có ít nhiễu (so với \texttt{ground\_truth}) \\
+\rowcolor{rowgray}
+\texttt{context\_recall} & Ngữ cảnh truy hồi có đủ thông tin để trả lời đúng \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{warnbox}{Ràng buộc dữ liệu}
+Cả 4 tiêu chí chỉ tin được khi \texttt{execute\_safe()} trả về rows thật cho câu hỏi -- script cảnh báo (\texttt{WARNING}) và in ground\_truth ra màn hình trước khi chấm điểm để soát tay, thay vì âm thầm chấm trên ground\_truth trống.
+\end{warnbox}
+
+\newpage
+
+% ============================================================
+% CHƯƠNG 7: KẾT LUẬN
+% ============================================================
+\chapter{Kết luận}
+
+\section{Tổng kết Đóng góp}
+
+\begin{table}[H]
+\centering
+\caption{Tóm tắt kết quả theo yêu cầu đề tài}
+\small
+\begin{tabularx}{\textwidth}{lXl}
+\toprule
+\textbf{Yêu cầu} & \textbf{Kết quả} & \textbf{Căn cứ} \\
+\midrule
+Graph agent & Luồng 10 node classify → finalize & Chương 3 \\
+\rowcolor{rowgray}
+RAG-Fusion & Graph 5 node + RRF $k=60$ & Chương 4 \\
+Dữ liệu & Postgres/Qdrant/MinIO + ToolResult & Chương 5 \\
+\rowcolor{rowgray}
+Ràng buộc trung lập & \texttt{STRICT\_NEUTRAL} / GUARD cấm mua-bán & Chương 4 \\
+Chống loop & Ngân sách 8 call / 180s, replan ≤1 & Chương 6 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Ba quyết định thiết kế then chốt}
+
+\begin{enumerate}
+  \item \textbf{Điều hướng bằng code thuần} -- routing/replan/critique là if/else; chỉ node sinh nội dung gọi LLM. Chi phí và độ trễ dự đoán được.
+  \item \textbf{State chỉ chứa text/đường dẫn} -- checkpoint tuần tự hoá được, và \texttt{run\_subqueries} gather dữ liệu dạng text không cần LLM.
+  \item \textbf{Mọi vòng lặp có trần} -- replan ≤1, critique ≤\texttt{MAX\_CRITIQUE}, ngân sách turn 8 call/180s, đảm bảo turn ``bệnh hoạn'' không đốt tiền vô hạn.
+\end{enumerate}
+
+\section{Hướng Phát triển}
+
+\begin{itemize}
+  \item \textbf{Reranking}: thêm cross-encoder sau RRF để tinh chỉnh top-k trước khi tổng hợp.
+  \item \textbf{HyDE}: sinh tài liệu giả định trước khi truy hồi để thu hẹp khoảng cách ngữ nghĩa query--corpus.
+  \item \textbf{Đa nguồn đồng bộ}: hợp nhất fusion với database và web search trong cùng một node tổng hợp.
+\end{itemize}
+
+\newpage
+
+% ============================================================
+% TÀI LIỆU THAM KHẢO
+% ============================================================
+\begin{thebibliography}{99}
+
+\bibitem{cormack2009}
+Cormack, G.~V., Clarke, C.~L.~A., \& Buettcher, S. (2009).
+Reciprocal rank fusion outperforms Condorcet and individual rank learning methods.
+\textit{Proceedings of the 32nd International ACM SIGIR Conference}, 758--759.
+
+\bibitem{langgraph}
+LangChain. (2024).
+\textit{LangGraph -- Low-level orchestration framework for agentic applications}.
+\url{https://langchain-ai.github.io/langgraph/}
+
+\bibitem{ragas}
+Es, S., James, J., Espinosa-Anke, L., \& Schockaert, S. (2024).
+RAGAS: Automated evaluation of retrieval augmented generation.
+\textit{Proceedings of the 18th Conference of the European Chapter of the ACL}.
+
+\bibitem{qdrant}
+Qdrant. (2024).
+\textit{Qdrant -- vector database}.
+\url{https://qdrant.tech/}
+
+\bibitem{ragfusion}
+Raudaschl, A. (2023).
+\textit{Forget RAG, the future is RAG-Fusion}.
+\url{https://towardsdatascience.com/forget-rag-the-future-is-rag-fusion}
+
+\bibitem{requirement}
+Giảng viên Project Agent. (2026).
+\textit{Hướng dẫn thực hiện Project môn Agent -- Đề tài 4: Trợ lý phân tích thị trường -- RAG-Fusion}.
+Khoa Công nghệ Thông tin, Trường Đại học Tân Tạo.
+
+\end{thebibliography}
+
+\end{document}

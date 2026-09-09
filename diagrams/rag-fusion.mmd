@@ -1,0 +1,6 @@
+flowchart LR
+    decomp["decompose<br/>LLM sinh N sub-queries<br/>(N = 4)"] -->
+    mr["multi_retrieve<br/>parallel: BM25+vector hybrid<br/>+ news + Postgres + Tavily"] -->
+    rrf["rrf_fuse<br/>RRF fold mọi result list<br/>→ top-K + sources_used"] -->
+    an["analyze<br/>LLM đọc fused context<br/>GUARD: không mua/bán/nắm giữ"] -->
+    rep["report<br/>format + trích nguồn<br/>+ sub-queries đã dùng"]

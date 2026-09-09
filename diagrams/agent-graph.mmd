@@ -1,0 +1,26 @@
+flowchart TD
+    classify["classify_node<br/>intent + ticker + Langfuse trace"] -->|"skip"| END0([END])
+    classify -->|"out_of_scope"| oos["node_out_of_scope<br/>câu cố định · no gather · no LLM"]
+    classify -->|"verify"| clarify["clarify_node<br/>interrupt() nếu thiếu intent/ticker"]
+    oos --> END1([END])
+
+    clarify -->|"market_brief"| brief["node_market_brief<br/>build_brief_graph() — graph con"]
+    clarify -->|"simple"| fast["build_single_subtask_node<br/>fast-path · 1 sub-task"]
+    clarify -->|"decompose"| decomp["decompose_node<br/>generate_sub_tasks(n=4)"]
+    clarify -->|"conversation"| fin_conv["finalize_node"]
+    clarify -->|"out_of_scope"| oos
+
+    brief --> fin2["finalize_node"]
+    fast --> run["run_subqueries_node<br/>gather_data · no LLM"]
+    decomp --> run
+
+    run -->|"synthesize"| synth["synthesize_final<br/>LLM · stream → SSE"]
+    run -->|"replan ≤1<br/>empty > 50%"| decomp
+
+    synth --> crit["critique_report_node<br/>LLM self-check → pass/feedback"]
+    crit -->|"save"| fin3["finalize_node"]
+    crit -->|"retry ≤ MAX_CRITIQUE"| synth
+
+    fin_conv --> END2([END])
+    fin2 --> END3([END])
+    fin3 --> END4([END])
