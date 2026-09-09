@@ -1,0 +1,211 @@
+[
+  {
+    "expected_intent": "price_action",
+    "question": "Khối ngoại mua bán ròng HPG hôm nay thế nào?",
+    "expected_ticker": "HPG",
+    "got_intent": "price_action",
+    "got_ticker": "HPG",
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "[GIÁ & DÒNG TIỀN HPG]\nGiá HPG: 22 VND (phiên gần nhất).\nGiá đóng cửa: 22,050 VND (tăng 0.92%)\nKhối lượng phiên gần nhất: 22,432,800 cp (113.0% so với "
+  },
+  {
+    "expected_intent": "price_action",
+    "question": "Khối lượng giao dịch HPG có đột biến không?",
+    "expected_ticker": "<object object at 0x00000147949709B0>",
+    "got_intent": "price_action",
+    "got_ticker": "HPG",
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "[GIÁ & DÒNG TIỀN HPG]\nGiá HPG: 22 VND (phiên gần nhất).\nGiá đóng cửa: 22,050 VND (tăng 0.92%)\nKhối lượng phiên gần nhất: 22,432,800 cp (113.0% so với "
+  },
+  {
+    "expected_intent": "technical_analysis",
+    "question": "RSI và MACD của FPT đang như thế nào?",
+    "expected_ticker": "FPT",
+    "got_intent": "technical_analysis",
+    "got_ticker": "FPT",
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "[KỸ THUẬT FPT]\nChỉ báo (RSI, MACD, EMA/SMA):\n[Đơn vị: VND]\nRSI(14) = 57.3 → vùng trung tính\nMACD(12,26,9) = 896.85, Signal = 771.88, Histogram = 124.9"
+  },
+  {
+    "expected_intent": "technical_analysis",
+    "question": "Vùng hỗ trợ kháng cự của VNM ở đâu?",
+    "expected_ticker": "VNM",
+    "got_intent": "technical_analysis",
+    "got_ticker": "VNM",
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "[KỸ THUẬT VNM]\nChỉ báo (RSI, MACD, EMA/SMA):\n[Đơn vị: VND]\nRSI(14) = 50.0 → vùng trung tính\nMACD(12,26,9) = 382.45, Signal = 741.03, Histogram = -358."
+  },
+  {
+    "expected_intent": "technical_analysis",
+    "question": "Phân tích kỹ thuật HPG hôm nay",
+    "expected_ticker": "HPG",
+    "got_intent": "technical_analysis",
+    "got_ticker": "HPG",
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "[KỸ THUẬT HPG]\nChỉ báo (RSI, MACD, EMA/SMA):\n[Đơn vị: VND]\nRSI(14) = 53.1 → vùng trung tính\nMACD(12,26,9) = -26.35, Signal = -80.28, Histogram = 53.93"
+  },
+  {
+    "expected_intent": "valuation",
+    "question": "P/E của HPG hiện tại so với trung bình ngành thế nào?",
+    "expected_ticker": "HPG",
+    "got_intent": "valuation",
+    "got_ticker": "HPG",
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "[CƠ BẢN & ĐỊNH GIÁ HPG]\n### Bảng dữ liệu thực tế\n| Mã | P/E | P/B | ROE | EPS |\n|---|---|---|---|---|\n| HPG ◀ | 12.0 | 1.54 | 12.7% | 2,204 |\n| HSG | "
+  },
+  {
+    "expected_intent": "valuation",
+    "question": "ROE của VCB năm ngoái là bao nhiêu?",
+    "expected_ticker": "<object object at 0x00000147949709B0>",
+    "got_intent": "valuation",
+    "got_ticker": "VCB",
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "[CƠ BẢN & ĐỊNH GIÁ VCB]\n### Bảng dữ liệu thực tế\n| Mã | P/E | P/B | ROE | EPS |\n|---|---|---|---|---|\n| VCB ◀ | 12.7 | 2.14 | 16.7% | 4,542 |\n| ACB | "
+  },
+  {
+    "expected_intent": "rag_qa",
+    "question": "Doanh thu HPG năm 2024 là bao nhiêu?",
+    "expected_ticker": "HPG",
+    "got_intent": "rag_qa",
+    "got_ticker": "HPG",
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "[DỮ LIỆU SQL]\nrevenue_vnd_billion\n----------------------------------------\n138855.112131387"
+  },
+  {
+    "expected_intent": "rag_qa",
+    "question": "Doanh thu và lợi nhuận HPG năm 2024 là bao nhiêu?",
+    "expected_ticker": "HPG",
+    "got_intent": "rag_qa",
+    "got_ticker": "HPG",
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "[DỮ LIỆU SQL]\nmetric_code | value\n----------------------------------------\ndoanh_thu_thuan | 138855112131387.0"
+  },
+  {
+    "expected_intent": "macro_sector",
+    "question": "Tỷ giá USD/VND hôm nay ảnh hưởng gì đến FPT?",
+    "expected_ticker": "<object object at 0x00000147949709B0>",
+    "got_intent": "macro_sector",
+    "got_ticker": "FPT",
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "[VĨ MÔ & NGÀNH]\n\nTỷ giá: Vietcombank — mua: 25,680 | bán: 26,090 | CK: 25,710 VND\n\nHàng hóa (thế giới): • Gold: 4,452.00 USD/oz (+1.32%)\n• Silver: 68."
+  },
+  {
+    "expected_intent": "macro_sector",
+    "question": "Giá thép HRC thế giới tăng ảnh hưởng HPG thế nào?",
+    "expected_ticker": "<object object at 0x00000147949709B0>",
+    "got_intent": "macro_sector",
+    "got_ticker": "HPG",
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "[VĨ MÔ & NGÀNH]\n\nTỷ giá: Vietcombank — mua: 25,680 | bán: 26,090 | CK: 25,710 VND\n\nHàng hóa (thế giới): • Gold: 4,452.00 USD/oz (+1.32%)\n• Silver: 68."
+  },
+  {
+    "expected_intent": "news_sentiment",
+    "question": "Tin tức về HPG trong 3 ngày gần nhất",
+    "expected_ticker": "HPG",
+    "got_intent": "news_sentiment",
+    "got_ticker": "HPG",
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "[TIN TỨC & SENTIMENT HPG]\nTin tức:\n[tavily | 2026-08-26] HPG: Khuyến nghị TĂNG TỶ TRỌNG với giá mục tiêu 36,200 đồng/cổ phiếu\n[tavily | 2026-08-26] HP"
+  },
+  {
+    "expected_intent": "news_sentiment",
+    "question": "Sentiment của cộng đồng về VNM như thế nào?",
+    "expected_ticker": "<object object at 0x00000147949709B0>",
+    "got_intent": "news_sentiment",
+    "got_ticker": "VNM",
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "[TIN TỨC & SENTIMENT VNM]\nTin tức:\n[tavily | 2026-08-26] VNM: Báo cáo cập nhật ĐHCĐ 2026\n[tavily | 2026-08-26] Cổ phiếu cần quan tâm ngày 24/8 | Tin n"
+  },
+  {
+    "expected_intent": "investment_case",
+    "question": "HPG có nên mua không?",
+    "expected_ticker": "HPG",
+    "got_intent": "investment_case",
+    "got_ticker": "HPG",
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "[GIÁ & DÒNG TIỀN HPG]\nGiá HPG: 22 VND (phiên gần nhất).\nGiá đóng cửa: 22,050 VND (tăng 0.92%)\nKhối lượng phiên gần nhất: 22,432,800 cp (113.0% so với "
+  },
+  {
+    "expected_intent": "investment_case",
+    "question": "Khuyến nghị VCB lúc này: mua bán hay nắm giữ?",
+    "expected_ticker": "VCB",
+    "got_intent": "investment_case",
+    "got_ticker": "VCB",
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "[GIÁ & DÒNG TIỀN VCB]\nGiá VCB: 59 VND (phiên gần nhất).\nGiá đóng cửa: 58,700 VND (tăng 1.03%)\nKhối lượng phiên gần nhất: 5,324,200 cp (122.1% so với M"
+  },
+  {
+    "expected_intent": "screening",
+    "question": "Lọc cổ phiếu có ROE > 20%",
+    "expected_ticker": "<object object at 0x00000147949709B0>",
+    "got_intent": "screening",
+    "got_ticker": null,
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "[SCREENING]\nLọc toàn thị trường (roe > 20):\n- CTG: roe=21.23\n- FPT: roe=28.30\n- FRT: roe=26.13\n- HDB: roe=25.41\n- LPB: roe=25.23\n- MBB: roe=21.57\n- MW"
+  },
+  {
+    "expected_intent": "breakout_scan",
+    "question": "Quét cổ phiếu đang breakout tạo đỉnh mới",
+    "expected_ticker": "None",
+    "got_intent": "breakout_scan",
+    "got_ticker": null,
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "[BREAKOUT 431 mã trên sàn]\nTổng: 10 tín hiệu | SHORT: 4 | MID_PRE: 4 | LONG_PRE: 2\n\n**APH** — 📈 SHORT (nền 20 phiên)\n  Giá: 6,400 | Pivot: 6,380\n  SL:"
+  },
+  {
+    "expected_intent": "market_brief",
+    "question": "Thị trường chứng khoán hôm nay thế nào?",
+    "expected_ticker": "None",
+    "got_intent": "market_brief",
+    "got_ticker": null,
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "(no tool — direct/static path)"
+  },
+  {
+    "expected_intent": "conversation",
+    "question": "Xin chào bạn tên gì",
+    "expected_ticker": "None",
+    "got_intent": "conversation",
+    "got_ticker": null,
+    "intent_ok": true,
+    "ticker_ok": true,
+    "tool_ok": true,
+    "tool_note": "(no tool — direct/static path)"
+  }
+]

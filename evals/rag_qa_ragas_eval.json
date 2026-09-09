@@ -1,0 +1,154 @@
+{
+  "routing_report": [
+    {
+      "question": "Doanh thu HPG năm 2024 là bao nhiêu?",
+      "expected_ticker": "HPG",
+      "got_intent": "rag_qa",
+      "got_ticker": "HPG",
+      "intent_ok": true,
+      "ticker_ok": true
+    },
+    {
+      "question": "Doanh thu và lợi nhuận HPG năm 2024 là bao nhiêu?",
+      "expected_ticker": "HPG",
+      "got_intent": "rag_qa",
+      "got_ticker": "HPG",
+      "intent_ok": true,
+      "ticker_ok": true
+    },
+    {
+      "question": "EPS của HPG năm 2024 là bao nhiêu?",
+      "expected_ticker": "HPG",
+      "got_intent": "rag_qa",
+      "got_ticker": "HPG",
+      "intent_ok": true,
+      "ticker_ok": true
+    },
+    {
+      "question": "ROE của HPG năm 2024 là bao nhiêu?",
+      "expected_ticker": "HPG",
+      "got_intent": "valuation",
+      "got_ticker": "HPG",
+      "intent_ok": false,
+      "ticker_ok": true
+    },
+    {
+      "question": "Tổng tài sản HPG năm 2024 là bao nhiêu?",
+      "expected_ticker": "HPG",
+      "got_intent": "rag_qa",
+      "got_ticker": "HPG",
+      "intent_ok": true,
+      "ticker_ok": true
+    },
+    {
+      "question": "Nợ vay dài hạn của HPG năm 2024 là bao nhiêu?",
+      "expected_ticker": "HPG",
+      "got_intent": "rag_qa",
+      "got_ticker": "HPG",
+      "intent_ok": true,
+      "ticker_ok": true
+    },
+    {
+      "question": "Biên lợi nhuận gộp của HPG năm 2024 là bao nhiêu?",
+      "expected_ticker": "HPG",
+      "got_intent": "rag_qa",
+      "got_ticker": "HPG",
+      "intent_ok": true,
+      "ticker_ok": true
+    },
+    {
+      "question": "Lưu chuyển tiền thuần từ hoạt động kinh doanh của HPG năm 2024?",
+      "expected_ticker": "HPG",
+      "got_intent": "rag_qa",
+      "got_ticker": "HPG",
+      "intent_ok": true,
+      "ticker_ok": true
+    }
+  ],
+  "scores": [
+    {
+      "user_input": "Doanh thu HPG năm 2024 là bao nhiêu?",
+      "retrieved_contexts": [
+        "[DỮ LIỆU SQL]\ndoanh_thu_tvnd\n----------------------------------------\n138855.112131387"
+      ],
+      "response": "Doanh thu HPG năm 2024 là khoảng 138.855 tỷ đồng.",
+      "reference": "revenue_billion_vnd\n----------------------------------------\n138855.112131387",
+      "faithfulness": 0.0,
+      "answer_relevancy": 0.9973762642425821,
+      "context_precision": 0.9999999999,
+      "context_recall": 0.0
+    },
+    {
+      "user_input": "Doanh thu và lợi nhuận HPG năm 2024 là bao nhiêu?",
+      "retrieved_contexts": [
+        "[DỮ LIỆU SQL]\nmetric_code | value_billion_vnd\n----------------------------------------\ndoanh_thu_thuan | 138855.112131387\nlailo_thuan_sau_thue | 12020.023621271"
+      ],
+      "response": "Doanh thu thuần năm 2024 của HPG đạt khoảng 138.855 tỷ đồng, lợi nhuận thuần sau thuế đạt khoảng 12.020 tỷ đồng.",
+      "reference": "period | metric_code | value_billion_vnd\n----------------------------------------\n2024 | anh_huong_cua_thay_oi_ty_gia_hoi_oai_quy_oi_ngoai_te | 0.764989257\n2024 | au_tu_dai_han | 136.5\n2024 | au_tu_nam_giu_en_ngay_ao_han | 136.5\n2024 | au_tu_ngan_han | 18974.716730905\n2024 | cac_khoan_giam_tru_doanh_thu | -1706.275317185\n2024 | cac_khoan_phai_thu | 7647.800286988\n2024 | cac_khoan_tuong_uong_tien | 3968.114193944\n2024 | chi_phi_ban_hang | -2337.308685264\n2024 | chi_phi_du_phong | 108.500407214\n2024 | chi_phi_khac | -733.273009245\n2024 | chi_phi_lai_vay | 2287.36081088\n2024 | chi_phi_phai_tra | 682.112072502\n2024 | chi_phi_phai_tra_dai_han | 1089.692237207\n2024 | chi_phi_quan_ly_doanh_nghiep | -1545.516022772\n2024 | chi_phi_san_xuat_kinh_doanh_do_dang_dai_han | 94.859885024\n2024 | chi_phi_tai_chinh | -3966.636074605\n2024 | chi_phi_thue_thu_nhap_doanh_nghiep | -1673.478639907\n2024 | chi_phi_tra_truoc_ngan_han | 426.149499088\n2024 | co_phieu_pho_thong | 63962.502\n2024 | co_tuc_loi_nhuan_a_tra_cho_chu_so_huu | -4.971010891\n2024 | doanh_thu_ban_hang_va_cung_cap_dich_vu | 140561.387448572\n2024 | doanh_thu_chua_thuc_hien_ngan_han | 11.060479431\n2024 | doanh_thu_hoat_ong_tai_chinh | 2618.917240287\n2024 | doanh_thu_thuan | 138855.112131387\n2024 | du_phong_cac_khoan_no_dai_han | 121.49554694\n2024 | du_phong_cac_khoan_phai_tra_ngan_han | 13.672830889\n2024 | du_phong_giam_gia_hang_ton_kho | -101.069892341\n2024 | du_phong_no_kho_oi | -159.993736285\n2024 | gia_tri_rong_tai_san_au_tu | 559.598463093\n2024 | gia_von_hang_ban | -120357.563003703\n2024 | gtcl_tai_san_co_inh_vo_hinh | 184.215978466\n2024 | gtcl_tsc_huu_hinh | 67244.150975048\n2024 | hang_ton_kho | 46192.292081813\n2024 | hang_ton_kho_rong | 46091.222189472\n2024 | khau_hao_luy_ke_tai_san_au_tu | -300.950552522\n2024 | khau_hao_luy_ke_tsc_huu_hinh | -40902.415373906\n2024 | khau_hao_luy_ke_tsc_vo_hinh | -182.841626241\n2024 | khau_hao_tsc_va_bst | 6915.671331197\n2024 | lai_chua_phan_phoi | 49599.124109203\n2024 | lai_co_ban_tren_co_phieu_vnd | 1.505e-06\n2024 | lailo_chenh_lech_ty_gia_hoi_oai_do_anh_gia_lai_cac_khoan_muc_tien_te_co_goc_ngoai_te | 173.470579978\n2024 | lailo_thuan_sau_thue | 12020.023621271\n2024 | lailo_truoc_thue | 13693.502261178\n2024 | lailo_tu_hoat_ong_au_tu | -1718.310403845\n2024 | lailo_tu_hoat_ong_kinh_doanh | 13267.00558533\n2024 | lnst_chua_phan_phoi_ky_nay | 11974.873561074\n2024 | lnst_chua_phan_phoi_luy_ke_en_cuoi_ky_truoc | 37624.250548129\n2024 | loi_ich_co_ong_khong_kiem_soat | 290.990632368\n2024 | loi_ich_cua_co_ong_thieu_so | -1.420214803\n2024 | loi_nhuan_cua_co_ong_cua_cong_ty_me | 12021.443836074\n2024 | loi_nhuan_gop | 18497.549127684\n2024 | loi_nhuan_truoc_thue | 13693.502261178\n2024 | loi_nhuanlo_tu_hoat_ong_kinh_doanh_truoc_nhung_thay_oi_von_luu_ong | 21472.490878571\n2024 | loi_the_thuong_mai | 63.613126723\n2024 | luu_chuyen_tien_te_rong_tu_cac_hoat_ong_san_xuat_kinh_doanh | 6608.320655215\n2024 | luu_chuyen_tien_thuan_trong_ky | -5365.120010289\n2024 | luu_chuyen_tien_thuan_tu_hoat_ong_au_tu | -29788.138252448\n2024 | luu_chuyen_tien_thuan_tu_hoat_ong_tai_chinh | 17814.697586944\n2024 | nguoi_mua_tra_tien_truoc | 739.178306553\n2024 | nguyen_gia_tai_san_au_tu | 860.549015615\n2024 | nguyen_gia_tsc_huu_hinh | 108146.566348954\n2024 | nguyen_gia_tsc_vo_hinh | 367.057604707\n2024 | no_dai_han | 34617.006307593\n2024 | no_ngan_han | 75225.243262689\n2024 | no_phai_tra | 109842.249570282\n2024 | phai_thu_cho_vay_ngan_han | 87.461616439\n2024 | phai_thu_dai_han | 923.400123614\n2024 | phai_thu_dai_han_khac | 840.594835822\n2024 | phai_thu_khac | 1248.992845378\n2024 | phai_thu_khach_hang | 4352.135419872\n2024 | phai_thu_thue_khac | 10.074967536\n2024 | phai_tra_dai_han_khac | 12.47650517\n2024 | phai_tra_khac | 188.07684519\n2024 | phai_tra_nguoi_ban | 14046.841160127\n2024 | phai_tra_nguoi_lao_ong | 890.893543298\n2024 | phai_tra_nha_cung_cap_dai_han | 6283.63027904\n2024 | phan_bo_loi_the_thuong_mai | 12.295891969\n2024 | quy_au_tu_va_phat_trien | 794.841242128\n2024 | quy_khen_thuong_phuc_loi | 1027.310381825\n2024 | tai_san_co_inh | 67428.366953514\n2024 | tai_san_dai_han | 137815.431280986\n2024 | tai_san_dai_han_khac | 5016.848415359\n2024 | tai_san_do_dang_dai_han | 63750.717325406\n2024 | tai_san_luu_ong_khac | 7072.890925778\n2024 | tai_san_ngan_han | 86674.276272995\n2024 | tai_san_thieu_can_xu_ly | 0.37971458\n2024 | tanggiam_cac_khoan_phai_thu | -1818.671846432\n2024 | tanggiam_cac_khoan_phai_tra | 1994.355381518\n2024 | tanggiam_chi_phi_tra_truoc | -227.706209603\n2024 | tanggiam_hang_ton_kho | -10759.800904696\n2024 | thiet_bi_vat_tu_phu_tung_thay_the_dai_han | 429.422385383\n2024 | thu_nhap_khac | 1159.769685093\n2024 | thu_nhap_khac_rong | 426.496675848\n2024 | thue_gtgt_uoc_khau_tru | 6636.666459154\n2024 | thue_thu_nhap_doanh_nghiep_a_nop | -936.764513356\n2024 | thue_thu_nhap_doanh_nghiep_hien_thoi | -1765.80600724\n2024 | thue_thu_nhap_doanh_nghiep_hoan_lai | 92.327367333\n2024 | thue_thu_nhap_hoan_lai | 29.26848314\n2024 | thue_va_cac_khoan_phai_tra_nha_nuoc | 1743.411429415\n2024 | tien | 2919.531945908\n2024 | tien_chi_cho_vay_mua_cac_cong_cu_no_cua_on_vi_khac | -28505.457880646\n2024 | tien_chi_e_mua_sam_xay_dung_tsc_va_cac_tai_san_dai_han_khac | -35495.026797327\n2024 | tien_chi_khac_cho_hoat_ong_kinh_doanh | -783.607107167\n2024 | tien_chi_tra_von_gop_cho_cac_chu_so_huu_mua_lai_co_phieu_cua_doanh_nghiep_a_phat_hanh | -0.11956\n2024 | tien_lai_vay_a_tra | -2332.422296347\n2024 | tien_thu_hoi_au_tu_gop_von_vao_on_vi_khac | 31.246619001\n2024 | tien_thu_hoi_cho_vay_ban_lai_cac_cong_cu_no_cua_on_vi_khac | 31587.656044222\n2024 | tien_thu_khac_tu_hoat_ong_kinh_doanh | 0.447272727\n2024 | tien_thu_lai_cho_vay_co_tuc_va_loi_nhuan_uoc_chia | 1339.850195728\n2024 | tien_thu_tu_phat_hanh_co_phieu_nhan_von_gop_cua_chu_so_huu | 233.136\n2024 | tien_thu_tu_thanh_ly_nhuong_ban_tsc_va_cac_tai_san_dai_han_khac | 1253.593566574\n2024 | tien_thu_uoc_cac_khoan_i_vay | 174465.587837075\n2024 | tien_tra_no_goc_vay | -156878.93567924\n2024 | tien_va_tuong_duong_tien | 6887.646139852\n2024 | tien_va_tuong_uong_tien_au_ky | 12252.001160884\n2024 | tien_va_tuong_uong_tien_cuoi_ky | 6887.646139852\n2024 | tong_cong_nguon_von | 224489.707553981\n2024 | tong_tai_san | 224489.707553981\n2024 | tra_truoc_dai_han | 4269.141694868\n2024 | tra_truoc_nguoi_ban | 2118.824427004\n2024 | tra_truoc_nguoi_ban_dai_han | 82.805287792\n2024 | vay_dai_han | 27080.443256096\n2024 | vay_ngan_han | 55882.686213459\n2024 | von_chu_so_huu | 114647.457983699\n2024 | von_gop | 63962.502\n2024 | von_va_cac_quy | 114647.457983699\n2024 | xay_dung_co_ban_ang_do_dang | 63655.857440382",
+      "faithfulness": 0.0,
+      "answer_relevancy": 0.9691602944559636,
+      "context_precision": 0.0,
+      "context_recall": NaN
+    },
+    {
+      "user_input": "EPS của HPG năm 2024 là bao nhiêu?",
+      "retrieved_contexts": [
+        "[DỮ LIỆU SQL]\neps_billion_vnd\n----------------------------------------\n12020.023621271"
+      ],
+      "response": "EPS của HPG năm 2024 là 12,020.02 tỷ đồng.",
+      "reference": "ticker | eps\n----------------------------------------\nHPG | 0.05",
+      "faithfulness": 0.0,
+      "answer_relevancy": 1.0,
+      "context_precision": 0.0,
+      "context_recall": 0.0
+    },
+    {
+      "user_input": "Tổng tài sản HPG năm 2024 là bao nhiêu?",
+      "retrieved_contexts": [
+        "[DỮ LIỆU SQL]\ntotal_assets\n----------------------------------------\n224489707553981.0"
+      ],
+      "response": "Tổng tài sản của HPG năm 2024 là 224.489,7 tỷ đồng.",
+      "reference": "value\n----------------------------------------\n224489707553981.0",
+      "faithfulness": 0.0,
+      "answer_relevancy": 0.9977615197737962,
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0
+    },
+    {
+      "user_input": "Nợ vay dài hạn của HPG năm 2024 là bao nhiêu?",
+      "retrieved_contexts": [
+        "[DỮ LIỆU SQL]\nvalue\n----------------------------------------\n27080443256096.0"
+      ],
+      "response": "Nợ vay dài hạn của HPG năm 2024 là 27.080,44 tỷ đồng (khoảng 27.080,44 tỷ VND).",
+      "reference": "long_term_debt\n----------------------------------------\n27080443256096.0",
+      "faithfulness": 0.5,
+      "answer_relevancy": 0.9595801473648378,
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0
+    },
+    {
+      "user_input": "Biên lợi nhuận gộp của HPG năm 2024 là bao nhiêu?",
+      "retrieved_contexts": [
+        "[DỮ LIỆU SQL]\ngross_margin_billion_vnd\n----------------------------------------\n18497.55"
+      ],
+      "response": "Biên lợi nhuận gộp của HPG năm 2024 đạt khoảng 18,5 tỷ đồng (18.497,55 tỷ đồng).",
+      "reference": "gross_profit_margin\n----------------------------------------\n18497.549127684",
+      "faithfulness": 0.5,
+      "answer_relevancy": 0.9986172303263621,
+      "context_precision": 0.0,
+      "context_recall": 0.0
+    },
+    {
+      "user_input": "Lưu chuyển tiền thuần từ hoạt động kinh doanh của HPG năm 2024?",
+      "retrieved_contexts": [
+        "[DỮ LIỆU SQL]\nvalue\n----------------------------------------\n6608320655215.0"
+      ],
+      "response": "Lưu chuyển tiền thuần từ hoạt động kinh doanh của HPG năm 2024 là khoảng 6.608,32 tỷ đồng.",
+      "reference": "value\n----------------------------------------\n6608320655215.0",
+      "faithfulness": 0.0,
+      "answer_relevancy": 0.8811802859034862,
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0
+    }
+  ]
+}

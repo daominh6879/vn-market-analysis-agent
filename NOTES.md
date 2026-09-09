@@ -32,3 +32,5 @@
 | Bài 26 | [docs/notes/bai-26-daily-brief-p4.md](docs/notes/bai-26-daily-brief-p4.md) |
 | Bài 27 | [docs/notes/bai-27-human-in-loop.md](docs/notes/bai-27-human-in-loop.md) |
 | Bài 32 | [docs/notes/bai-32-cache.md](docs/notes/bai-32-cache.md) |
+| Eval RAGAS (rag_qa) | [docs/notes/eval-rag-qa-ragas.md](docs/notes/eval-rag-qa-ragas.md) |
+| Eval router + tools (mọi intent) | [docs/notes/eval-router-tools.md](docs/notes/eval-router-tools.md) |
