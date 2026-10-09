@@ -97,6 +97,9 @@ class PriceProvider(ABC):
 
 # ── FireantProvider ───────────────────────────────────────────────────────────
 
+_FIREANT_COOLDOWN_WINDOW = 60.0  # seconds; one shared pause per rate-limit outage
+
+
 class FireantProvider(PriceProvider):
     """
     Fireant REST API — primary source for VN stock OHLCV + foreign volumes.
@@ -111,6 +114,7 @@ class FireantProvider(PriceProvider):
     """
 
     _token: str | None = None  # class-level token shared across instances
+    _cooldown_until: float | None = None  # monotonic deadline while rate-limited
 
     def __init__(self) -> None:
         import os
@@ -167,11 +171,33 @@ class FireantProvider(PriceProvider):
                 timeout=30,
             )
 
+        def _request_with_cooldown(token: str) -> httpx.Response:
+            """One shared cooldown per Fireant outage — pause once, not per ticker.
+
+            On a 429 we sleep a single window then retry once. If the provider is
+            still rate-limited, the cooldown stays armed so every later ticker in
+            the batch fails fast instead of each burning its own backoff.
+            """
+            resp = _request(token)
+            if resp.status_code != 429:
+                return resp
+            now = time.monotonic()
+            if FireantProvider._cooldown_until is not None and now < FireantProvider._cooldown_until:
+                return resp  # inside an active outage window → fail fast
+            FireantProvider._cooldown_until = now + _FIREANT_COOLDOWN_WINDOW
+            time.sleep(_FIREANT_COOLDOWN_WINDOW)
+            resp = _request(token)
+            if resp.status_code != 429:
+                FireantProvider._cooldown_until = None  # recovered
+            else:
+                FireantProvider._cooldown_until = time.monotonic() + _FIREANT_COOLDOWN_WINDOW
+            return resp
+
         token = self._get_token()
-        resp = _request(token)
+        resp = _request_with_cooldown(token)
         if resp.status_code == 401:
             FireantProvider._token = None
-            resp = _request(self._login())
+            resp = _request_with_cooldown(self._login())
         resp.raise_for_status()
 
         data = resp.json()

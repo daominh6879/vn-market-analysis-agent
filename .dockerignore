@@ -1,0 +1,13 @@
+.venv
+.git
+**/node_modules
+**/__pycache__
+data
+chroma_db
+traces
+outputs
+docs
+spec-html
+diagrams
+*.pptx
+*.tex

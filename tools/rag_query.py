@@ -18,6 +18,7 @@ import threading
 import httpx
 from qdrant_client import QdrantClient
 
+from core.config import settings
 from rag.filter import BCTC_COLLECTION, build_filter
 from tools.result import ToolResult
 
@@ -40,7 +41,7 @@ def _get_qdrant() -> QdrantClient:
     if _qdrant is None:
         with _qdrant_lock:
             if _qdrant is None:
-                _qdrant = QdrantClient("localhost", port=6333)
+                _qdrant = QdrantClient(settings.QDRANT_HOST, port=settings.QDRANT_PORT)
     return _qdrant
 
 

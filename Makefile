@@ -1,10 +1,23 @@
-.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-fetch-ticker news-backfill news-reindex test-sentiment mcp-server mcp-inspect test-tools test-chaos migrate-b28 test-b28 api-b28 test-b30 eval-b30 eval-b30-notes test-b31 api-b31 curl-stream-b31 ui-b31 ui-chainlit ui-react test-b32 test-b32-unit api-b32 ingest-migrate ingest-daily ingest-ohlcv ingest-foreign ingest-index ingest-prices ingest-ratios ingest-quotes ingest-events audit test-fireant test-intents expose
+.PHONY: up down test logs eval eval-baseline noise test-idempotent index migrate delete reconcile reconcile-fix migrate-quarantine quality-check quality-list migrate-facts extract-facts query-fact fetch-prices migrate-nguon fetch-financials fetch-financials-dry fetch-financials-schema pipeline-dev pipeline-ui eval-bm25 eval-bm25-vn eval-fusion eval-hybrid-rrf eval-hybrid-weighted eval-reranker demo-rag-fusion eval-rag-fusion eval-rag-fusion-run test-tenant migrate-readonly news-fetch-ticker news-backfill news-reindex test-sentiment mcp-server mcp-inspect test-tools test-chaos migrate-b28 test-b28 api-b28 test-b30 eval-b30 eval-b30-notes test-b31 api-b31 curl-stream-b31 ui-b31 ui-chainlit ui-react test-b32 test-b32-unit api-b32 ingest-migrate ingest-daily ingest-ohlcv ingest-foreign ingest-index ingest-prices ingest-ratios ingest-quotes ingest-events audit test-fireant test-intents expose up-app down-app build-app logs-app
 
 up:
 	docker compose up -d
 
 down:
 	docker compose down
+
+# API (:8031) + React UI (:5173) in Docker, with infra
+up-app:
+	docker compose up -d --build
+
+build-app:
+	docker compose build api ui
+
+down-app:
+	docker compose stop api ui
+
+logs-app:
+	docker compose logs -f api ui
 
 test:
 	pytest tests/ -v

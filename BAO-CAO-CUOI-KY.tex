@@ -191,10 +191,10 @@
   \textbf{Nhóm thực hiện:} & Nhóm F \\[5pt]
   \textbf{Thành viên:}
       & Đào Minh Hùng \quad -- \quad MSHV: 2632006 \\
-      & Vương Thảo Nguyên -- MSHV: 2532013 \\
-      & Phạm Thị Kim Ngọc -- MSHV: 2532005 \\
-      & Nguyễn Khánh Hòa -- MSHV: 2532018 \\[5pt]
-  \textbf{Giảng viên hướng dẫn:} & Trần Quốc Huy \\[5pt]
+      & Nguyễn Văn Bích \quad -- \quad MSHV: 2632008  \\
+      & Phạm Thị Kim Ngọc \quad -- \quad MSHV: 2532005 \\
+      & Nguyễn Khánh Hòa \quad -- \quad MSHV: 2532018 \\[5pt]
+  \textbf{Giảng viên hướng dẫn:} & Cao Tiến Dũng \\[5pt]
 \end{tabular}
 
 \vfill
@@ -232,6 +232,44 @@ Tiểu luận này trình bày \textbf{Trợ lý phân tích thị trường ch�
 % CHƯƠNG 1: GIỚI THIỆU
 % ============================================================
 \chapter{Giới thiệu}
+
+\section{Tổng quan dự án}
+
+\textbf{Trợ lý phân tích thị trường / tài chính (Market Analysis Agent)} là hệ thống agent áp dụng \textbf{kỹ thuật RAG nâng cao -- RAG-Fusion}: sinh nhiều truy vấn con, truy hồi song song, rồi hợp nhất thứ hạng bằng \textbf{Reciprocal Rank Fusion (RRF)}. Hệ thống tổng hợp tin tức và dữ liệu lịch sử để phân tích một mã cổ phiếu hoặc một ngành, trả về báo cáo Markdown kèm trích nguồn.
+
+\begin{table}[H]
+\centering
+\caption{Tổng quan dự án}
+\small
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Khía cạnh} & \textbf{Nội dung} \\
+\midrule
+Bài toán & Tổng hợp tin tức + dữ liệu lịch sử để phân tích một mã/ngành. \\
+\rowcolor{rowgray}
+Bộ công cụ (tools) & Web search (tin realtime) $\cdot$ DB giá/chỉ số lịch sử $\cdot$ RAG trên báo cáo phân tích. \\
+Luồng LangGraph & \texttt{decompose-query} $\rightarrow$ \texttt{multi-retrieve} $\rightarrow$ \texttt{RRF-fuse} $\rightarrow$ \texttt{analyze} $\rightarrow$ \texttt{report}. \\
+\rowcolor{rowgray}
+Thách thức chính & Tách sự kiện mới khỏi tri thức tĩnh. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{warnbox}{Lưu ý trung lập}
+Hệ thống \textbf{chỉ phân tích dữ kiện}, KHÔNG đưa lời khuyên đầu tư (mua/bán/nắm giữ).
+\end{warnbox}
+
+\section{Công nghệ sử dụng}
+
+Dự án dùng các công nghệ chính sau (kiến trúc chi tiết và bảng stack đầy đủ ở Chương 2):
+
+\begin{itemize}
+  \item \textbf{LLM}: DeepSeek (default) $\cdot$ Anthropic $\cdot$ OpenAI $\cdot$ Ollama $\cdot$ Gemini -- qua \texttt{create\_client()}.
+  \item \textbf{Điều phối agent}: LangGraph -- graph trạng thái, checkpoint, interrupt.
+  \item \textbf{Truy hồi}: Qdrant (vector) + BM25, hợp nhất bằng RRF ($k=60$); embedding bge-m3.
+  \item \textbf{Dữ liệu}: Postgres (giá, tin, tài chính), MinIO (PDF BCTC), Tavily (web search).
+  \item \textbf{Hạ tầng}: Dagster (orchestration), Langfuse (observability), FastAPI + Streamlit (phục vụ).
+\end{itemize}
 
 \section{Bối cảnh và Động lực}
 
@@ -685,40 +723,6 @@ Resume khôi phục state \textbf{từ thời điểm interrupt tạo} -- có th
 \section{Streaming ra SSE}
 
 \texttt{synthesize\_final} stream token qua \texttt{emit\_llm\_delta} → observer → \texttt{asyncio.Queue} → SSE. Chỉ lượt đầu stream; critique-retry dùng \texttt{generate()} để SSE không nhận \texttt{draft1 + draft2} nối nhau.
-
-\section{Đánh giá chất lượng -- RAGAS + Langfuse}
-
-Hai lớp quan sát tách biệt: \textbf{Langfuse} theo dõi từng lượt chạy thật (trace/span, chi phí, độ trễ); \textbf{RAGAS} đo chất lượng câu trả lời trên nhánh \texttt{rag\_qa} bằng 4 tiêu chí chuẩn của thư viện.
-
-\subsection{Tracing -- Langfuse}
-
-\texttt{llm.factory.create\_client()} bọc client LLM theo thứ tự \texttt{\_wrap\_langfuse()} → \texttt{tracing.instrument\_llm()} (\texttt{llm/factory.py}). Khi \texttt{LANGFUSE\_PUBLIC\_KEY}/\texttt{LANGFUSE\_SECRET\_KEY} có trong \texttt{.env}, mọi lệnh gọi \texttt{generate()} -- kể cả \texttt{classify\_hybrid}/\texttt{llm\_classify} (phân loại intent) và \texttt{conversation\_router.llm\_route} (định tuyến) -- tự động lên trace Langfuse; thiếu key thì rơi về ghi cục bộ \texttt{traces/latest.jsonl} (\texttt{tracing.\_emit}), không lỗi. \texttt{graph\_callbacks()} (\texttt{tracing.py}) gắn thêm \texttt{langfuse.langchain.CallbackHandler} cho từng node LangGraph khi chạy \texttt{app.invoke(..., config={"callbacks": graph\_callbacks()})}.
-
-\subsection{Chất lượng câu trả lời -- RAGAS trên nhánh rag\_qa}
-
-Script \texttt{evals/eval\_rag\_qa\_ragas.py} đo pipeline \texttt{rag\_qa} thật, không mock: \texttt{rag.qa.retrieve\_only()} lấy ngữ cảnh (SQL rows + chunk RAG), \texttt{rag.qa.answer()} sinh câu trả lời qua DeepSeek. \texttt{ground\_truth} không hard-code -- lấy trực tiếp từ \texttt{rag.sql\_agent.execute\_safe()} trên cùng câu hỏi, tức số liệu thật trong Postgres tại thời điểm chạy.
-
-\begin{table}[H]
-\centering
-\caption{4 tiêu chí RAGAS áp dụng}
-\small
-\begin{tabularx}{\textwidth}{lX}
-\toprule
-\textbf{Tiêu chí} & \textbf{Ý nghĩa} \\
-\midrule
-\texttt{faithfulness} & Câu trả lời có bám sát ngữ cảnh truy hồi, không bịa thêm \\
-\rowcolor{rowgray}
-\texttt{answer\_relevancy} & Câu trả lời có đúng trọng tâm câu hỏi \\
-\texttt{context\_precision} & Ngữ cảnh truy hồi có ít nhiễu (so với \texttt{ground\_truth}) \\
-\rowcolor{rowgray}
-\texttt{context\_recall} & Ngữ cảnh truy hồi có đủ thông tin để trả lời đúng \\
-\bottomrule
-\end{tabularx}
-\end{table}
-
-\begin{warnbox}{Ràng buộc dữ liệu}
-Cả 4 tiêu chí chỉ tin được khi \texttt{execute\_safe()} trả về rows thật cho câu hỏi -- script cảnh báo (\texttt{WARNING}) và in ground\_truth ra màn hình trước khi chấm điểm để soát tay, thay vì âm thầm chấm trên ground\_truth trống.
-\end{warnbox}
 
 \newpage
 

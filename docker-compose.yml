@@ -47,3 +47,34 @@ services:
     command: server /data --console-address ":9001"
     restart: unless-stopped
 
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: api
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      QDRANT_HOST: qdrant
+      REDIS_URL: redis://redis:6379
+      OLLAMA_BASE_URL: ${DOCKER_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8031:8031"
+    volumes:
+      - ./traces:/app/traces
+    depends_on:
+      - postgres
+      - qdrant
+      - redis
+    restart: unless-stopped
+
+  ui:
+    build: ./ui/react
+    container_name: ui
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+    restart: unless-stopped

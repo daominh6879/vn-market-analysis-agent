@@ -106,6 +106,7 @@ class TestFireantProviderFetchHistoryRange:
     def setup_method(self):
         from tools.providers import FireantProvider
         FireantProvider._token = "test-token"
+        FireantProvider._cooldown_until = None
 
     def test_returns_dataframe_with_correct_columns(self):
         from tools.providers import FireantProvider
@@ -150,6 +151,37 @@ class TestFireantProviderFetchHistoryRange:
             df = p.fetch_history_range("HPG", "2026-08-01", "2026-08-05")
         assert not df.empty
         assert FireantProvider._token == "new-token"
+
+    def test_429_pauses_once_then_succeeds(self):
+        from tools.providers import FireantProvider
+        api_rows = _fireant_api_rows(5)
+        resp_429 = _mock_fireant_resp(status=429)
+        resp_ok = _mock_fireant_resp(api_rows)
+        with (
+            patch("httpx.get", side_effect=[resp_429, resp_ok]),
+            patch("tools.providers.time.sleep") as mock_sleep,
+        ):
+            p = FireantProvider()
+            df = p.fetch_history_range("HPG", "2026-08-01", "2026-08-05")
+        assert not df.empty
+        assert mock_sleep.call_count == 1  # one shared cooldown pause
+
+    def test_429_full_outage_pauses_once_across_tickers(self):
+        from tools.providers import FireantProvider
+        resp_429 = _mock_fireant_resp(status=429)
+        resp_429.raise_for_status.side_effect = Exception("429 Too Many Requests")
+        with (
+            patch("httpx.get", return_value=resp_429),
+            patch("tools.providers.time.sleep") as mock_sleep,
+        ):
+            p = FireantProvider()
+            # First ticker: pause once, retry still 429 → raise
+            with pytest.raises(Exception, match="429"):
+                p.fetch_history_range("HPG", "2026-08-01", "2026-08-05")
+            # Second ticker: still in cooldown → fail fast, no extra sleep
+            with pytest.raises(Exception, match="429"):
+                p.fetch_history_range("VCB", "2026-08-01", "2026-08-05")
+        assert mock_sleep.call_count == 1  # shared pause, not per ticker
 
     def test_empty_response_raises(self):
         from tools.providers import FireantProvider
