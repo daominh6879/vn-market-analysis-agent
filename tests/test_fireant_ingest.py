@@ -350,7 +350,7 @@ class TestFetchOhlcv:
 
     def test_foreign_value_derived_from_volume_times_close(self):
         """buy_val = buy_vol × close / 1e6 (tỷ đồng); Fireant close is nghìn đồng."""
-        from ingest.fetch_ohlcv import fetch_and_upsert, _upsert_foreign as real_upsert_foreign
+        from ingest.fetch_ohlcv import fetch_and_upsert
         df = pd.DataFrame({
             "time":             ["2026-08-01"],
             "open":             [20.0],

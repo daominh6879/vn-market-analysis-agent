@@ -243,6 +243,6 @@ def test_execute_safe_loi_nhuan_cao_nhat() -> None:
         assert isinstance(result.rows, list)
         # If data exists, values should be positive numbers
         for row in result.rows:
-            assert float(row[2]) > 0, f"Unexpected non-positive value: {row}"
+            assert float(row["value"]) > 0, f"Unexpected non-positive value: {row}"
     finally:
         sql_agent.generate_sql = original

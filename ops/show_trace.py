@@ -2,8 +2,7 @@
 ops/show_trace.py — Terminal trace viewer.
 
 Usage:
-    python -m ops.show_trace                        # traces/latest.jsonl
-    python -m ops.show_trace traces/2026-09-03.jsonl
+    python -m ops.show_trace                        # latest 2000 events from Postgres
     python -m ops.show_trace --tail 50              # last 50 events
 """
 from __future__ import annotations
@@ -15,7 +14,6 @@ from datetime import datetime
 from pathlib import Path
 
 _ROOT = Path(__file__).parent.parent
-_LATEST = _ROOT / "traces" / "latest.jsonl"
 
 _TYPE_COLOR = {
     "turn_start": "\033[1;36m",
@@ -79,19 +77,10 @@ def format_event(ev: dict) -> str:
     return "\n".join(parts)
 
 
-def show(path: Path, tail: int = 0) -> None:
-    if not path.exists():
-        print(f"File not found: {path}", file=sys.stderr)
-        sys.exit(1)
-    lines = path.read_text(encoding="utf-8").splitlines()
-    if tail:
-        lines = lines[-tail:]
-    events: list[dict] = []
-    for line in lines:
-        try:
-            events.append(json.loads(line))
-        except Exception:
-            pass
+def show(tail: int = 0) -> None:
+    sys.path.insert(0, str(_ROOT))
+    from tracing import read_events
+    events = read_events(tail or 2000)
     try:
         from rich.console import Console
         console = Console()
@@ -103,8 +92,7 @@ def show(path: Path, tail: int = 0) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Show trace JSONL in terminal")
-    parser.add_argument("file", nargs="?", type=Path, default=_LATEST)
+    parser = argparse.ArgumentParser(description="Show trace events from Postgres in terminal")
     parser.add_argument("--tail", "-n", type=int, default=0, help="Last N events (0=all)")
     args = parser.parse_args()
-    show(args.file, args.tail)
+    show(args.tail)

@@ -73,7 +73,9 @@ AGENT_RUN_TOOL: dict = {
                 "description": (
                     "Stock ticker (2-5 uppercase letters), or empty string if not applicable. "
                     "A company name (e.g. 'vinamilk', 'hòa phát') is acceptable — it resolves "
-                    "to the ticker. Resolve from conversation context when the current query is implicit."
+                    "to the ticker. Resolve from conversation context when the current query is implicit. "
+                    "If the message names no company/ticker and the conversation has no prior subject "
+                    "(e.g. a bare 'phân tích kỹ thuật'), leave it EMPTY — never guess a ticker."
                 ),
             },
             "query": {
@@ -495,7 +497,8 @@ def _fallback_classify(query: str, history: list[dict], focus: Focus | None = No
     return None
 
 
-def _trace(decision: str, intent: str = "", ticker: str = "", fallback_used: bool = False) -> None:
+def _trace(decision: str, intent: str = "", ticker: str = "", fallback_used: bool = False,
+           deterministic: bool = False) -> None:
     try:
         from tracing import get_tracer
         get_tracer().event("gate", {
@@ -504,6 +507,7 @@ def _trace(decision: str, intent: str = "", ticker: str = "", fallback_used: boo
             "intent": intent,
             "ticker": ticker,
             "fallback_used": fallback_used,
+            "deterministic": deterministic,
         })
     except Exception:
         pass
@@ -512,14 +516,10 @@ def _trace(decision: str, intent: str = "", ticker: str = "", fallback_used: boo
 def _screening_route(query: str) -> RouteResult:
     """Deterministic screening route for "lọc/filter/screen" queries the LLM misrouted.
 
-    Extracts an RSI filter via regex when present; other indicators are left to gather's
-    fallback. Never calls the LLM.
+    Extracts numeric filters (P/E, ROE, RSI, ...) via regex when present. Never calls the LLM.
     """
-    from agents.intents.screening import _parse_rsi_filter
-    filters = None
-    parsed = _parse_rsi_filter(query)
-    if parsed:
-        filters = [{"indicator": "rsi", "op": parsed[0], "threshold": parsed[1]}]
+    from agents.intents.screening import _parse_filters
+    filters = _parse_filters(query) or None
     return RouteResult(
         type="agent",
         intent="screening",

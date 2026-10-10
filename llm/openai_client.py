@@ -98,7 +98,6 @@ class OpenAIClient(LLMClient):
             except json.JSONDecodeError:
                 # Model returned truncated/malformed JSON (often from low max_tokens).
                 # Attempt partial repair: find last complete key-value by truncating to last '}'.
-                import re as _re2
                 repaired = raw[: raw.rfind("}") + 1] if "}" in raw else "{}"
                 try:
                     parsed = json.loads(repaired)

@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 from datetime import date as _date, timedelta as _timedelta
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 
@@ -127,6 +126,9 @@ def _map_upstream_error(ticker: str, exc: Exception) -> ToolResult:
 
 # ── Tool 1: Giá hiện tại ─────────────────────────────────────────────────────
 
+_MARKET_INDEX_CODES = frozenset({"VNINDEX", "VN30", "HNX", "HNX30", "UPCOM"})
+
+
 @instrument_tool("get_realtime_price")
 def get_realtime_price(ticker: str, provider: PriceProvider | None = None) -> ToolResult:
     """Trả giá đóng cửa gần nhất (VND). Luôn trả ToolResult, không raise."""
@@ -141,11 +143,13 @@ def get_realtime_price(ticker: str, provider: PriceProvider | None = None) -> To
     p = provider or _detect_provider(t)
     try:
         price = p.get_price(resolved)
-        return ToolResult(
-            status="ok",
-            data=price,
-            message=f"Giá {t}: {price:,.0f} VND (phiên gần nhất).",
-        )
+        if t in _MARKET_INDEX_CODES:
+            message = f"Chỉ số {t}: {price:,.2f} điểm (phiên gần nhất)."
+        elif isinstance(p, YFinanceProvider):  # non-VN symbol routed to yfinance → USD
+            message = f"Giá {t}: {price:,.2f} USD (phiên gần nhất)."
+        else:
+            message = f"Giá {t}: {price:,.0f} VND (phiên gần nhất)."
+        return ToolResult(status="ok", data=price, message=message)
     except ValueError as e:
         return ToolResult(
             status="no_data",
@@ -259,10 +263,12 @@ def get_historical_ohlcv(
     try:
         df = p.get_history(resolved, days)
         df = _clip_range(df, start_date, end_date) if has_range else df
+        unit = ("USD" if isinstance(p, YFinanceProvider)
+                else "điểm" if t in _MARKET_INDEX_CODES else "VND")
         return ToolResult(
             status="ok",
             data=df,
-            message=f"Lấy được {len(df)} phiên lịch sử OHLCV của {t} (VND).",
+            message=f"Lấy được {len(df)} phiên lịch sử OHLCV của {t} ({unit}).",
         )
     except ValueError as e:
         return ToolResult(
@@ -329,7 +335,7 @@ def calculate_indicators(df: pd.DataFrame, currency: str = "VND") -> ToolResult:
 
     Args:
         df: DataFrame từ get_historical_ohlcv (phải có cột 'close', 'high', 'low', 'volume').
-        currency: 'VND' hoặc 'USD'. Tag vào output để model không so sánh sai đơn vị.
+        currency: 'VND', 'USD' hoặc 'điểm' (chỉ số). Tag vào output để model không so sánh sai đơn vị.
     """
     try:
         import pandas_ta as ta  # noqa: F401
@@ -1365,11 +1371,13 @@ def _build_foreign_result(
     net_buyers = [(t, v) for t, v in net_items if v > 0][:3]
     net_sellers = [(t, v) for t, v in net_items if v < 0][-3:]
 
-    top_buy_str = " / ".join(f"{t} {v:.0f}tỷ" for t, v in net_buyers)
-    top_sell_str = " / ".join(f"{t} {abs(v):.0f}tỷ" for t, v in reversed(net_sellers))
+    block = {r["ticker"] for r in (*top_buyers, *top_sellers) if r.get("block_trade")}
+    tag = lambda t: " (giao dịch thỏa thuận)" if t in block else ""  # noqa: E731
+    top_buy_str = " / ".join(f"{t} {v:.0f}tỷ{tag(t)}" for t, v in net_buyers)
+    top_sell_str = " / ".join(f"{t} {abs(v):.0f}tỷ{tag(t)}" for t, v in reversed(net_sellers))
 
     summary = "\n".join([
-        f"Khối ngoại {date_str}{source_tag}: {direction} {abs(net_bn):.0f} tỷ đồng",
+        f"Khối ngoại {date_str}{source_tag}: {direction} {abs(net_bn):,.0f} tỷ đồng",
         f"Mua ròng nhiều nhất: {top_buy_str}" if top_buy_str else "Mua ròng nhiều nhất: (không có dữ liệu)",
         f"Bán ròng nhiều nhất: {top_sell_str}" if top_sell_str else "Bán ròng nhiều nhất: (không có dữ liệu)",
     ])
@@ -1468,7 +1476,7 @@ def _query_sector_performance_db(sessions: int = 1) -> list[dict] | None:
                             CASE WHEN prev.close > 0
                                  THEN (curr.close - prev.close) / prev.close * 100
                                  ELSE 0 END                             AS pct_change,
-                            curr.close * curr.volume                   AS trade_value
+                            curr.close * curr.volume * 1000            AS trade_value  -- nghìn đồng → VND
                         FROM ohlcv_daily curr
                         JOIN ohlcv_daily prev
                             ON curr.ticker = prev.ticker
@@ -1536,7 +1544,7 @@ def _query_sector_performance_fallback(sessions: int = 1) -> list[dict] | None:
             val_map = val_df.set_index("ticker")["traded_value"].to_dict()
             db_df["trade_value"] = db_df["ticker"].map(val_map).fillna(0.0)
         else:
-            db_df["trade_value"] = db_df["close"] * 1000  # crude proxy if no volume
+            db_df["trade_value"] = db_df["close"]  # crude proxy if no volume (close is already VND)
 
         results = []
         for sector, grp in db_df.groupby("sector"):

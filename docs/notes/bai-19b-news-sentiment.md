@@ -9,7 +9,7 @@
 ```
 tools/price.py   — thêm search_financial_news, analyze_market_sentiment
 tools/cli.py     — thêm subcommand news, sentiment
-tests/test_tools.py — thêm TestSearchFinancialNews (9 tests), TestAnalyzeMarketSentiment (7 tests)
+tests/test_price_tools.py — thêm TestSearchFinancialNews (9 tests), TestAnalyzeMarketSentiment (7 tests)
 ```
 
 ## Tool functions mới

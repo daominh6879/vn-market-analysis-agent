@@ -1,5 +1,5 @@
 """
-tests/test_p1_breadth_movers.py — Unit tests for Phase 1:
+tests/test_market_breadth_movers.py — Unit tests for Phase 1:
   - hose_universe (load/seed)
   - get_market_breadth(universe="HOSE"|"VN30")
   - get_top_movers(by="value"|"pct_gain"|"pct_loss")
@@ -13,10 +13,10 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pandas as pd
-import pytest
+from datetime import date
 
-from tools.result import ToolResult
+import pandas as pd
+
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ def _make_universe_df(tickers: list[str], advances: int, declines: int) -> pd.Da
             pct = -(1.0 + i * 0.1)
         else:
             pct = 0.0
-        rows.append({"ticker": t, "date": "2026-08-26",
+        rows.append({"ticker": t, "date": str(date.today()),
                      "close": 50_000.0 + i * 100, "prev_close": 50_000.0,
                      "pct_change": round(pct, 2)})
     return pd.DataFrame(rows)
@@ -42,7 +42,7 @@ def _make_top_value_df(tickers: list[str]) -> pd.DataFrame:
     rows = [
         {
             "ticker": t,
-            "date": "2026-08-26",
+            "date": str(date.today()),
             "close": 200_000.0 - i * 1000,
             "volume": 10_000_000 - i * 500_000,
             "traded_value": (200_000.0 - i * 1000) * (10_000_000 - i * 500_000),
@@ -115,8 +115,7 @@ class TestHoseUniverse:
         assert len(tickers) == len(set(tickers)), "Duplicate tickers in HOSE_SEED"
 
     def test_fetch_and_save_returns_zero_on_error(self):
-        import httpx
-        with patch("httpx.post", side_effect=Exception("network")):
+        with patch("vnstock.Listing", side_effect=Exception("network")):
             from data.hose_universe import fetch_and_save_hose_universe
             n = fetch_and_save_hose_universe()
         assert n == 0
@@ -145,8 +144,7 @@ class TestBuildBreadthLabel:
 
 class TestGetMarketBreadthHose:
     def _seed_tickers(self):
-        from data.hose_universe import load_hose_tickers
-        return load_hose_tickers()[:30]  # 30 for speed
+        return [f"T{i:03d}" for i in range(210)]  # >= _MIN_COVERAGE (200) for HOSE
 
     def test_hose_breadth_from_db(self):
         tickers = self._seed_tickers()
@@ -260,7 +258,8 @@ class TestGetTopMovers:
     def test_no_data_when_db_empty(self):
         tickers = self._tickers()
         with patch("data.hose_universe.load_hose_tickers", return_value=tickers), \
-             patch("tools.ohlcv_db.query_top_by_value", return_value=None):
+             patch("tools.ohlcv_db.query_top_by_value", return_value=None),              patch("tools.providers.VciDirectProvider.fetch_batch_latest",
+                   side_effect=Exception("network")):
             from tools.price import get_top_movers
             result = get_top_movers(by="value")
         assert result.status == "no_data"

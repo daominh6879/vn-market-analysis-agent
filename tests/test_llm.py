@@ -1,7 +1,6 @@
 """Unit tests for the LLM middleware — no network calls."""
 from __future__ import annotations
 
-import os
 from typing import Iterator
 
 import pytest
@@ -63,19 +62,28 @@ def test_fake_tool_calls():
     assert resp.tool_calls[0].input == {"q": "test"}
 
 
+def _unwrap(client):
+    """create_client() wraps the provider client for tracing (file + optional Langfuse)."""
+    while True:
+        inner = getattr(client, "_inner", None) or getattr(client, "_client", None)
+        if inner is None or not isinstance(inner, LLMClient):
+            return client
+        client = inner
+
+
 def test_factory_anthropic(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "anthropic")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-fake")
     from llm.anthropic_client import AnthropicClient
     client = create_client()
-    assert isinstance(client, AnthropicClient)
+    assert isinstance(_unwrap(client), AnthropicClient)
 
 
 def test_factory_ollama(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "ollama")
     from llm.ollama_client import OllamaClient
     client = create_client()
-    assert isinstance(client, OllamaClient)
+    assert isinstance(_unwrap(client), OllamaClient)
 
 
 def test_factory_openai(monkeypatch):
@@ -83,7 +91,7 @@ def test_factory_openai(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-fake")
     from llm.openai_client import OpenAIClient
     client = create_client()
-    assert isinstance(client, OpenAIClient)
+    assert isinstance(_unwrap(client), OpenAIClient)
 
 
 def test_factory_gemini(monkeypatch):
@@ -91,7 +99,7 @@ def test_factory_gemini(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
     from llm.gemini_client import GeminiClient
     client = create_client()
-    assert isinstance(client, GeminiClient)
+    assert isinstance(_unwrap(client), GeminiClient)
 
 
 def test_factory_unknown(monkeypatch):

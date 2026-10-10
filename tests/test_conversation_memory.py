@@ -1,8 +1,8 @@
 """
-tests/test_bai28_conversation.py — Bài 28 integration tests.
+tests/test_conversation_memory.py — Bài 28 integration tests.
 
 All tests hit real DB + LLM (DeepSeek default).
-Run: python -m pytest tests/test_bai28_conversation.py -v -s
+Run: python -m pytest tests/test_conversation_memory.py -v -s
 
 Covers every "Xong khi" checklist item:
   [x] POST /conversations → conversation_id

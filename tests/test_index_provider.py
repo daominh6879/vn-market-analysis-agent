@@ -7,31 +7,31 @@ All network calls mocked. No DB connection required.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
 
-from tools.providers import SsiIndexProvider, resolve_ticker, _detect_provider, _SSI_DIRECT
+from tools.providers import SsiIndexProvider, resolve_ticker, _detect_provider
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
-def _make_ssi_response(symbol: str = "VNINDEX", n: int = 10) -> dict:
-    """Build fake SSI iBoard response payload."""
+def _make_ssi_response(symbol: str = "VNINDEX", n: int = 10) -> list:
+    """Build fake VCI OHLCChart payload (list with one time-series dict)."""
     base_ts = int(datetime(2026, 8, 1).timestamp())
     day_sec = 86400
-    return {
-        "data": {
-            "t": [base_ts + i * day_sec for i in range(n)],
-            "o": [1750.0 + i for i in range(n)],
-            "h": [1760.0 + i for i in range(n)],
-            "l": [1740.0 + i for i in range(n)],
-            "c": [1755.0 + i for i in range(n)],
-            "v": [100_000_000 for _ in range(n)],
-        }
-    }
+    return [{
+        "symbol": symbol,
+        "t": [base_ts + i * day_sec for i in range(n)],
+        "o": [1750.0 + i for i in range(n)],
+        "h": [1760.0 + i for i in range(n)],
+        "l": [1740.0 + i for i in range(n)],
+        "c": [1755.0 + i for i in range(n)],
+        "v": [100_000_000 for _ in range(n)],
+        "accumulatedValue": [20_000_000 for _ in range(n)],
+    }]
 
 
 # ── resolve_ticker ────────────────────────────────────────────────────────────
@@ -68,10 +68,10 @@ class TestDetectProvider:
         p = _detect_provider("HNX")
         assert isinstance(p, SsiIndexProvider)
 
-    def test_stock_uses_vci(self):
-        from tools.providers import VciDirectProvider
+    def test_stock_uses_fireant_primary(self):
+        from tools.providers import FallbackProvider, FireantProvider
         p = _detect_provider("HPG")
-        assert isinstance(p, VciDirectProvider)
+        assert isinstance(p, FallbackProvider) and isinstance(p._primary, FireantProvider)
 
     def test_intl_uses_yfinance(self):
         # _detect_provider routes by ticker format: dot or >4 chars → YFinance.
@@ -92,23 +92,25 @@ class TestSsiIndexProvider:
 
     def test_fetch_history_returns_dataframe(self):
         provider = SsiIndexProvider()
-        with patch("httpx.get", return_value=self._mock_get("VNINDEX", 30)):
+        with patch("httpx.post", return_value=self._mock_get("VNINDEX", 30)):
             df = provider.fetch_history("VNINDEX", 20)
         assert isinstance(df, pd.DataFrame)
-        assert list(df.columns) == ["time", "open", "high", "low", "close", "volume"]
+        assert list(df.columns) == [
+            "time", "open", "high", "low", "close", "volume", "accumulated_value_vnd",
+        ]
         assert len(df) <= 20
 
     def test_fetch_history_sorted_ascending(self):
         provider = SsiIndexProvider()
-        with patch("httpx.get", return_value=self._mock_get("VNINDEX", 15)):
+        with patch("httpx.post", return_value=self._mock_get("VNINDEX", 15)):
             df = provider.fetch_history("VNINDEX", 10)
         assert list(df["time"]) == sorted(df["time"].tolist())
 
     def test_fetch_price_returns_last_close(self):
         provider = SsiIndexProvider()
         fake = _make_ssi_response("VNINDEX", 5)
-        last_close = fake["data"]["c"][-1]
-        with patch("httpx.get", return_value=self._mock_get("VNINDEX", 5)):
+        last_close = fake[0]["c"][-1]
+        with patch("httpx.post", return_value=self._mock_get("VNINDEX", 5)):
             price = provider.fetch_price("VNINDEX")
         assert price == last_close
 
@@ -116,14 +118,14 @@ class TestSsiIndexProvider:
         provider = SsiIndexProvider()
         mock_resp = MagicMock()
         mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = {"data": {"t": [], "o": [], "h": [], "l": [], "c": [], "v": []}}
-        with patch("httpx.get", return_value=mock_resp):
+        mock_resp.json.return_value = []
+        with patch("httpx.post", return_value=mock_resp):
             with pytest.raises(ValueError, match="No data"):
                 provider.fetch_price("VNINDEX")
 
     def test_hnx_same_interface(self):
         provider = SsiIndexProvider()
-        with patch("httpx.get", return_value=self._mock_get("HNX", 10)):
+        with patch("httpx.post", return_value=self._mock_get("HNX", 10)):
             df = provider.fetch_history("HNX", 5)
         assert not df.empty
         assert "close" in df.columns

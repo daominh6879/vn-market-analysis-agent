@@ -1,5 +1,5 @@
 """
-tests/test_e2e_changes.py — End-to-end tests for the observability + streaming changes.
+tests/test_observability_streaming_e2e.py — End-to-end tests for the observability + streaming changes.
 
 Covers the code touched in this change set (all hit real DeepSeek LLM + real tools/DB):
 
@@ -7,8 +7,8 @@ Covers the code touched in this change set (all hit real DeepSeek LLM + real too
     - synthesize_final streams tokens via client.stream() + emit_llm_delta
     - stream_turn surfaces `event: tool` / `event: gate` SSE lines via current_observer
   tracing.py
-    - turn_start / turn_end / tool events written to traces/latest.jsonl
-    - usage.jsonl cost ledger written (llm/pricing.py estimate_cost)
+    - turn_start / turn_end / tool events written to trace_events
+    - llm_usage cost ledger written (llm/pricing.py estimate_cost)
   memory
     - memory/retrieval_gate.should_retrieve (real LLM)
     - memory/consolidation.consolidate (real LLM)
@@ -18,10 +18,10 @@ Covers the code touched in this change set (all hit real DeepSeek LLM + real too
     - tools/price.get_historical_ohlcv     (DB-first path)
 
 Run (needs DeepSeek key + Postgres running):
-    python -m pytest tests/test_e2e_changes.py -v -s -m e2e
+    python -m pytest tests/test_observability_streaming_e2e.py -v -s -m e2e
 
 Run only the no-network unit tests:
-    python -m pytest tests/test_e2e_changes.py -v -k "unit"
+    python -m pytest tests/test_observability_streaming_e2e.py -v -k "unit"
 """
 
 from __future__ import annotations
@@ -114,12 +114,10 @@ def conversation_id():
 def test_stream_turn_emits_tool_gate_and_traces(conversation_id):
     """One full agent turn must: stream text, emit tool+gate SSE, write trace + usage."""
     cid, user_id = conversation_id
-    traces_dir = ROOT / "traces"
-    latest = traces_dir / "latest.jsonl"
-    usage = traces_dir / "usage.jsonl"
+    from tracing import read_events, read_usage
 
     start_ts = time.time()
-    before_usage = len(usage.read_text(encoding="utf-8").splitlines()) if usage.exists() else 0
+    before_usage = len(read_usage(100000))
 
     # Use macro_sector (a _ALWAYS_SCOPE_INTENTS intent): its cache key hashes the
     # full question, so the unique suffix guarantees a cache MISS → full graph path
@@ -147,27 +145,19 @@ def test_stream_turn_emits_tool_gate_and_traces(conversation_id):
     print(f"  [tools] {tool_names}")
     print(f"  [gates] {gate_nodes}")
 
-    # 4. tracing: turn_start / turn_end / tool written to latest.jsonl.
-    # latest.jsonl rotates at 2000 lines, so don't assert line count grows — filter
-    # by timestamp to isolate events written during THIS turn.
-    new_events = []
-    for line in latest.read_text(encoding="utf-8").splitlines():
-        try:
-            ev = json.loads(line)
-        except Exception:
-            continue
-        if ev.get("ts", 0) >= start_ts - 2:
-            new_events.append(ev)
+    # 4. tracing: turn_start / turn_end / tool written to trace_events.
+    # Filter by timestamp to isolate events written during THIS turn.
+    new_events = read_events(5000, since_ts=start_ts - 2)
     types = {e.get("type") for e in new_events}
     assert "turn_start" in types, f"Missing turn_start in trace: {types}"
     assert "turn_end" in types, f"Missing turn_end in trace: {types}"
     assert "tool" in types, f"Missing tool event in trace: {types}"
     print(f"  [trace] this turn wrote {len(new_events)} events: {sorted(types)}")
 
-    # 5. usage.jsonl cost ledger grew (classify/decompose/route use generate())
-    after_usage = usage.read_text(encoding="utf-8").splitlines()
-    assert len(after_usage) > before_usage, "usage.jsonl must grow after an agent turn"
-    last_usage = json.loads(after_usage[-1])
+    # 5. llm_usage cost ledger grew (classify/decompose/route use generate())
+    after_usage = read_usage(100000)
+    assert len(after_usage) > before_usage, "llm_usage must grow after an agent turn"
+    last_usage = after_usage[-1]
     assert "cost_usd" in last_usage and "model" in last_usage
     print(f"  [usage] last: {last_usage.get('model')} ${last_usage.get('cost_usd', 0):.6f}")
 

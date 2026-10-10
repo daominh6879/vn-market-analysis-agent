@@ -4,7 +4,6 @@ Router-level `decompose` parsing lives in tests/test_router_intents_cache.py; th
 cover the turn_handler side — building agent state per segment and executing segments.
 """
 
-from unittest.mock import MagicMock
 
 
 class _FakeApp:

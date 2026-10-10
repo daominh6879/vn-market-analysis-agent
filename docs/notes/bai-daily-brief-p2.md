@@ -2,7 +2,7 @@
 
 ## Kết quả
 
-- **39 tests xanh** (`tests/test_phase2.py`)
+- **39 tests xanh** (`tests/test_foreign_flow_sector.py`)
 - Tool `get_foreign_flows` DB-first (foreign_flows table) với fallback VCI live
 - Tool `get_sector_performance` DB-first (JOIN ohlcv_daily × securities) với fallback hose_universe seed
 - Ingest script `ingest/fetch_foreign_flows.py` — fetch VCI price board → upsert Postgres
@@ -15,7 +15,7 @@
 | `tools/price.py` (Tool 7-8) | get_foreign_flows, get_sector_performance, _build_foreign_result, _get_foreign_flows_live |
 | `ingest/fetch_foreign_flows.py` | Fetch VCI price board endpoint theo từng batch 50 mã → upsert foreign_flows |
 | `infra/migrations/009_foreign_flows.sql` | Bảng foreign_flows (ticker, date, buy_value, sell_value, net_value, buy_volume, sell_volume, net_volume) |
-| `tests/test_phase2.py` | 39 tests: DB layer, tool logic, ingest script, registry |
+| `tests/test_foreign_flow_sector.py` | 39 tests: DB layer, tool logic, ingest script, registry |
 
 ## Schema bảng foreign_flows
 
@@ -55,7 +55,7 @@ get_sector_performance(period="day")
 
 ## Quyết định kỹ thuật
 
-- **Lazy import pattern**: `foreign_flow_db.py` dùng `from core.db import get_conn` bên trong từng hàm (không import module-level). Patch target trong test phải là `core.db.get_conn`, không phải `tools.foreign_flow_db.get_conn`. Tham khảo `test_phase5.py` dùng `data.db.get_conn`.
+- **Lazy import pattern**: `foreign_flow_db.py` dùng `from core.db import get_conn` bên trong từng hàm (không import module-level). Patch target trong test phải là `core.db.get_conn`, không phải `tools.foreign_flow_db.get_conn`. Tham khảo `test_corporate_events_broker_views.py` dùng `data.db.get_conn`.
 - **_build_foreign_result**: tách riêng để test trực tiếp logic format message mà không cần DB mock.
 - **Batch 50**: VCI price board endpoint có giới hạn payload — chunk 50 mã/request.
 
@@ -78,7 +78,7 @@ python ingest/fetch_foreign_flows.py
 python ingest/fetch_foreign_flows.py --date 2026-08-25
 
 # Chạy tests Phase 2:
-python -m pytest tests/test_phase2.py -v
+python -m pytest tests/test_foreign_flow_sector.py -v
 ```
 
 ---
@@ -167,12 +167,12 @@ Data quality sau cleanup:
 | `abs(net_value) > 10000` tỷ | 0 |
 | `volume=0` nhưng `value<>0` | 0 |
 
-Test: `test_phase2.py` + `test_fireant_ingest.py` + `test_phase2_tools.py` → **91 passed, 1 failed**. Fail duy nhất `test_fireant_failure_falls_back_to_vci` là **pre-existing** (verify bằng `git stash` trên HEAD sạch), không liên quan fix này.
+Test: `test_foreign_flow_sector.py` + `test_fireant_ingest.py` + `test_foreign_flow_db_integration.py` → **91 passed, 1 failed**. Fail duy nhất `test_fireant_failure_falls_back_to_vci` là **pre-existing** (verify bằng `git stash` trên HEAD sạch), không liên quan fix này.
 
 ### Test fixture sai premise
 Hai fixture giả định `close` là VND nên phải sửa cùng:
 - `tests/test_fireant_ingest.py:314` — `close: 20_000.0` → `20.0`, expected `/1e9` → `/1e6`
-- `tests/test_phase2.py:149` — `_MARKET`/`_BUYERS`/`_SELLERS` từ `e9` → tỷ; thêm `as_of_date="2026-08-25"` cho 4 test DB-path (không có thì `_is_db_fresh()` báo stale theo ngày chạy thật → rơi xuống live VCI → timeout)
+- `tests/test_foreign_flow_sector.py:149` — `_MARKET`/`_BUYERS`/`_SELLERS` từ `e9` → tỷ; thêm `as_of_date="2026-08-25"` cho 4 test DB-path (không có thì `_is_db_fresh()` báo stale theo ngày chạy thật → rơi xuống live VCI → timeout)
 
 ---
 

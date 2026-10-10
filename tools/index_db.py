@@ -90,9 +90,9 @@ def query_index_latest(index_code: str, as_of_date: Optional[str] = None) -> Opt
             "close": float(d["close"]),
             "change_pts": float(d["change_pts"]),
             "change_pct": float(d["change_pct"]),
-            "matched_value": float(d["matched_value"]),
+            "matched_value": float(d["matched_value"]) if d["matched_value"] is not None else None,
             "matched_volume": int(d["matched_volume"]),
-            "foreign_net": float(d["foreign_net"]),
+            "foreign_net": float(d["foreign_net"]) if d["foreign_net"] is not None else None,
         }
     except Exception as e:
         sys.stderr.write(f"[index_db] query_index_latest({index_code}) failed: {e}\n")

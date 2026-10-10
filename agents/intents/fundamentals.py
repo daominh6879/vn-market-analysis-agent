@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import math
 import time as _time
-from typing import Optional
 
 from langfuse import observe
 
@@ -61,7 +60,6 @@ def _fetch_from_db(ticker: str) -> dict | None:
     """Read latest ratios from Postgres stock_ratios. Returns None if missing or stale."""
     try:
         from core.db import get_conn
-        import datetime
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -237,6 +235,9 @@ def _build_analysis(ticker: str, rows: list[dict]) -> str:
         )
     if avg_pe:
         lines.append(f"| **TB ngành** | **{avg_pe:.1f}** | - | {_fmt(avg_roe, '.1f', '%') if avg_roe else '-'} | - |")
+    lines.append("Lưu ý: P/E, P/B quy về giá đóng cửa gần nhất; EPS là EPS năm tài chính gần nhất "
+                 "đã điều chỉnh theo cổ tức cổ phiếu/tách cổ phiếu (P/E × EPS = giá hiện tại). "
+                 "EV/EBITDA giữ nguyên theo báo cáo năm.")
 
     lines.append("")
     lines.append("### Phân tích thực tế đã tính sẵn (DÙNG NGUYÊN CÁC CON SỐ NÀY)")

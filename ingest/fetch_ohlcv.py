@@ -81,6 +81,91 @@ def _upsert_ohlcv(rows: list[tuple]) -> int:
     return len(rows)
 
 
+# HOSE daily price limit is ±7%. A close-to-close move beyond this cannot be a normal
+# trading day: it is an ex-rights / stock-dividend / split day. Fireant serves RAW prices
+# (history before the ex-date is not adjusted) while KBS/VCI serve ADJUSTED prices, so after
+# such a day the stored series has a fake cliff (HDB 28.0 → 22.4 on its 25% stock dividend).
+_PRICE_LIMIT_BREAK = 0.075
+
+
+def _has_unadjusted_break(ticker: str, since: date) -> bool:
+    """True if ohlcv_daily has a close-to-close move beyond the daily price limit since `since`."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT 1 FROM (
+                    SELECT date, close, LAG(close) OVER (ORDER BY date) AS prev_close
+                    FROM ohlcv_daily WHERE ticker = %s AND date >= %s
+                ) t
+                WHERE prev_close > 0 AND ABS(close / prev_close - 1) > %s
+                LIMIT 1
+                """,
+                (ticker, since - timedelta(days=10), _PRICE_LIMIT_BREAK),
+            )
+            return cur.fetchone() is not None
+
+
+def _adjusted_closes(ticker: str, days: int) -> dict[str, dict]:
+    """date → adjusted {open,high,low,close} in nghìn đồng. VCI first (complete), KBS fills gaps
+    (KBS history skips sessions). Both return VND from get_history."""
+    out: dict[str, dict] = {}
+    for prov in (VciDirectProvider(), KbsProvider()):
+        try:
+            df = prov.get_history(resolve_ticker(ticker), days)
+        except Exception:
+            continue
+        if df is None or df.empty:
+            continue
+        for _, r in df.iterrows():
+            d = str(r["time"])[:10]
+            if d not in out:
+                out[d] = {k: float(r[k]) / 1000.0 for k in ("open", "high", "low", "close")}
+    return out
+
+
+def refresh_adjusted_prices(ticker: str, days: int = MIGRATE_DAYS) -> int:
+    """Re-align stored OHLC to the adjusted series. Volume is left untouched.
+
+    Sessions the adjusted sources do not cover are scaled by the adjusted/raw factor of the
+    nearest covered session, so the series stays continuous. Returns rows updated.
+    """
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT date, open, high, low, close FROM ohlcv_daily "
+                        "WHERE ticker = %s ORDER BY date", (ticker,))
+            stored = [(str(d)[:10], *map(float, vals)) for d, *vals in cur.fetchall()]
+    if not stored:
+        return 0
+    # Cover the WHOLE stored history, otherwise rows older than the window keep raw prices and
+    # a cliff appears at the window edge.
+    days = max(days, (date.today() - date.fromisoformat(stored[0][0])).days + 30)
+    adj = _adjusted_closes(ticker, days)
+    if not adj:
+        return 0
+    factors = {d: adj[d]["close"] / c for d, _, _, _, c in stored if d in adj and c > 0}
+    if not factors:
+        return 0
+    covered = sorted(factors)
+    rows = []
+    for d, o, h, l, c in stored:
+        if d in adj:
+            a = adj[d]
+            rows.append((a["open"], a["high"], a["low"], a["close"], ticker, d))
+            continue
+        prev = [x for x in covered if x < d]
+        f = factors[prev[-1]] if prev else factors[covered[0]]
+        rows.append((o * f, h * f, l * f, c * f, ticker, d))
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.executemany(
+                "UPDATE ohlcv_daily SET open=%s, high=%s, low=%s, close=%s, fetched_at=NOW() "
+                "WHERE ticker=%s AND date=%s",
+                rows,
+            )
+    return len(rows)
+
+
 def _upsert_foreign(rows: list[tuple]) -> int:
     """Insert foreign_flows rows, never overwriting existing ones.
 
@@ -167,7 +252,11 @@ def fetch_and_upsert(
                 df_fallback = df_fallback[
                     (df_fallback["time"] >= str(range_start))
                     & (df_fallback["time"] <= str(range_end))
-                ]
+                ].copy()
+            # get_history returns VND; ohlcv_daily (and the Fireant path) store nghìn đồng
+            for col in ("open", "high", "low", "close"):
+                if col in df_fallback.columns:
+                    df_fallback[col] = df_fallback[col] / 1000.0
             df = df_fallback
         except Exception as fb_err:
             raise RuntimeError(
@@ -192,6 +281,11 @@ def fetch_and_upsert(
         for _, row in df.iterrows()
     ]
     n_ohlcv = _upsert_ohlcv(ohlcv_rows)
+
+    # Fireant is raw: if this window contains an ex-rights cliff, re-align the whole stored
+    # history to the adjusted series so technicals/returns don't see a fake crash.
+    if used_fireant and _has_unadjusted_break(ticker, range_start):
+        refresh_adjusted_prices(ticker)
 
     # Foreign rows (Fireant only)
     n_foreign = 0
@@ -242,6 +336,8 @@ def main() -> None:
                         help=f"Backfill {MIGRATE_DAYS} days for all active securities")
     parser.add_argument("--days", type=int, default=30,
                         help="Days to fetch (non-migrate incremental, default 30)")
+    parser.add_argument("--repair-adjustments", action="store_true",
+                        help="Re-align stored OHLC to adjusted prices for tickers with an ex-rights cliff")
     parser.add_argument("--start-date", default=None,
                         help="Explicit range start YYYY-MM-DD (use with --end-date to fill a gap)")
     parser.add_argument("--end-date", default=None,
@@ -253,6 +349,17 @@ def main() -> None:
         return
 
     explicit_range = bool(args.start_date)
+
+    if args.repair_adjustments:
+        fixed = 0
+        for t in (_active_tickers() if not args.tickers else
+                  [x.strip().upper() for x in args.tickers.split(",") if x.strip()]):
+            if _has_unadjusted_break(t, date(2000, 1, 1)):
+                n = refresh_adjusted_prices(t)
+                print(f"  {t}: re-aligned {n} rows to adjusted prices")
+                fixed += 1
+        print(f"Repaired {fixed} tickers")
+        return
 
     if args.migrate:
         tickers = _active_tickers()

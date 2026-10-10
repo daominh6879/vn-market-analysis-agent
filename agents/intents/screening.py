@@ -246,6 +246,29 @@ def _parse_rsi_filter(query: str) -> tuple[str, int] | None:
     return op, int(m.group("n"))
 
 
+_FILTER_RE = re.compile(
+    r"(?<![\w/])(?P<ind>p/e|pe|p/b|pb|roe|roa|eps|rsi|adx|ev/ebitda|d/e)(?![\w/])\s*"
+    r"(?P<op>dưới|trên|nhỏ hơn|lớn hơn|thấp hơn|cao hơn|<=|>=|<|>|=)?\s*(?P<n>\d+(?:[.,]\d+)?)",
+    re.IGNORECASE,
+)
+
+
+def _parse_filters(query: str) -> list[dict]:
+    """Regex fallback: every "<indicator> <op> <number>" in the query → filter list.
+
+    Used when the router/classifier LLM did not supply structured filters. An operator
+    word without a direction defaults to "<", matching _parse_rsi_filter.
+    """
+    out: list[dict] = []
+    for m in _FILTER_RE.finditer(query or ""):
+        ind = m.group("ind").lower()
+        op = ">" if (m.group("op") or "").lower() in _ABOVE_OPS else "<"
+        if (m.group("op") or "") in ("<=", ">=", "="):
+            op = m.group("op") if m.group("op") != "=" else ">="
+        out.append({"indicator": ind, "op": op, "threshold": float(m.group("n").replace(",", "."))})
+    return out
+
+
 def _to_float(v) -> float | None:
     if v is None:
         return None
@@ -452,9 +475,7 @@ def gather_data(ticker: str | None, query: str, time_context: dict | None = None
 
     filters = _normalize_filters(screening)
     if not filters:
-        parsed = _parse_rsi_filter(query)
-        if parsed:
-            filters = [{"indicator": "rsi", "op": parsed[0], "threshold": parsed[1]}]
+        filters = _parse_filters(query)
 
     if filters:
         label = extract_focus_sector(query)
@@ -522,7 +543,7 @@ def run(ticker: str | None, query: str) -> str:
     sql = _pick_template(query)
     if sql:
         try:
-            from rag.sql_agent import run_raw_sql, SQLAgentError
+            from rag.sql_agent import run_raw_sql
             result = run_raw_sql(sql)
             if result.rows:
                 rows_text = result.format_answer()

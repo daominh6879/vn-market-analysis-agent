@@ -47,7 +47,7 @@ Chỉ node **synthesize** (và bất kỳ intent node nào trả report trực t
 `tracing.py` đang emit `llm`/`tool`/`gate` (start/end, không phải delta). Thêm nhánh mới song song, không đụng event cũ:
 - `event: llm_delta` → `{"text": chunk}` — cho token thật.
 - Giữ `event: llm` (start/end) để tool-chip UI vẫn hoạt động như cũ.
-- `event: done` giữ nguyên hợp đồng hiện tại (đã có test bám vào format này — `tests/test_bai31_streaming.py`, `test_graph_unified.py`, ...).
+- `event: done` giữ nguyên hợp đồng hiện tại (đã có test bám vào format này — `tests/test_token_streaming.py`, `test_graph_unified.py`, ...).
 
 ### D. Client (UI) — `ui/react/src/api.ts`, `ui/chat.py`
 Thêm handler cho `llm_delta` để append chữ dần vào bong bóng chat, giữ tool chip render như hiện tại từ `tool`/`gate` event.
@@ -67,5 +67,5 @@ Thêm handler cho `llm_delta` để append chữ dần vào bong bóng chat, gi�
 4. Đổi `memory/turn_handler.py`: `app.invoke(initial)` → `for event in app.astream(initial, stream_mode="custom"): ...` forward SSE.
 5. Thêm `event: llm_delta` vào SSE contract, update `chat-context-spec.md` / `docs/graph-flow.md` nếu có mô tả contract cũ.
 6. Update UI (`ui/chat.py`, `ui/react/src/api.ts`) nhận `llm_delta`.
-7. Test: viết test mới kiểu `test_bai31_streaming.py` nhưng chạy qua graph thật (có tool call + gate), assert chunk nhỏ dần tới xuất hiện trước `event: done`, và test disconnect-mid-stream không save turn.
+7. Test: viết test mới kiểu `test_token_streaming.py` nhưng chạy qua graph thật (có tool call + gate), assert chunk nhỏ dần tới xuất hiện trước `event: done`, và test disconnect-mid-stream không save turn.
 8. Chạy thật (không mock) 1 turn qua market_brief / synthesize, xem output SSE bằng `curl --no-buffer`, xác nhận chữ chảy dần đúng thứ tự, không bị đảo hoặc trùng.

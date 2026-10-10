@@ -2,7 +2,7 @@
 ui/trace_viewer.py — Visual audit tool for agent tool calls.
 
 Run: streamlit run ui/trace_viewer.py
-Reads: traces/latest.jsonl (written by tracing.instrument_tool)
+Reads: Postgres trace_events (written by tracing.instrument_tool)
 
 Shows per-request waterfall: tool name | status | duration bar | args preview | result preview
 """
@@ -13,9 +13,13 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import sys
+
 import streamlit as st
 
-TRACE_FILE = Path(__file__).parent.parent / "traces" / "latest.jsonl"
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from tracing import clear_events, read_events
+
 
 st.set_page_config(page_title="Tool Trace Viewer", page_icon="🔍", layout="wide")
 
@@ -71,8 +75,7 @@ with col_refresh:
     auto_refresh = st.toggle("Auto-refresh (5s)", value=False)
 with col_clear:
     if st.button("🗑 Clear traces"):
-        if TRACE_FILE.exists():
-            TRACE_FILE.write_text("")
+        clear_events()
         st.rerun()
 
 if auto_refresh:
@@ -84,19 +87,7 @@ if auto_refresh:
 # ── Load traces ────────────────────────────────────────────────────────────────
 
 def load_traces() -> list[dict]:
-    if not TRACE_FILE.exists():
-        return []
-    lines = TRACE_FILE.read_text(encoding="utf-8").splitlines()
-    entries = []
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entries.append(json.loads(line))
-        except Exception:
-            pass
-    return entries
+    return read_events(2000)
 
 
 def group_by_request(entries: list[dict]) -> dict[str, list[dict]]:
@@ -110,14 +101,14 @@ def group_by_request(entries: list[dict]) -> dict[str, list[dict]]:
 entries = load_traces()
 
 if not entries:
-    st.info(f"No traces yet. File: `{TRACE_FILE}`\n\nAsk a question in the chat to generate traces.")
+    st.info(f"No traces yet (Postgres table `trace_events`)\n\nAsk a question in the chat to generate traces.")
     st.stop()
 
 groups = group_by_request(entries)
 # Sort groups by first entry timestamp, newest first
 sorted_rids = sorted(groups.keys(), key=lambda r: groups[r][0]["ts"], reverse=True)
 
-st.caption(f"{len(entries)} tool calls · {len(groups)} requests · `{TRACE_FILE}`")
+st.caption(f"{len(entries)} tool calls · {len(groups)} requests · Postgres `trace_events`")
 st.divider()
 
 # ── Sidebar: request selector ──────────────────────────────────────────────────

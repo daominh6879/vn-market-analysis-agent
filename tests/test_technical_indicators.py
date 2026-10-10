@@ -1,5 +1,5 @@
 """
-tests/test_phase4.py — Unit tests for Phase 4: calculate_indicators (extended),
+tests/test_technical_indicators.py — Unit tests for Phase 4: calculate_indicators (extended),
 detect_candle_pattern, find_support_resistance.
 
 No network calls. Pure computation on synthetic DataFrames.
@@ -8,7 +8,6 @@ No network calls. Pure computation on synthetic DataFrames.
 from datetime import datetime, timedelta
 
 import pandas as pd
-import pytest
 
 from tools.price import calculate_indicators, detect_candle_pattern
 from tools.levels import find_support_resistance

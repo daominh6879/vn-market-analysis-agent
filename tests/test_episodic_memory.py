@@ -1,5 +1,5 @@
 """
-tests/test_bai29_episodic.py — Bài 29: Episodic memory (quên đi)
+tests/test_episodic_memory.py — Bài 29: Episodic memory (quên đi)
 
 Real LLM + Qdrant. No mocks.
 
@@ -16,13 +16,11 @@ Covers:
 
 from __future__ import annotations
 
-import os
 import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
@@ -123,7 +121,7 @@ def test_decay_older_scores_lower():
     _ensure_collection(client)
 
     from qdrant_client.models import PointStruct
-    from memory.episodic import _embed, EMBED_DIM
+    from memory.episodic import _embed
 
     query = "phân tích VCB ngân hàng"
     vec = _embed(query)

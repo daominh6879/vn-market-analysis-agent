@@ -144,7 +144,7 @@ from marker phrases alone.
     → both tickers carried forward, not just BID.
   - router bypasses tools (direct_reply misuse) on a bare continuation with focus set →
     `_fallback_classify` still inherits, doesn't drop to conversation.
-- Run full `tests/test_router_intents_cache.py`, `tests/test_phase2.py`,
+- Run full `tests/test_router_intents_cache.py`, `tests/test_foreign_flow_sector.py`,
   `tests/test_fireant_ingest.py` (unrelated but touches shared fixtures) to confirm no
   regression.
 - Manual: run 3-turn conversation through `run_turn` (or the API) —

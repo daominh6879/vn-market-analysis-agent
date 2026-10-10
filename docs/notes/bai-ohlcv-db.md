@@ -96,7 +96,7 @@ python ingest/fetch_ohlcv.py --tickers VN30,ACB,BCM,BID,BVH,CTG,FPT,GAS,GVR,HDB,
 python ingest/fetch_ohlcv.py --tickers VN30 --days 5
 
 # Test tools
-python -m pytest tests/test_tools.py tests/test_tool_chaos.py -q
+python -m pytest tests/test_price_tools.py tests/test_tool_chaos.py -q
 ```
 
 ## Còn thiếu

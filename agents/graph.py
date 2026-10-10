@@ -661,7 +661,7 @@ def synthesize_final(state: AgentState) -> dict:
 
     elapsed = time.perf_counter() - t0
 
-    # Token usage for streamed calls lives in usage.jsonl (written by instrument_llm).
+    # Token usage for streamed calls lives in llm_usage (written by instrument_llm).
     # Estimate here only for the in-graph history ledger.
     from llm.pricing import estimate_tokens
     in_tokens = estimate_tokens(system_prompt) + estimate_tokens(user_prompt)

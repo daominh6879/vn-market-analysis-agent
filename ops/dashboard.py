@@ -6,8 +6,8 @@ Usage:
     python -m ops.dashboard --port 8888
 
 Reads:
-    traces/latest.jsonl   — event log (tool, llm, turn_start, turn_end)
-    traces/usage.jsonl    — LLM cost ledger
+    Postgres trace_events  — event log (tool, llm, turn_start, turn_end)
+    Postgres llm_usage     — LLM cost ledger
 """
 from __future__ import annotations
 
@@ -26,32 +26,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 _ROOT = Path(__file__).parent.parent
-_TRACES_DIR = _ROOT / "traces"
-_LATEST = _TRACES_DIR / "latest.jsonl"
-_USAGE = _TRACES_DIR / "usage.jsonl"
 
 
 # ── Data collection ───────────────────────────────────────────────────────────
 
-def _read_jsonl(path: Path, limit: int = 5000) -> list[dict]:
-    if not path.exists():
-        return []
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()[-limit:]
-        result = []
-        for line in lines:
-            try:
-                result.append(json.loads(line))
-            except Exception:
-                pass
-        return result
-    except Exception:
-        return []
-
-
 def collect() -> dict:
-    raw = _read_jsonl(_LATEST)
-    usage_raw = _read_jsonl(_USAGE)
+    from tracing import read_events, read_usage
+    raw = read_events(5000)
+    usage_raw = read_usage(5000)
 
     by_rid: dict[str, list[dict]] = defaultdict(list)
     for ev in raw:
@@ -175,8 +157,8 @@ def collect() -> dict:
             or os.environ.get("OPENAI_MODEL")
             or "default"
         ),
-        "trace_file": str(_LATEST),
-        "usage_file": str(_USAGE),
+        "trace_file": "postgres:trace_events",
+        "usage_file": "postgres:llm_usage",
         "total_turns": len(turns),
         "total_tool_calls": sum(t["calls"] for t in tools),
         "total_cost_usd": round(sum(u["cost_usd"] for u in usage), 4),

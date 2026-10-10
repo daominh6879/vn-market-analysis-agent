@@ -1,8 +1,8 @@
 ﻿"""
-tests/test_bug_fixes.py — Unit tests for the 6 code-review bug fixes.
+tests/test_regression_fixes.py — Unit tests for the 6 code-review bug fixes.
 
 All tests are fast (no LLM/network). Run with:
-    pytest tests/test_bug_fixes.py -v
+    pytest tests/test_regression_fixes.py -v
 """
 
 from __future__ import annotations

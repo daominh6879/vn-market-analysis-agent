@@ -2,7 +2,7 @@
 
 ## Kết quả
 
-- **33 tests xanh** (`tests/test_phase6.py`)
+- **33 tests xanh** (`tests/test_market_brief_graph.py`)
 - **LangGraph mới**: `agents/market_brief_graph.py` — 3 node: `collect_all → compose_outlook → render_report`
 - **Template**: `agents/templates/market_brief.txt` — khung cố định, 12 placeholder
 - **CLI**: `agents/run_brief.py --date YYYY-MM-DD --out info/DD_MM_YYYY.txt`
@@ -15,7 +15,7 @@
 | `agents/market_brief_graph.py` | LangGraph: collect_all (4 threads) → compose_outlook (LLM) → render_report (template) |
 | `agents/templates/market_brief.txt` | Template Python .format() — copy đúng format `info/26_08_2026.txt` |
 | `agents/run_brief.py` | CLI runner: `--date`, `--out`, `--no-file` |
-| `tests/test_phase6.py` | 33 tests: state, template, mỗi sub-collector, compose_outlook, full graph e2e |
+| `tests/test_market_brief_graph.py` | 33 tests: state, template, mỗi sub-collector, compose_outlook, full graph e2e |
 
 ## Thiết kế chính
 
@@ -73,7 +73,7 @@ python agents/run_brief.py --date 2026-08-26 --out info/26_08_2026.txt
 python agents/run_brief.py --date 2026-08-26 --no-file
 
 # Chạy tests:
-python -m pytest tests/test_phase6.py -v
+python -m pytest tests/test_market_brief_graph.py -v
 ```
 
 ## Quyết định kỹ thuật

@@ -1,5 +1,5 @@
 """
-tests/test_phase2.py — Phase 2: foreign flows + sector performance.
+tests/test_foreign_flow_sector.py — Phase 2: foreign flows + sector performance.
 
 Unit tests with mocks — no live DB, no network required.
 
@@ -76,10 +76,11 @@ class TestForeignFlowDb:
     def test_query_top_foreign_ok(self):
         from tools.foreign_flow_db import query_top_foreign
         cols = ["ticker", "buy_value", "sell_value", "net_value",
-                "buy_volume", "sell_volume", "net_volume"]
+                "buy_volume", "sell_volume", "net_volume", "volume"]
         rows = [
-            ("VIC", 1200e9, 200e9, 1000e9, 5_000_000, 800_000, 4_200_000),
-            ("HPG", 800e9,  100e9, 700e9,  3_000_000, 400_000, 2_600_000),
+            ("VIC", 1200e9, 200e9, 1000e9, 5_000_000, 800_000, 4_200_000, 9_000_000),
+            # foreign buy volume (3M) above the ticker's whole matched volume (400k) → block trade
+            ("HPG", 800e9,  100e9, 700e9,  3_000_000, 400_000, 2_600_000, 400_000),
         ]
         ctx = _make_conn_ctx(rows, cols)
         with patch("core.db.get_conn", return_value=ctx):
@@ -87,6 +88,8 @@ class TestForeignFlowDb:
         assert result is not None
         assert len(result) == 2
         assert result[0]["ticker"] == "VIC"
+        assert result[0]["block_trade"] is False
+        assert result[1]["block_trade"] is True
 
     def test_query_top_foreign_empty_returns_none(self):
         from tools.foreign_flow_db import query_top_foreign

@@ -114,11 +114,11 @@ def query_top_foreign(
     Returns None on error.
     """
     order_col = {
-        "buy": "buy_value DESC",
-        "sell": "sell_value DESC",
-        "net_buy": "net_value DESC",
-        "net_sell": "net_value ASC",
-    }.get(direction, "buy_value DESC")
+        "buy": "f.buy_value DESC",
+        "sell": "f.sell_value DESC",
+        "net_buy": "f.net_value DESC",
+        "net_sell": "f.net_value ASC",
+    }.get(direction, "f.buy_value DESC")
 
     try:
         from core.db import get_conn
@@ -126,10 +126,11 @@ def query_top_foreign(
             with conn.cursor() as cur:
                 cur.execute(
                     f"""
-                    SELECT ticker, buy_value, sell_value, net_value,
-                           buy_volume, sell_volume, net_volume
-                    FROM foreign_flows
-                    WHERE date = %s
+                    SELECT f.ticker, f.buy_value, f.sell_value, f.net_value,
+                           f.buy_volume, f.sell_volume, f.net_volume, o.volume
+                    FROM foreign_flows f
+                    LEFT JOIN ohlcv_daily o ON o.ticker = f.ticker AND o.date = f.date
+                    WHERE f.date = %s
                     ORDER BY {order_col}
                     LIMIT %s
                     """,
@@ -139,11 +140,17 @@ def query_top_foreign(
         if not rows:
             return None
         cols = ["ticker", "buy_value", "sell_value", "net_value",
-                "buy_volume", "sell_volume", "net_volume"]
+                "buy_volume", "sell_volume", "net_volume", "day_volume"]
         df = pd.DataFrame(rows, columns=cols)
         for col in ["buy_value", "sell_value", "net_value"]:
             df[col] = df[col].astype(float)
-        return df.to_dict("records")
+        # Foreign volume above the ticker's whole matched volume can only come from a
+        # negotiated (thỏa thuận) deal — flag it so a single block trade isn't read as flow.
+        df["block_trade"] = [
+            bool(dv) and max(bv, sv) > float(dv)
+            for bv, sv, dv in zip(df["buy_volume"], df["sell_volume"], df["day_volume"])
+        ]
+        return df.drop(columns=["day_volume"]).to_dict("records")
     except Exception as e:
         sys.stderr.write(f"[foreign_flow_db] query_top_foreign({target_date}) failed: {e}\n")
         return None

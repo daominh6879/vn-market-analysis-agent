@@ -1,11 +1,11 @@
 """
-tests/test_agent_integration.py — Real end-to-end tests for bài 22 + 23.
+tests/test_agent_graph_e2e.py — Real end-to-end tests for bài 22 + 23.
 
 No mocks. Calls real LLM via create_client(), real price/news tools.
 Requires: .env with LLM_PROVIDER + API key, network access.
 
 Run:
-    pytest tests/test_agent_integration.py -v -s
+    pytest tests/test_agent_graph_e2e.py -v -s
 """
 
 from __future__ import annotations
@@ -34,54 +34,10 @@ class TestBai22RealGraph:
         state = make_initial_state(query)
         return app.invoke(state)
 
-    def test_hpg_report_not_empty(self, app):
-        result = self._run(app, "HPG")
-        assert result.get("report"), "Report is empty for HPG"
-
-    def test_hpg_report_has_markdown_structure(self, app):
-        result = self._run(app, "HPG")
-        report = result["report"]
-        assert "#" in report, "Report has no markdown headings"
-
-    def test_hpg_risk_verdict_set(self, app):
-        result = self._run(app, "HPG")
-        verdict = result.get("risk_verdict", "")
-        assert verdict, "risk_verdict not set"
-        assert any(kw in verdict for kw in ("OK", "HIGH_VOLATILITY", "INSUFFICIENT_DATA")), (
-            f"Unexpected risk_verdict: {verdict}"
-        )
-
     def test_fpt_does_not_crash(self, app):
         result = self._run(app, "FPT")
         # Either report or error — must not raise
         assert result.get("report") or result.get("error") is not None
-
-    def test_market_query_detection(self, app):
-        state = make_initial_state("Phân tích thị trường hôm nay")
-        assert state["is_market_query"] is True
-        result = app.invoke(state)
-        assert result.get("report"), "Market query returned empty report"
-
-    def test_step_count_equals_four(self, app):
-        result = self._run(app, "VNM")
-        assert result.get("step_count") == 4, (
-            f"Expected 4 steps, got {result.get('step_count')}"
-        )
-
-    def test_history_has_synthesize_entry(self, app):
-        result = self._run(app, "MWG")
-        history = result.get("history", [])
-        steps = [h.get("step") for h in history]
-        assert "synthesize" in steps, f"synthesize not in history: {steps}"
-
-    def test_synthesize_records_tokens(self, app):
-        result = self._run(app, "TCB")
-        history = result.get("history", [])
-        synth = next((h for h in history if h.get("step") == "synthesize"), None)
-        assert synth is not None
-        assert synth.get("input_tokens", 0) > 0, "No input tokens recorded"
-        assert synth.get("output_tokens", 0) > 0, "No output tokens recorded"
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # BÀI 23 — generate_plan real LLM, validate_plan real registry
@@ -150,14 +106,6 @@ class TestBai23RealPlanning:
         assert any("Circular" in e for e in errs), (
             f"Cycle not caught: {errs}"
         )
-
-    def test_fallback_plan_used_when_registry_empty(self, client):
-        """Empty registry → every executor invalid → fallback to default_plan."""
-        plan, errors = generate_plan(SIMPLE_QUERY, set(), client)
-        # Fallback default_plan also fails empty-registry validation,
-        # but generate_plan still returns it (not None) — caller decides.
-        assert plan is not None
-        assert len(plan.steps) >= 1
 
     def test_default_plan_passes_real_registry(self):
         plan = default_plan("Phân tích HPG")

@@ -1,8 +1,8 @@
 """
-tests/test_bai31_streaming.py — Bài 31 streaming integration tests.
+tests/test_token_streaming.py — Bài 31 streaming integration tests.
 
 All tests hit real DB + real LLM (DeepSeek default).
-Run: python -m pytest tests/test_bai31_streaming.py -v -s
+Run: python -m pytest tests/test_token_streaming.py -v -s
 
 Covers every "Xong khi" checklist item:
   [x] Chunks arrive incrementally (multiple data events before done)

@@ -42,7 +42,7 @@ Mỗi conversation kết thúc → gọi `finish_conversation()` → lưu vào Q
 | `memory/episodic.py` | store_episode + retrieve_similar với decay |
 | `memory/procedural.py` | Sinh rule từ feedback người dùng |
 | `infra/migrations/029_episodic.sql` | Ghi chú — collection tạo tự động trong Qdrant |
-| `tests/test_bai29_episodic.py` | 9 test cases, real LLM + Qdrant |
+| `tests/test_episodic_memory.py` | 9 test cases, real LLM + Qdrant |
 
 ## Thay đổi hiện có
 

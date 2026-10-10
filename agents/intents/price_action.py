@@ -32,6 +32,16 @@ _SYSTEM = (
 )
 
 
+def _bn(value: float, signed: bool = False) -> str:
+    """tỷ đồng with enough precision: per-ticker flows are often < 1 tỷ (0.06 tỷ = 60 triệu)."""
+    sign = "+" if signed else ""
+    if abs(value) >= 10:
+        return f"{value:{sign},.0f}"
+    if abs(value) >= 0.1:
+        return f"{value:{sign},.1f}"
+    return f"{value:{sign}.2f}"
+
+
 def _get_foreign_flow_summary(ticker: str, as_of: str | None = None) -> str:
     """Market-level flow for indices; per-ticker flow for stocks."""
     t = ticker.strip().upper()
@@ -54,9 +64,9 @@ def _get_foreign_flow_summary(ticker: str, as_of: str | None = None) -> str:
         if row and _is_db_fresh(row["date"]):
             # foreign_flows stores values in tỷ đồng (ingest divides raw VND by 1e9)
             return (
-                f"Khối ngoại: mua {row['buy_value']:,.0f} tỷ, "
-                f"bán {row['sell_value']:,.0f} tỷ, "
-                f"ròng {row['net_value']:+,.0f} tỷ"
+                f"Khối ngoại: mua {_bn(row['buy_value'])} tỷ, "
+                f"bán {_bn(row['sell_value'])} tỷ, "
+                f"ròng {_bn(row['net_value'], signed=True)} tỷ"
             )
     except Exception:
         pass
@@ -67,9 +77,9 @@ def _get_foreign_flow_summary(ticker: str, as_of: str | None = None) -> str:
         if rows:
             r = rows[0]
             return (
-                f"Khối ngoại (live): mua {r['buy_value']/1e9:,.0f} tỷ, "
-                f"bán {r['sell_value']/1e9:,.0f} tỷ, "
-                f"ròng {r['net_value']/1e9:+,.0f} tỷ"
+                f"Khối ngoại (live): mua {_bn(r['buy_value'] / 1e9)} tỷ, "
+                f"bán {_bn(r['sell_value'] / 1e9)} tỷ, "
+                f"ròng {_bn(r['net_value'] / 1e9, signed=True)} tỷ"
             )
     except Exception:
         pass
@@ -89,7 +99,7 @@ def _volume_vs_ma(df: pd.DataFrame, ma_window: int = 20) -> str:
     )
 
 
-def _price_change_summary(df: pd.DataFrame) -> str:
+def _price_change_summary(df: pd.DataFrame, ticker: str = "") -> str:
     if df.empty or "close" not in df.columns or len(df) < 2:
         return "Không đủ dữ liệu giá."
     last = df["close"].iloc[-1]
@@ -97,6 +107,8 @@ def _price_change_summary(df: pd.DataFrame) -> str:
     change_pct = (last - prev) / prev * 100 if prev > 0 else 0
     direction = "tăng" if change_pct > 0 else ("giảm" if change_pct < 0 else "không đổi")
     alert = " ⚠️ Biến động mạnh" if abs(change_pct) > 3 else ""
+    if ticker.strip().upper() in _INDEX_CODES:
+        return f"Điểm đóng cửa: {last:,.2f} điểm ({direction} {abs(change_pct):.2f}%){alert}"
     return f"Giá đóng cửa: {last:,.0f} VND ({direction} {abs(change_pct):.2f}%){alert}"
 
 
@@ -161,7 +173,7 @@ def gather_data(ticker: str, query: str, time_context: dict | None = None) -> st
     price_r = get_realtime_price(ticker)
     df = _load_ohlcv(ticker, start_date=start, end_date=end)
     price_line  = price_r.message
-    change_line = _price_change_summary(df) if df is not None else "Không có dữ liệu OHLCV."
+    change_line = _price_change_summary(df, ticker) if df is not None else "Không có dữ liệu OHLCV."
     vol_line    = _volume_vs_ma(df)         if df is not None else "Không có dữ liệu khối lượng."
     flow_line   = _get_foreign_flow_summary(ticker, as_of=end)
     return (
@@ -183,7 +195,7 @@ def run(ticker: str, query: str) -> str:
     change_line = "Không có dữ liệu OHLCV."
     if df is not None:
         vol_line    = _volume_vs_ma(df)
-        change_line = _price_change_summary(df)
+        change_line = _price_change_summary(df, ticker)
     flow_line = _get_foreign_flow_summary(ticker)
 
     user_prompt = f"""Dữ liệu thị trường {ticker}:

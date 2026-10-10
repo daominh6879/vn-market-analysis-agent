@@ -17,7 +17,7 @@ was never ingested.
 Router/classify LLM calls already go through llm.factory.create_client() →
 _wrap_langfuse() → tracing.instrument_llm(), so every generate() call in this
 run is traced to Langfuse (when LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY are
-set) and to traces/latest.jsonl — no extra wiring needed here.
+set) and to trace_events — no extra wiring needed here.
 
 ground_truth is optional per case: when present, context_precision +
 context_recall run too; when absent, only faithfulness + answer_relevancy run
@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -40,20 +41,47 @@ sys.path.insert(0, str(ROOT))
 from dotenv import load_dotenv
 load_dotenv(ROOT / ".env")
 
-# (question, expected_ticker) — expected_ticker is what classify_hybrid() must
-# resolve to (router-correctness gate, checked before running RAGAS on the
-# case). ground_truth is NOT hardcoded: fetched at run time from the real DB
-# via rag.sql_agent.execute_safe(), so it reflects whatever data is actually
-# loaded — never a guessed number. All HPG: see module docstring (data scope).
-RAG_QA_CASES: list[tuple[str, str | None]] = [
-    ("Doanh thu HPG năm 2024 là bao nhiêu?", "HPG"),
-    ("Doanh thu và lợi nhuận HPG năm 2024 là bao nhiêu?", "HPG"),
-    ("EPS của HPG năm 2024 là bao nhiêu?", "HPG"),
-    ("Tổng tài sản HPG năm 2024 là bao nhiêu?", "HPG"),
-    ("Nợ vay dài hạn của HPG năm 2024 là bao nhiêu?", "HPG"),
-    ("Biên lợi nhuận gộp của HPG năm 2024 là bao nhiêu?", "HPG"),
-    ("Lưu chuyển tiền thuần từ hoạt động kinh doanh của HPG năm 2024?", "HPG"),
+# (question, expected_ticker, reference) — expected_ticker is what classify_hybrid()
+# must resolve to (router-correctness gate, checked before running RAGAS on the
+# case). reference is a FIXED answer sentence (values verified against the real DB
+# rows, in tỷ đồng) so context_recall is stable across runs: regenerating the
+# reference with text-to-SQL each run is nondeterministic (extra/missing columns
+# swung recall 0.85 -> 0.71 between identical runs). reference=None falls back to
+# fetching it from the DB via rag.sql_agent.execute_safe() (value not yet verified).
+# All HPG: see module docstring (data scope).
+RAG_QA_CASES: list[tuple[str, str | None, str | None]] = [
+    ("Doanh thu HPG năm 2024 là bao nhiêu?", "HPG",
+     "Doanh thu thuần của HPG năm 2024 là 138855.11 tỷ đồng; doanh thu bán hàng và cung cấp dịch vụ là 140561.39 tỷ đồng."),
+    ("Doanh thu và lợi nhuận HPG năm 2024 là bao nhiêu?", "HPG",
+     "Doanh thu thuần của HPG năm 2024 là 138855.11 tỷ đồng; lợi nhuận sau thuế là 12020.02 tỷ đồng."),
+    ("EPS của HPG năm 2024 là bao nhiêu?", "HPG", None),
+    ("Tổng tài sản HPG năm 2024 là bao nhiêu?", "HPG",
+     "Tổng tài sản của HPG năm 2024 là 224489.71 tỷ đồng."),
+    ("Nợ vay dài hạn của HPG năm 2024 là bao nhiêu?", "HPG",
+     "Nợ vay dài hạn của HPG năm 2024 là 27080.44 tỷ đồng."),
+    ("Biên lợi nhuận gộp của HPG năm 2024 là bao nhiêu?", "HPG",
+     "Biên lợi nhuận gộp của HPG năm 2024 là 13.32%."),
+    ("Lưu chuyển tiền thuần từ hoạt động kinh doanh của HPG năm 2024?", "HPG",
+     "Lưu chuyển tiền thuần từ hoạt động kinh doanh của HPG năm 2024 là 6608.32 tỷ đồng."),
 ]
+
+
+_RAW_VND = re.compile(r"-?\d{10,}(?:\.\d+)?")
+
+
+def _normalize_units(text: str) -> str:
+    """Express raw-VND amounts (>= 1e9) in billions of VND, drop misleading '| VND' unit cells.
+
+    The pipeline answers in 'tỷ đồng' while SQL rows hold raw VND (or a mislabeled
+    'VND' column holding billions). The RAGAS judge does not convert units, so it
+    marks correct answers as unsupported (faithfulness 0.0) and recall as missing.
+    Applied identically to contexts and ground_truth so both use one unit.
+    """
+    if not text:
+        return text
+    text = text.replace(" | VND", "")
+    text = _RAW_VND.sub(lambda m: f"{float(m.group()) / 1e9:.2f}", text)
+    return "(Đơn vị tiền tệ: tỷ đồng)\n" + text
 
 
 def main() -> None:
@@ -72,7 +100,7 @@ def main() -> None:
     samples = []
     routing_report = []
     skipped = []
-    for question, expected_ticker in RAG_QA_CASES:
+    for question, expected_ticker, reference in RAG_QA_CASES:
         print(f"  {question[:55]:55s} ", end="", flush=True)
 
         # Router gate: real classify_hybrid() must agree this is rag_qa with the
@@ -108,22 +136,28 @@ def main() -> None:
             context = retrieve_only(question, ticker=expected_ticker, client=client)
             reply = answer(question, ticker=expected_ticker, client=client)
 
-        # Ground truth: real DB rows via the SQL agent, not a hardcoded guess.
+        # Fixed reference when provided; otherwise real DB rows via the SQL agent.
         # text-to-SQL is nondeterministic and occasionally emits malformed SQL
         # (SecurityError from sqlglot parse failure) — don't let that crash the run,
         # just record no ground_truth for this case (precision/recall skipped for it).
-        try:
-            gt_result = execute_safe(question, client=client)
-            ground_truth = gt_result.format_answer() if gt_result.rows else ""
-        except Exception as exc:
-            print(f"\n  ground_truth fetch failed for {question!r}: {exc}")
-            ground_truth = ""
+        if reference:
+            ground_truth = reference
+        else:
+            try:
+                gt_result = execute_safe(question, client=client)
+                ground_truth = _normalize_units(gt_result.format_answer()) if gt_result.rows else ""
+            except Exception as exc:
+                print(f"\n  ground_truth fetch failed for {question!r}: {exc}")
+                ground_truth = ""
 
         print("done")
         samples.append({
             "question": question,
             "answer": reply,
-            "contexts": [context],
+            # SQL rows carry only metric codes + numbers (no ticker/year), so the judge
+            # cannot tie them to the answer's "HPG năm 2024" claim -> prefix the query
+            # the rows were retrieved for.
+            "contexts": [f"Dữ liệu truy vấn cho câu hỏi: {question}\n" + _normalize_units(context)],
             "ground_truth": ground_truth,
         })
 
@@ -135,7 +169,7 @@ def main() -> None:
         return
 
     for s in samples:
-        print(f"\nQ: {s['question']}\nground_truth (from DB): {s['ground_truth'] or '(none — DB returned no rows)'}")
+        print(f"\nQ: {s['question']}\nground_truth: {s['ground_truth'] or '(none — DB returned no rows)'}")
 
     from ragas import evaluate
     from ragas.metrics import faithfulness, answer_relevancy, context_precision, context_recall

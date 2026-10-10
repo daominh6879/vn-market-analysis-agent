@@ -95,7 +95,7 @@ def _run_tool(name: str, args: dict) -> str:
             from tools.providers import _detect_provider
             ticker = args["ticker"].upper()
             r = get_realtime_price(ticker, provider=_detect_provider(ticker))
-            return f"{ticker}: {r.data:,.0f} VND" if r.status == "ok" else r.message
+            return r.message
 
         if name == "get_indicators":
             from tools.price import get_historical_ohlcv, calculate_indicators

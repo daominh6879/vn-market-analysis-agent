@@ -28,7 +28,7 @@ POST /conversations/{id}/turn
 | `memory/extractor.py` | LLM-based preference extraction, confidence filter |
 | `memory/turn_handler.py` | Orchestrates full turn flow |
 | `api/conversations.py` | REST endpoints (POST /conversations, POST /turn, GET /history, GET /memory) |
-| `tests/test_bai28_conversation.py` | 9 test cases, real LLM + DB |
+| `tests/test_conversation_memory.py` | 9 test cases, real LLM + DB |
 
 ## File thay đổi
 
@@ -69,9 +69,9 @@ psql -U $POSTGRES_USER -d $POSTGRES_DB -f migrations/028_conversations.sql
 ## Cách chạy test
 
 ```bash
-python -m pytest tests/test_bai28_conversation.py -v -s
+python -m pytest tests/test_conversation_memory.py -v -s
 # Hoặc chạy trực tiếp:
-python tests/test_bai28_conversation.py
+python tests/test_conversation_memory.py
 ```
 
 ## Checklist "Xong khi"

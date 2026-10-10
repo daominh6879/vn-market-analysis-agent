@@ -58,7 +58,7 @@ Export thêm `detect_candle_pattern`, `find_support_resistance`.
 
 ---
 
-## Test cases — `tests/test_phase4.py`
+## Test cases — `tests/test_technical_indicators.py`
 
 **`TestCalculateIndicatorsExtended`** (14 test):
 - MA200 có khi ≥ 200 phiên, "không đủ dữ liệu" khi < 200
@@ -94,7 +94,7 @@ Export thêm `detect_candle_pattern`, `find_support_resistance`.
 ## Lệnh chạy test
 
 ```bash
-pytest tests/test_phase4.py -v
+pytest tests/test_technical_indicators.py -v
 ```
 
 ---

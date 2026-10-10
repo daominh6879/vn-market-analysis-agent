@@ -8,18 +8,18 @@
     "intent_ok": true,
     "ticker_ok": true,
     "tool_ok": true,
-    "tool_note": "[GIÁ & DÒNG TIỀN HPG]\nGiá HPG: 22 VND (phiên gần nhất).\nGiá đóng cửa: 22,050 VND (tăng 0.92%)\nKhối lượng phiên gần nhất: 22,432,800 cp (113.0% so với "
+    "tool_note": "[GIÁ & DÒNG TIỀN HPG]\nGiá HPG: 20,100 VND (phiên gần nhất).\nGiá đóng cửa: 20,100 VND (giảm 0.25%)\nKhối lượng phiên gần nhất: 15,779,800 cp (88.7% so v"
   },
   {
     "expected_intent": "price_action",
     "question": "Khối lượng giao dịch HPG có đột biến không?",
-    "expected_ticker": "<object object at 0x00000147949709B0>",
+    "expected_ticker": "<object object at 0x000002607BFA09B0>",
     "got_intent": "price_action",
     "got_ticker": "HPG",
     "intent_ok": true,
     "ticker_ok": true,
     "tool_ok": true,
-    "tool_note": "[GIÁ & DÒNG TIỀN HPG]\nGiá HPG: 22 VND (phiên gần nhất).\nGiá đóng cửa: 22,050 VND (tăng 0.92%)\nKhối lượng phiên gần nhất: 22,432,800 cp (113.0% so với "
+    "tool_note": "[GIÁ & DÒNG TIỀN HPG]\nGiá HPG: 20,100 VND (phiên gần nhất).\nGiá đóng cửa: 20,100 VND (giảm 0.25%)\nKhối lượng phiên gần nhất: 15,779,800 cp (88.7% so v"
   },
   {
     "expected_intent": "technical_analysis",
@@ -30,7 +30,7 @@
     "intent_ok": true,
     "ticker_ok": true,
     "tool_ok": true,
-    "tool_note": "[KỸ THUẬT FPT]\nChỉ báo (RSI, MACD, EMA/SMA):\n[Đơn vị: VND]\nRSI(14) = 57.3 → vùng trung tính\nMACD(12,26,9) = 896.85, Signal = 771.88, Histogram = 124.9"
+    "tool_note": "[KỸ THUẬT FPT]\nChỉ báo (RSI, MACD, EMA/SMA):\n[Đơn vị: VND]\nRSI(14) = 18.3 → vùng quá bán\nMACD(12,26,9) = -3022.02, Signal = -2327.45, Histogram = -694"
   },
   {
     "expected_intent": "technical_analysis",
@@ -41,7 +41,7 @@
     "intent_ok": true,
     "ticker_ok": true,
     "tool_ok": true,
-    "tool_note": "[KỸ THUẬT VNM]\nChỉ báo (RSI, MACD, EMA/SMA):\n[Đơn vị: VND]\nRSI(14) = 50.0 → vùng trung tính\nMACD(12,26,9) = 382.45, Signal = 741.03, Histogram = -358."
+    "tool_note": "[KỸ THUẬT VNM]\nChỉ báo (RSI, MACD, EMA/SMA):\n[Đơn vị: VND]\nRSI(14) = 38.1 → vùng trung tính\nMACD(12,26,9) = -832.49, Signal = -623.32, Histogram = -20"
   },
   {
     "expected_intent": "technical_analysis",
@@ -52,7 +52,7 @@
     "intent_ok": true,
     "ticker_ok": true,
     "tool_ok": true,
-    "tool_note": "[KỸ THUẬT HPG]\nChỉ báo (RSI, MACD, EMA/SMA):\n[Đơn vị: VND]\nRSI(14) = 53.1 → vùng trung tính\nMACD(12,26,9) = -26.35, Signal = -80.28, Histogram = 53.93"
+    "tool_note": "[KỸ THUẬT HPG]\nChỉ báo (RSI, MACD, EMA/SMA):\n[Đơn vị: VND]\nRSI(14) = 37.0 → vùng trung tính\nMACD(12,26,9) = -361.91, Signal = -348.31, Histogram = -13"
   },
   {
     "expected_intent": "valuation",
@@ -63,18 +63,18 @@
     "intent_ok": true,
     "ticker_ok": true,
     "tool_ok": true,
-    "tool_note": "[CƠ BẢN & ĐỊNH GIÁ HPG]\n### Bảng dữ liệu thực tế\n| Mã | P/E | P/B | ROE | EPS |\n|---|---|---|---|---|\n| HPG ◀ | 12.0 | 1.54 | 12.7% | 2,204 |\n| HSG | "
+    "tool_note": "[CƠ BẢN & ĐỊNH GIÁ HPG]\n### Bảng dữ liệu thực tế\n| Mã | P/E | P/B | ROE | EPS |\n|---|---|---|---|---|\n| HPG ◀ | 10.2 | 1.31 | 12.7% | 1,967 |\n| HSG | "
   },
   {
     "expected_intent": "valuation",
     "question": "ROE của VCB năm ngoái là bao nhiêu?",
-    "expected_ticker": "<object object at 0x00000147949709B0>",
+    "expected_ticker": "<object object at 0x000002607BFA09B0>",
     "got_intent": "valuation",
     "got_ticker": "VCB",
     "intent_ok": true,
     "ticker_ok": true,
     "tool_ok": true,
-    "tool_note": "[CƠ BẢN & ĐỊNH GIÁ VCB]\n### Bảng dữ liệu thực tế\n| Mã | P/E | P/B | ROE | EPS |\n|---|---|---|---|---|\n| VCB ◀ | 12.7 | 2.14 | 16.7% | 4,542 |\n| ACB | "
+    "tool_note": "[CƠ BẢN & ĐỊNH GIÁ VCB]\n### Bảng dữ liệu thực tế\n| Mã | P/E | P/B | ROE | EPS |\n|---|---|---|---|---|\n| VCB ◀ | 12.5 | 2.11 | 16.7% | 4,542 |\n| ACB | "
   },
   {
     "expected_intent": "rag_qa",
@@ -85,7 +85,7 @@
     "intent_ok": true,
     "ticker_ok": true,
     "tool_ok": true,
-    "tool_note": "[DỮ LIỆU SQL]\nrevenue_vnd_billion\n----------------------------------------\n138855.112131387"
+    "tool_note": "[DỮ LIỆU SQL]\nmetric_code | value_billion_vnd\n----------------------------------------\ncac_khoan_giam_tru_doanh_thu | -1706.28\ndoanh_thu_ban_hang_va_c"
   },
   {
     "expected_intent": "rag_qa",
@@ -96,29 +96,29 @@
     "intent_ok": true,
     "ticker_ok": true,
     "tool_ok": true,
-    "tool_note": "[DỮ LIỆU SQL]\nmetric_code | value\n----------------------------------------\ndoanh_thu_thuan | 138855112131387.0"
+    "tool_note": "[DỮ LIỆU SQL]\nmetric_code | value_billion_vnd\n----------------------------------------\ndoanh_thu_ban_hang_va_cung_cap_dich_vu | 140561.39\ndoanh_thu_th"
   },
   {
     "expected_intent": "macro_sector",
     "question": "Tỷ giá USD/VND hôm nay ảnh hưởng gì đến FPT?",
-    "expected_ticker": "<object object at 0x00000147949709B0>",
+    "expected_ticker": "<object object at 0x000002607BFA09B0>",
     "got_intent": "macro_sector",
     "got_ticker": "FPT",
     "intent_ok": true,
     "ticker_ok": true,
     "tool_ok": true,
-    "tool_note": "[VĨ MÔ & NGÀNH]\n\nTỷ giá: Vietcombank — mua: 25,680 | bán: 26,090 | CK: 25,710 VND\n\nHàng hóa (thế giới): • Gold: 4,452.00 USD/oz (+1.32%)\n• Silver: 68."
+    "tool_note": "[VĨ MÔ & NGÀNH]\n\nTỷ giá: Vietcombank — mua: 25,660 | bán: 26,070 | CK: 25,690 VND\n\nHàng hóa (thế giới): • Gold: 4,216.30 USD/oz (+1.43%)\n• Silver: 60."
   },
   {
     "expected_intent": "macro_sector",
     "question": "Giá thép HRC thế giới tăng ảnh hưởng HPG thế nào?",
-    "expected_ticker": "<object object at 0x00000147949709B0>",
+    "expected_ticker": "<object object at 0x000002607BFA09B0>",
     "got_intent": "macro_sector",
     "got_ticker": "HPG",
     "intent_ok": true,
     "ticker_ok": true,
     "tool_ok": true,
-    "tool_note": "[VĨ MÔ & NGÀNH]\n\nTỷ giá: Vietcombank — mua: 25,680 | bán: 26,090 | CK: 25,710 VND\n\nHàng hóa (thế giới): • Gold: 4,452.00 USD/oz (+1.32%)\n• Silver: 68."
+    "tool_note": "[VĨ MÔ & NGÀNH]\n\nTỷ giá: Vietcombank — mua: 25,660 | bán: 26,070 | CK: 25,690 VND\n\nHàng hóa (thế giới): • Gold: 4,216.30 USD/oz (+1.43%)\n• Silver: 60."
   },
   {
     "expected_intent": "news_sentiment",
@@ -129,18 +129,18 @@
     "intent_ok": true,
     "ticker_ok": true,
     "tool_ok": true,
-    "tool_note": "[TIN TỨC & SENTIMENT HPG]\nTin tức:\n[tavily | 2026-08-26] HPG: Khuyến nghị TĂNG TỶ TRỌNG với giá mục tiêu 36,200 đồng/cổ phiếu\n[tavily | 2026-08-26] HP"
+    "tool_note": "[TIN TỨC & SENTIMENT HPG]\nTin tức:\n[cafef | 2026-09-10] Người thân sếp lớn Hòa Phát đăng ký bán cổ phiếu HPG\n[cafef | 2026-08-11] Dòng vốn ẩn danh từn"
   },
   {
     "expected_intent": "news_sentiment",
     "question": "Sentiment của cộng đồng về VNM như thế nào?",
-    "expected_ticker": "<object object at 0x00000147949709B0>",
+    "expected_ticker": "<object object at 0x000002607BFA09B0>",
     "got_intent": "news_sentiment",
     "got_ticker": "VNM",
     "intent_ok": true,
     "ticker_ok": true,
     "tool_ok": true,
-    "tool_note": "[TIN TỨC & SENTIMENT VNM]\nTin tức:\n[tavily | 2026-08-26] VNM: Báo cáo cập nhật ĐHCĐ 2026\n[tavily | 2026-08-26] Cổ phiếu cần quan tâm ngày 24/8 | Tin n"
+    "tool_note": "[TIN TỨC & SENTIMENT VNM]\nTin tức:\n[cafef | 2026-05-01] Vinamilk (VNM) hé lộ chiến lược vòng qua eo biển Hormuz\n[cafef | 2026-03-31] Xung đột Trung Đô"
   },
   {
     "expected_intent": "investment_case",
@@ -151,7 +151,7 @@
     "intent_ok": true,
     "ticker_ok": true,
     "tool_ok": true,
-    "tool_note": "[GIÁ & DÒNG TIỀN HPG]\nGiá HPG: 22 VND (phiên gần nhất).\nGiá đóng cửa: 22,050 VND (tăng 0.92%)\nKhối lượng phiên gần nhất: 22,432,800 cp (113.0% so với "
+    "tool_note": "[GIÁ & DÒNG TIỀN HPG]\nGiá HPG: 20,100 VND (phiên gần nhất).\nGiá đóng cửa: 20,100 VND (giảm 0.25%)\nKhối lượng phiên gần nhất: 15,779,800 cp (88.7% so v"
   },
   {
     "expected_intent": "investment_case",
@@ -162,12 +162,12 @@
     "intent_ok": true,
     "ticker_ok": true,
     "tool_ok": true,
-    "tool_note": "[GIÁ & DÒNG TIỀN VCB]\nGiá VCB: 59 VND (phiên gần nhất).\nGiá đóng cửa: 58,700 VND (tăng 1.03%)\nKhối lượng phiên gần nhất: 5,324,200 cp (122.1% so với M"
+    "tool_note": "[GIÁ & DÒNG TIỀN VCB]\nGiá VCB: 56,700 VND (phiên gần nhất).\nGiá đóng cửa: 56,700 VND (tăng 0.18%)\nKhối lượng phiên gần nhất: 3,049,500 cp (73.4% so vớ"
   },
   {
     "expected_intent": "screening",
     "question": "Lọc cổ phiếu có ROE > 20%",
-    "expected_ticker": "<object object at 0x00000147949709B0>",
+    "expected_ticker": "<object object at 0x000002607BFA09B0>",
     "got_intent": "screening",
     "got_ticker": null,
     "intent_ok": true,
@@ -184,7 +184,7 @@
     "intent_ok": true,
     "ticker_ok": true,
     "tool_ok": true,
-    "tool_note": "[BREAKOUT 431 mã trên sàn]\nTổng: 10 tín hiệu | SHORT: 4 | MID_PRE: 4 | LONG_PRE: 2\n\n**APH** — 📈 SHORT (nền 20 phiên)\n  Giá: 6,400 | Pivot: 6,380\n  SL:"
+    "tool_note": "[BREAKOUT 431 mã trên sàn]\nTổng: 8 tín hiệu | SHORT: 2 | MID_PRE: 6\n\n**IMP** — 📈 SHORT (nền 20 phiên)\n  Giá: 37,000 | Pivot: 36,900\n  SL: 34,550 | TP1"
   },
   {
     "expected_intent": "market_brief",

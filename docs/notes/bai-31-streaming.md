@@ -59,7 +59,7 @@ make curl-stream-b31 CID=<id> MSG="HPG là gì?"
 ```
 
 ## Kết quả test
-Chạy: `pytest tests/test_bai31_streaming.py -v -s` — **4/4 xanh** (59s)
+Chạy: `pytest tests/test_token_streaming.py -v -s` — **4/4 xanh** (59s)
 
 | Test | Kết quả |
 |------|---------|

@@ -16,7 +16,6 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Optional
 
 _CACHE_PATH = Path(__file__).parent / "hose_tickers.json"
 
@@ -502,7 +501,7 @@ TICKER_ENRICHMENT: dict[str, dict] = {
     "TCB": {"name_aliases": ["techcombank", "ngân hàng kỹ thương", "ngân hàng kỹ thương việt nam"]},
     "MBB": {"name_aliases": ["mbbank", "ngân hàng quân đội", "ngân hàng tmcp quân đội"]},
     "ACB": {"name_aliases": ["ngân hàng á châu", "ngân hàng á châu việt nam"]},
-    "VPB": {"name_aliases": ["vpbank", "ngân hàng việt nam thịnh vượng"]},
+    "VPB": {"name_aliases": ["vpbank", "ngân hàng việt nam thịnh vượng", "ngân hàng thịnh vượng", "thịnh vượng"]},
     "HDB": {"name_aliases": ["hdbank", "ngân hàng phát triển tp.hcm", "ngân hàng phát triển thành phố hồ chí minh"]},
     "STB": {"name_aliases": ["sacombank", "ngân hàng sài gòn thương tín"]},
     "VIB": {"name_aliases": ["ngân hàng quốc tế", "ngân hàng quốc tế việt nam"]},

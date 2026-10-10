@@ -84,7 +84,7 @@
 
   **Lưu ý:** yfinance trả giá USD, vnstock trả giá VND — **không so sánh thẳng**. Tag rõ đơn vị tiền tệ trong output text của `calculate_indicators`.
 
-- **Viết unit test trong `tests/test_tools.py`** — mock hoàn toàn cả `VnstockProvider` và `YFinanceProvider`, không gọi mạng.
+- **Viết unit test trong `tests/test_price_tools.py`** — mock hoàn toàn cả `VnstockProvider` và `YFinanceProvider`, không gọi mạng.
 
 **Xong khi.**
 - [ ] CLI chạy cho 5 mã VN (gồm 2 mã thanh khoản thấp) → kết quả hợp lý
@@ -166,7 +166,7 @@ Bẫy thứ hai với yfinance: giá VND (vnstock) và USD (yfinance) trong cùn
   python -m tools.cli sentiment HPG
   ```
 
-- **Cập nhật `tests/test_tools.py`** — mock Qdrant và LLM hoàn toàn, không gọi mạng.
+- **Cập nhật `tests/test_price_tools.py`** — mock Qdrant và LLM hoàn toàn, không gọi mạng.
 
 **Xong khi.**
 - [ ] `search_financial_news('HPG', 7)` trả ≥ 1 tin (cần data từ bài 12B)

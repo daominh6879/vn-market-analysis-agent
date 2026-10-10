@@ -87,3 +87,6 @@ dagster_home/
 traces/
 ui/react/node_modules/
 ui/react/dist/
+
+# Docker: local copy of vnstock (removed from PyPI) copied from .venv
+vendor/

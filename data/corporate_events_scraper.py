@@ -42,7 +42,7 @@ _EVENT_TYPE_MAP = [
 ]
 
 _DATE_RE = re.compile(r"(\d{1,2})/(\d{1,2})/(\d{4})")
-_RATIO_RE = re.compile(r"(\d+)[:\s]*(\d+)")
+_RATIO_RE = re.compile(r"(\d+)\s*:\s*(\d+)")  # "100:5" — colon required ("2025" is not 20:25)
 
 
 def _classify_event(raw_text: str) -> str:
@@ -64,10 +64,14 @@ def _parse_date(text: str) -> Optional[date]:
 
 
 def _extract_ratio(note: str) -> Optional[float]:
-    """Extract ratio from text like '100:10' → 10.0, '5%' → 5.0."""
-    pct = re.search(r"(\d+(?:\.\d+)?)\s*%", note)
+    """Extract ratio in percent from text: '5%' → 5.0, '1,1125%' → 1.1125, '100:5' → 5.0.
+
+    Vietnamese decimals use a comma, so '1,1125%' is 1.1125 (not 1125). Cash amounts
+    ('2.000 đ/cp') and bare numbers (years, share counts) are not ratios → None.
+    """
+    pct = re.search(r"(\d+(?:[.,]\d+)?)\s*%", note)
     if pct:
-        return float(pct.group(1))
+        return float(pct.group(1).replace(",", "."))
     m = _RATIO_RE.search(note)
     if m:
         base, part = int(m.group(1)), int(m.group(2))

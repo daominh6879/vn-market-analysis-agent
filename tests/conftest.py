@@ -9,6 +9,10 @@ into the next. Clear it before/after every test to keep them isolated.
 from __future__ import annotations
 
 import pytest
+from dotenv import load_dotenv
+
+# Load .env so tests run in isolation see the same LLM/DB credentials as the app.
+load_dotenv()
 
 
 @pytest.fixture(autouse=True)

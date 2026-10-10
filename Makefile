@@ -193,7 +193,7 @@ mcp-inspect:
 	npx @modelcontextprotocol/inspector python tools/mcp_server.py
 
 test-tools:
-	pytest tests/test_tools.py -v
+	pytest tests/test_price_tools.py -v
 
 test-chaos:
 	pytest tests/test_tool_chaos.py -v
@@ -203,7 +203,7 @@ migrate-b28:
 	python -c "from data.db import run_migration; run_migration('infra/migrations/028_conversations.sql')"
 
 test-b28:
-	pytest tests/test_bai28_conversation.py -v -s
+	pytest tests/test_conversation_memory.py -v -s
 
 api-b28:
 	python -m uvicorn api.main:app --reload --port 8028
@@ -213,7 +213,7 @@ migrate-b29:
 	python -c "from data.db import run_migration; run_migration('infra/migrations/029_episodic.sql')"
 
 test-b29:
-	pytest tests/test_bai29_episodic.py -v -s
+	pytest tests/test_episodic_memory.py -v -s
 
 # Bài 32 — Cache + clarification context
 migrate-b32:
@@ -224,7 +224,7 @@ migrate-b33:
 	python -c "from core.db import run_migration; run_migration('infra/migrations/033_messages_trace_meta.sql')"
 
 test-b29-load:
-	pytest tests/test_bai29_episodic.py::test_load_20_episodes_no_context_bloat -v -s
+	pytest tests/test_episodic_memory.py::test_load_20_episodes_no_context_bloat -v -s
 
 # Bài 30 — Đo memory + test rò rỉ giữa người dùng
 test-b30:
@@ -238,7 +238,7 @@ eval-b30-notes:
 
 # Bài 31 — Streaming
 test-b31:
-	pytest tests/test_bai31_streaming.py -v -s
+	pytest tests/test_token_streaming.py -v -s
 
 api-b31:
 	python -m uvicorn api.main:app --reload --port 8031

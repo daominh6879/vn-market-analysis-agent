@@ -1,13 +1,13 @@
 """
-tests/test_phase2_tools.py — Integration tests for Phase 2 tools.
+tests/test_foreign_flow_db_integration.py — Integration tests for Phase 2 tools.
 
 Requires Postgres running with seeded data:
     python ingest/seed_securities.py
     python ingest/fetch_foreign_flows.py --date 2026-08-25
 
 Run:
-    python tests/test_phase2_tools.py
-    python tests/test_phase2_tools.py --skip-foreign  # skip if no foreign flow data
+    python tests/test_foreign_flow_db_integration.py
+    python tests/test_foreign_flow_db_integration.py --skip-foreign  # skip if no foreign flow data
 """
 
 from __future__ import annotations

@@ -89,7 +89,9 @@ class TestGoldScraper:
     def test_returns_none_on_error(self):
         mock = MagicMock()
         mock.raise_for_status.side_effect = Exception("network")
-        with patch("httpx.get", return_value=mock):
+        # fetch_sjc_gold falls back to a yfinance world-price estimate; disable it so
+        # "every source failed" is what's under test (and no live network call is made).
+        with patch("httpx.get", return_value=mock),              patch("data.gold_vn_scraper._fetch_yfinance_gold_estimate", return_value=None):
             from data.gold_vn_scraper import fetch_sjc_gold
             result = fetch_sjc_gold()
         assert result is None

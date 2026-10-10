@@ -62,8 +62,6 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       - "8031:8031"
-    volumes:
-      - ./traces:/app/traces
     depends_on:
       - postgres
       - qdrant

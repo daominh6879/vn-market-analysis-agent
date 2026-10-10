@@ -7,7 +7,6 @@ Unit tests (không cần service):
 Integration tests (cần Qdrant + Ollama + MinIO):
     pytest tests/test_pipeline.py -v -m integration
 """
-import hashlib
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -415,7 +414,7 @@ class TestPipelineIntegration:
     def test_new_pdf_indexed(self):
         """Upload PDF → materialize pipeline → chunk có trong Qdrant."""
         from dagster import materialize
-        from pipeline.assets import raw_pdf, parsed_doc, embeddings, financial_facts
+        from pipeline.assets import raw_pdf, parsed_doc, embeddings
 
         self._upload_pdf("2024/test_q4.pdf")
         cfg = IngestionConfig(ticker=self.TICKER, mode="full_rebuild", object_key="2024/test_q4.pdf")

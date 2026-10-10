@@ -1,12 +1,10 @@
 """
-tests/test_tools.py — Unit tests cho 7 tool giá chứng khoán (bài 19 + 19B + 20).
+tests/test_price_tools.py — Unit tests cho 7 tool giá chứng khoán (bài 19 + 19B + 20).
 
 Mock hoàn toàn, không gọi mạng. Mọi tool trả ToolResult.
 """
 
-import math
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
@@ -21,6 +19,12 @@ from tools.price import (
     get_realtime_price_intl,
 )
 from tools.result import ToolResult
+
+
+@pytest.fixture(autouse=True)
+def _no_db_first(monkeypatch):
+    """get_historical_ohlcv is DB-first; force the injected mock provider path."""
+    monkeypatch.setattr("tools.ohlcv_db.query_ohlcv", lambda *a, **k: None)
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -380,12 +384,14 @@ class TestDetectProvider:
     """_detect_provider chọn đúng provider theo format ticker."""
 
     def test_vn_ticker_3_chars(self):
-        from tools.providers import _detect_provider, VciDirectProvider
-        assert isinstance(_detect_provider("FPT"), VciDirectProvider)
+        from tools.providers import _detect_provider, FallbackProvider, FireantProvider
+        p = _detect_provider("FPT")
+        assert isinstance(p, FallbackProvider) and isinstance(p._primary, FireantProvider)
 
     def test_vn_ticker_4_chars_no_dot(self):
-        from tools.providers import _detect_provider, VciDirectProvider
-        assert isinstance(_detect_provider("VNM"), VciDirectProvider)
+        from tools.providers import _detect_provider, FallbackProvider, FireantProvider
+        p = _detect_provider("VNM")
+        assert isinstance(p, FallbackProvider) and isinstance(p._primary, FireantProvider)
 
     def test_vn_index_routes_to_ssi_provider(self):
         from tools.providers import _detect_provider, SsiIndexProvider, resolve_ticker

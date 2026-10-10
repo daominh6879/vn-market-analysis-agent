@@ -17,7 +17,7 @@ from langfuse import observe
 
 from llm.factory import create_client
 from llm.types import Message
-from tools.price import get_historical_ohlcv, calculate_indicators
+from tools.price import get_historical_ohlcv, calculate_indicators, _MARKET_INDEX_CODES
 
 
 _SYSTEM = (
@@ -140,7 +140,7 @@ def gather_data(ticker: str, query: str, time_context: dict | None = None) -> st
     status, df = _get_ohlcv(ticker, start_date=start, end_date=end)
     if status != "ok" or df is None:
         return f"[KỸ THUẬT {ticker}]\nKhông có dữ liệu OHLCV."
-    ind_r = calculate_indicators(df)
+    ind_r = calculate_indicators(df, currency="điểm" if ticker.upper() in _MARKET_INDEX_CODES else "VND")
     sr_text = "Không xác định."
     try:
         from tools.levels import find_support_resistance
@@ -183,7 +183,7 @@ def run(ticker: str, query: str) -> str:
         )
 
     # ── Python computes all data ──────────────────────────────────────────────
-    ind_r = calculate_indicators(df)
+    ind_r = calculate_indicators(df, currency="điểm" if ticker.upper() in _MARKET_INDEX_CODES else "VND")
     tech_signals = ind_r.message
 
     sr_text = "Không xác định."

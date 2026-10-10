@@ -132,17 +132,19 @@ def get_broker_views(
                 message=f"Không có nhận định CTCK cho {subject} trong {days} ngày qua.",
             )
 
+        # broker_views stores VND for stocks and index points for indices (see ingest/extract_broker_views.py)
+        unit = "điểm" if subject in {"VNINDEX", "VN30", "HNX", "HNX30", "UPCOM"} else "VND"
         lines: list[str] = []
         for r in rows:
             parts = [f"{r['broker']:10s} →"]
             if r["stance"]:
                 parts.append(r["stance"])
             if r["target"]:
-                parts.append(f"target {r['target']:,.0f}")
+                parts.append(f"target {r['target']:,.0f} {unit}")
             if r["support"]:
-                parts.append(f"hỗ trợ {r['support']:,.0f}")
+                parts.append(f"hỗ trợ {r['support']:,.0f} {unit}")
             if r["resistance"]:
-                parts.append(f"kháng cự {r['resistance']:,.0f}")
+                parts.append(f"kháng cự {r['resistance']:,.0f} {unit}")
             lines.append("• " + " | ".join(parts))
 
         return ToolResult(

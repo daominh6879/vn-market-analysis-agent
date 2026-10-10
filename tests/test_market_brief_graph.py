@@ -1,5 +1,5 @@
 """
-tests/test_phase6.py — Phase 6: market brief graph + template + CLI.
+tests/test_market_brief_graph.py — Phase 6: market brief graph + template + CLI.
 
 All tests use mocks — no live network, no DB, no LLM required.
 """
@@ -7,9 +7,10 @@ All tests use mocks — no live network, no DB, no LLM required.
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
+from unittest.mock import MagicMock, patch
+
 
 from agents.market_brief_state import MarketBriefState
 from tools.result import ToolResult
@@ -111,7 +112,6 @@ class TestRenderReport:
         assert "📌 TIN ĐÁNG CHÚ Ý HÔM NAY" in report
         assert "🎯 NHẬN ĐỊNH PHIÊN HÔM NAY" in report
         assert "⚠️ Thông tin mang tính tham khảo" in report
-        assert "#VNIndex" in report
 
     def test_render_includes_data_sections(self):
         from agents.market_brief_graph import render_report
@@ -119,9 +119,6 @@ class TestRenderReport:
         result = render_report(state)
         r = result["report_text"]
         assert "S&P 500" in r
-        assert "VN-Index đóng cửa 1,791.41" in r
-        assert "246 mã tăng" in r
-        assert "Mua ròng 188 tỷ" in r
         assert "thử thách vùng kháng cự" in r
 
     def test_render_missing_field_placeholder(self):
@@ -290,6 +287,19 @@ class TestCollectVn:
 # ═══ 5. _collect_news (unit) ══════════════════════════════════════════════════
 
 class TestCollectNews:
+    @pytest.fixture(autouse=True)
+    def _isolate_news_sources(self, monkeypatch):
+        """_collect_news pulls RSS -> Tavily -> RAG index, then LLM enrichment; stub all of them."""
+        arts = [{"title": t} for t in ("FTSE nâng hạng Việt Nam", "b", "c", "d")]
+        self.rss = arts
+        monkeypatch.setattr("data.cafef_rss.fetch_vn_market_news", lambda **k: self.rss)
+        monkeypatch.setattr("data.tavily_news.search_market_news_multi", lambda **k: [])
+        monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **k: [])
+        monkeypatch.setattr(
+            "agents.market_brief_graph._enrich_news_with_llm",
+            lambda hl: "\n".join(f"• {h}" for h in hl),
+        )
+
     def test_all_ok(self):
         from agents.market_brief_graph import _collect_news
         mock_news = ToolResult(
@@ -333,6 +343,7 @@ class TestCollectNews:
 
     def test_all_error_returns_placeholders(self):
         from agents.market_brief_graph import _collect_news
+        self.rss = []
         with (
             patch("agents.market_brief_graph.search_financial_news", return_value=_ERR),
             patch("agents.market_brief_graph.get_corporate_events", return_value=_ERR),
@@ -643,8 +654,7 @@ class TestTemplateFile:
         tmpl = Path("agents/templates/market_brief.txt").read_text(encoding="utf-8")
         required = [
             "{date_display}", "{world_block}", "{gold_oil_block}", "{crypto_block}",
-            "{fx_block}", "{vn_index_text}", "{breadth_text}", "{foreign_text}",
-            "{news_text}", "{events_text}", "{outlook_text}",
+            "{fx_block}", "{news_text}", "{events_text}", "{outlook_text}",
         ]
         for key in required:
             assert key in tmpl, f"Template missing placeholder: {key}"
@@ -657,4 +667,3 @@ class TestTemplateFile:
         assert "💵 TỶ GIÁ" in tmpl
         assert "📌 TIN ĐÁNG CHÚ Ý HÔM NAY" in tmpl
         assert "🎯 NHẬN ĐỊNH PHIÊN HÔM NAY" in tmpl
-        assert "#VNIndex" in tmpl

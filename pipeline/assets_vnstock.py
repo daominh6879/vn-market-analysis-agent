@@ -155,10 +155,7 @@ ON CONFLICT (ticker) DO UPDATE SET
     retry_policy=RetryPolicy(max_retries=2, delay=120),
 )
 def vnstock_ratios(context: AssetExecutionContext) -> dict:
-    import math
     import time
-    from vnstock.api.financial import Finance as VnFinance
-    from core.db import get_conn
     from core.tickers import get_ratio_tickers
 
     ticker_list = get_ratio_tickers()
@@ -169,39 +166,8 @@ def vnstock_ratios(context: AssetExecutionContext) -> dict:
     for ticker in ticker_list:
         context.log.info(f"Fetching ratios: {ticker}")
         try:
-            df = VnFinance(symbol=ticker, source='KBS').ratio(period='year', lang='en')
-            df = df.set_index('item_id').drop(columns=['item'], errors='ignore')
-            latest = df.iloc[:, 0]
-
-            def _get(key) -> float | None:
-                v = latest.get(key)
-                if v is None:
-                    return None
-                try:
-                    f = float(v)
-                    return None if math.isnan(f) else f
-                except (TypeError, ValueError):
-                    return None
-
-            roe_pct = _get('roe')
-            de_pct  = _get('debt_to_equity')
-            row = {
-                "ticker":             ticker,
-                "pe":                 _get('pe_ratio'),
-                "pb":                 _get('pb_ratio'),
-                "roe_pct":            roe_pct,
-                "roa_pct":            _get('roa'),
-                "eps":                _get('trailing_eps'),
-                "gross_margin_pct":   _get('gross_margin'),
-                "net_margin_pct":     _get('net_margin'),
-                "revenue_growth_pct": _get('net_revenue'),
-                "earnings_growth_pct": _get('profit_after_tax_for_shareholders_of_the_parent_company'),
-                "de_ratio":           de_pct / 100 if de_pct is not None else None,
-                "ev_ebitda":          _get('ev_ebitda'),
-            }
-            with get_conn() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(_UPSERT_SQL, row)
+            from ingest.fetch_ratios import fetch_and_upsert  # single source of truth (re-prices to adjusted close)
+            row = fetch_and_upsert(ticker)
             upserted += 1
             context.log.info(f"  {ticker}: upserted (pe={row['pe']}, pb={row['pb']}, roe={row['roe_pct']}%)")
         except Exception as exc:

@@ -2,7 +2,11 @@
 .git
 **/node_modules
 **/__pycache__
-data
+data/qdrant
+data/postgres
+data/redis
+data/minio
+data/outputs
 chroma_db
 traces
 outputs

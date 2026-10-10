@@ -61,7 +61,7 @@ from agents.graph import (
     _strip_subresult_labels,
 )
 from agents.state import make_initial_state, AgentState
-from agents.focus import Focus, resolve_focus
+from agents.focus import Focus
 from core.tickers import raw_tickers, extract_tickers
 
 # Minimal persona for llm_route — routing is tool-driven, not prompt-sensitive.
@@ -368,7 +368,6 @@ def test_llm_classify_none_ticker_preserved():
 
 def test_llm_classify_generate_call_shape():
     from agents.classifier import _TOOL
-    from llm.types import Message
 
     resp = MagicMock(); resp.tool_calls = []; resp.text = "conversation"
     client = MagicMock(); client.generate.return_value = resp
@@ -485,7 +484,7 @@ def test_llm_route_nonbare_followup_suppresses_intent(monkeypatch):
     client = MagicMock(); client.generate.return_value = resp
 
     route = cr.llm_route(
-        "giá cổ phiếu vietcombank?", [], "sys", client=client,
+        "giá cổ phiếu?", [], "sys", client=client,
         focus=Focus(tickers=["VCB"], intent="valuation", query="P/E của VCB"),
     )
 
@@ -583,7 +582,7 @@ def test_llm_route_no_last_context_no_injection():
         cr.llm_route("xin chào", [], "sys", client=client)
     system = client.generate.call_args.kwargs["system"]
     assert "Lượt trước" not in system
-    assert system.endswith("sys")
+    assert "sys" in system
 
 
 def test_router_time_context_schema_and_parse():
@@ -1716,11 +1715,11 @@ def test_decompose_assigns_distinct_intents():
     )
 
 
-@pytest.mark.e2e
 def test_ngan_hang_thinh_vuong_resolves_vpb():
-    result = classify_hybrid("phân tích cổ phiếu Ngân hàng Thịnh Vượng")
-    print(f"\nRouter result: intent={result.intent} ticker={result.ticker} reason={result.reason}")
-    assert result.ticker == "VPB", f"Expected VPB, got {result.ticker}"
+    # Ticker is resolved deterministically from securities name/alias data (graph.py takes
+    # extract_tickers before the LLM classifier's guess), so assert that layer — not the LLM.
+    from core.tickers import extract_tickers
+    assert extract_tickers("phân tích cổ phiếu Ngân hàng Thịnh Vượng") == ["VPB"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

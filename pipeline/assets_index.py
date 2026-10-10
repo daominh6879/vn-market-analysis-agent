@@ -53,7 +53,6 @@ def global_quotes_ingest(context: AssetExecutionContext) -> dict:
         get_global_indices,
         get_vn_gold,
     )
-    from tools.index_db import upsert_index_rows  # reuse DB conn, but write to market_quotes
 
     today = str(date.today())
     rows_to_upsert: list[dict] = []

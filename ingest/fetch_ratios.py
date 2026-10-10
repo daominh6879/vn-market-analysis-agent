@@ -66,6 +66,36 @@ def _get(latest, key) -> float | None:
         return None
 
 
+def _reprice(ticker: str, fiscal_year: int | None, pe, pb, eps):
+    """Re-express KBS year-end valuation at today's adjusted price.
+
+    KBS pe/pb are computed at the fiscal year-end price and eps is the raw (pre-dilution)
+    figure. With ref = adjusted close on the last session <= Dec 31 and now = latest close:
+        eps_adj = ref / pe          (so a later stock dividend/split is reflected)
+        pe_live = pe * now / ref    (= now / eps_adj)
+        pb_live = pb * now / ref
+    Returns (pe, pb, eps) unchanged if prices are unavailable.
+    """
+    if not fiscal_year or not pe or pe <= 0:
+        return pe, pb, eps
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT close FROM ohlcv_daily WHERE ticker=%s AND date <= %s "
+                            "ORDER BY date DESC LIMIT 1", (ticker, f"{fiscal_year}-12-31"))
+                ref = cur.fetchone()
+                cur.execute("SELECT close FROM ohlcv_daily WHERE ticker=%s ORDER BY date DESC LIMIT 1",
+                            (ticker,))
+                now = cur.fetchone()
+        if not ref or not now or not ref[0] or float(ref[0]) <= 0:
+            return pe, pb, eps
+        ref_p, now_p = float(ref[0]) * 1000.0, float(now[0]) * 1000.0  # nghìn đồng → VND
+        scale = now_p / ref_p
+        return round(pe * scale, 2), (round(pb * scale, 2) if pb else pb), round(ref_p / pe, 2)
+    except Exception:
+        return pe, pb, eps
+
+
 def fetch_and_upsert(ticker: str) -> dict:
     """Fetch latest annual ratios for `ticker` from KBS and upsert into stock_ratios."""
     from vnstock.api.financial import Finance as VnFinance
@@ -73,15 +103,21 @@ def fetch_and_upsert(ticker: str) -> dict:
     df = VnFinance(symbol=ticker, source='KBS').ratio(period='year', lang='en')
     df = df.set_index('item_id').drop(columns=['item'], errors='ignore')
     latest = df.iloc[:, 0]
+    try:
+        fiscal_year = int(str(latest.name)[:4])
+    except (TypeError, ValueError):
+        fiscal_year = None
 
     de_pct = _get(latest, 'debt_to_equity')
+    pe, pb, eps = _reprice(ticker, fiscal_year, _get(latest, 'pe_ratio'),
+                           _get(latest, 'pb_ratio'), _get(latest, 'trailing_eps'))
     row = {
         "ticker":             ticker,
-        "pe":                 _get(latest, 'pe_ratio'),
-        "pb":                 _get(latest, 'pb_ratio'),
+        "pe":                 pe,
+        "pb":                 pb,
         "roe_pct":            _get(latest, 'roe'),
         "roa_pct":            _get(latest, 'roa'),
-        "eps":                _get(latest, 'trailing_eps'),
+        "eps":                eps,
         "gross_margin_pct":   _get(latest, 'gross_margin'),
         "net_margin_pct":     _get(latest, 'net_margin'),
         "revenue_growth_pct": _get(latest, 'net_revenue'),

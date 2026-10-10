@@ -95,6 +95,23 @@ class PriceProvider(ABC):
         return value
 
 
+# ── Price unit normalization ──────────────────────────────────────────────────
+# Tool-facing unit for VN stock prices is VND (VCI/TCBS/yfinance return VND natively).
+# Fireant and KBS return nghìn đồng (VCB 56.7 = 56,700 VND), so their fetch_price /
+# fetch_history multiply by this factor. ohlcv_daily stores nghìn đồng (see
+# tools/ohlcv_db.py), and ingest reads Fireant via fetch_history_range (raw, unscaled).
+_THOUSAND_VND = 1000.0
+_PRICE_COLS = ("open", "high", "low", "close")
+
+
+def _thousands_to_vnd(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    for col in _PRICE_COLS:
+        if col in df.columns:
+            df[col] = df[col] * _THOUSAND_VND
+    return df
+
+
 # ── FireantProvider ───────────────────────────────────────────────────────────
 
 _FIREANT_COOLDOWN_WINDOW = 60.0  # seconds; one shared pause per rate-limit outage
@@ -226,7 +243,7 @@ class FireantProvider(PriceProvider):
         df = self.fetch_history_range(ticker, str(today - timedelta(days=10)), str(today))
         if df.empty:
             raise ValueError(f"Fireant: no price for '{ticker}'")
-        return float(df["close"].iloc[-1])
+        return float(df["close"].iloc[-1]) * _THOUSAND_VND  # nghìn đồng → VND
 
     def fetch_history(self, ticker: str, days: int) -> pd.DataFrame:
         from datetime import date, timedelta
@@ -238,7 +255,7 @@ class FireantProvider(PriceProvider):
         )
         if df.empty:
             raise ValueError(f"Fireant: no history for '{ticker}'")
-        return df.tail(days).reset_index(drop=True)
+        return _thousands_to_vnd(df.tail(days).reset_index(drop=True))  # nghìn đồng → VND
 
 
 # ── VciDirectProvider ─────────────────────────────────────────────────────────
@@ -519,7 +536,7 @@ class KbsProvider(PriceProvider):
         df = self._kbs_history(ticker, str(date.today() - timedelta(days=7)), str(date.today()))
         if df is None:
             raise ValueError(f"No KBS price for '{ticker}'")
-        return float(df["close"].iloc[-1])
+        return float(df["close"].iloc[-1]) * _THOUSAND_VND  # nghìn đồng → VND
 
     def fetch_history(self, ticker: str, days: int) -> pd.DataFrame:
         from datetime import date, timedelta
@@ -528,7 +545,8 @@ class KbsProvider(PriceProvider):
         if df is None:
             raise ValueError(f"No KBS history for '{ticker}'")
         df["time"] = df["time"].astype(str).str[:10]
-        return df[["time", "open", "high", "low", "close", "volume"]].tail(days).reset_index(drop=True)
+        out = df[["time", "open", "high", "low", "close", "volume"]].tail(days).reset_index(drop=True)
+        return _thousands_to_vnd(out)  # nghìn đồng → VND
 
 
 # ── YFinanceProvider ──────────────────────────────────────────────────────────
@@ -619,6 +637,9 @@ class SsiIndexProvider(PriceProvider):
             for i, ts in enumerate(item["t"])
         ]
         df = pd.DataFrame(rows)
+        # The endpoint changed unit mid-history: candles up to 2025-08-11 already come in VND,
+        # so the ×1e6 above inflates them (1.3e19). No session trades 1e16 VND (10 triệu tỷ).
+        df.loc[df["accumulated_value_vnd"] > 1e16, "accumulated_value_vnd"] /= 1_000_000
         return df.sort_values("time").drop_duplicates(subset=["time"]).reset_index(drop=True)
 
     def fetch_price(self, ticker: str) -> float:

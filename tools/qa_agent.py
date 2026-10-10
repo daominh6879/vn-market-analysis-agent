@@ -40,7 +40,7 @@ def _fetch_price_and_indicators(ticker: str) -> tuple[str | None, str | None]:
         provider = _detect_provider(ticker)
         price_result = get_realtime_price(ticker, provider=provider)
         if price_result.status == "ok" and price_result.data is not None:
-            price_text = f"{ticker}: {price_result.data:,.0f} VND"
+            price_text = price_result.message
     except Exception:
         pass
 

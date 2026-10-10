@@ -1,6 +1,5 @@
 """tests/test_planner.py — Unit tests for agents/planner.py (bài 23)."""
 
-import pytest
 from agents.planner import (
     MAX_BUDGET_TOKENS,
     MAX_STEPS,

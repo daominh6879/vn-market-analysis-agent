@@ -616,4 +616,4 @@ Hai chi tiết làm nó khó tìm:
 
 Cách phòng: fixture và code phải cùng hệ quy chiếu. Hoặc fixture sinh theo `today` (`base = today - timedelta(days=5)`), hoặc test truyền range tường minh để không phụ thuộc `today`. Trộn hai hệ là bom hẹn giờ.
 
-Cùng họ với lỗi ở `tests/test_phase2.py`: fixture `date(2026, 8, 25)` + `_is_db_fresh()` so với `date.today()` → sau vài ngày data mock bị coi là stale, tool rơi xuống live path và gọi network thật trong unit test.
+Cùng họ với lỗi ở `tests/test_foreign_flow_sector.py`: fixture `date(2026, 8, 25)` + `_is_db_fresh()` so với `date.today()` → sau vài ngày data mock bị coi là stale, tool rơi xuống live path và gọi network thật trong unit test.

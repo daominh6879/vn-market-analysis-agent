@@ -1,5 +1,5 @@
 """
-tests/test_phase5.py — Unit tests for Phase 5: corporate events + broker views.
+tests/test_corporate_events_broker_views.py — Unit tests for Phase 5: corporate events + broker views.
 
 No network calls. No DB (all DB queries mocked via monkeypatch).
 Covers:
@@ -14,10 +14,8 @@ from __future__ import annotations
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Optional
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
@@ -165,13 +163,13 @@ BROKER_COLS = ["broker", "ticker_or_index", "published_at", "stance", "target", 
 class TestGetCorporateEvents:
     def test_returns_tool_result(self):
         conn = _make_mock_conn([], CORP_COLS)
-        with patch("data.db.get_conn", return_value=conn):
+        with patch("core.db.get_conn", return_value=conn):
             result = get_corporate_events()
         assert isinstance(result, ToolResult)
 
     def test_no_data_status(self):
         conn = _make_mock_conn([], CORP_COLS)
-        with patch("data.db.get_conn", return_value=conn):
+        with patch("core.db.get_conn", return_value=conn):
             result = get_corporate_events(days_ahead=7)
         assert result.status == "no_data"
         assert result.data == []
@@ -180,7 +178,7 @@ class TestGetCorporateEvents:
         ex = date(2026, 8, 26)
         rows = [("TN1", "gdkhq", ex, None, 10.0, "Cổ tức 10%")]
         conn = _make_mock_conn(rows, CORP_COLS)
-        with patch("data.db.get_conn", return_value=conn):
+        with patch("core.db.get_conn", return_value=conn):
             result = get_corporate_events()
         assert result.status == "ok"
         assert len(result.data) == 1
@@ -190,12 +188,12 @@ class TestGetCorporateEvents:
         ex = date(2026, 8, 27)
         rows = [("VAB", "rights_issue", ex, None, None, "Phát hành 85.7 triệu cp")]
         conn = _make_mock_conn(rows, CORP_COLS)
-        with patch("data.db.get_conn", return_value=conn):
+        with patch("core.db.get_conn", return_value=conn):
             result = get_corporate_events()
         assert "VAB" in result.message
 
     def test_upstream_error_on_exception(self):
-        with patch("data.db.get_conn", side_effect=RuntimeError("DB down")):
+        with patch("core.db.get_conn", side_effect=RuntimeError("DB down")):
             result = get_corporate_events()
         assert result.status == "upstream_error"
         assert "DB down" in result.message
@@ -204,13 +202,13 @@ class TestGetCorporateEvents:
 class TestGetBrokerViews:
     def test_returns_tool_result(self):
         conn = _make_mock_conn([], BROKER_COLS)
-        with patch("data.db.get_conn", return_value=conn):
+        with patch("core.db.get_conn", return_value=conn):
             result = get_broker_views("VNINDEX")
         assert isinstance(result, ToolResult)
 
     def test_no_data_status(self):
         conn = _make_mock_conn([], BROKER_COLS)
-        with patch("data.db.get_conn", return_value=conn):
+        with patch("core.db.get_conn", return_value=conn):
             result = get_broker_views("VNINDEX", days=7)
         assert result.status == "no_data"
 
@@ -218,7 +216,7 @@ class TestGetBrokerViews:
         pub = datetime(2026, 8, 25, 8, 0, tzinfo=timezone.utc)
         rows = [("TPS", "VNINDEX", pub, "buy", 1900.0, None, None, "https://tps.com.vn/1")]
         conn = _make_mock_conn(rows, BROKER_COLS)
-        with patch("data.db.get_conn", return_value=conn):
+        with patch("core.db.get_conn", return_value=conn):
             result = get_broker_views("VNINDEX")
         assert result.status == "ok"
         assert len(result.data) == 1
@@ -229,7 +227,7 @@ class TestGetBrokerViews:
         pub = datetime(2026, 8, 25, 9, 0, tzinfo=timezone.utc)
         rows = [("VCBS", "VNINDEX", pub, "neutral", None, 1760.0, None, "")]
         conn = _make_mock_conn(rows, BROKER_COLS)
-        with patch("data.db.get_conn", return_value=conn):
+        with patch("core.db.get_conn", return_value=conn):
             result = get_broker_views("VNINDEX")
         assert result.status == "ok"
         assert "1,760" in result.message or "1760" in result.message
@@ -238,19 +236,19 @@ class TestGetBrokerViews:
         pub = datetime(2026, 8, 25, 10, 0, tzinfo=timezone.utc)
         rows = [("Yuanta", "VNINDEX", pub, None, None, None, 1820.0, "")]
         conn = _make_mock_conn(rows, BROKER_COLS)
-        with patch("data.db.get_conn", return_value=conn):
+        with patch("core.db.get_conn", return_value=conn):
             result = get_broker_views("VNINDEX")
         assert "1,820" in result.message or "1820" in result.message
 
     def test_case_insensitive_subject(self):
         """ticker_or_index is normalized to uppercase before query — verify no crash."""
         conn = _make_mock_conn([], BROKER_COLS)
-        with patch("data.db.get_conn", return_value=conn):
+        with patch("core.db.get_conn", return_value=conn):
             result = get_broker_views("vnindex")
         assert result.status in ("ok", "no_data")
 
     def test_upstream_error_on_exception(self):
-        with patch("data.db.get_conn", side_effect=RuntimeError("Timeout")):
+        with patch("core.db.get_conn", side_effect=RuntimeError("Timeout")):
             result = get_broker_views("VNINDEX")
         assert result.status == "upstream_error"
 
@@ -262,7 +260,7 @@ class TestGetBrokerViews:
             ("Yuanta", "VNINDEX", pub, None,       None,  None,  1820.0,  ""),
         ]
         conn = _make_mock_conn(rows, BROKER_COLS)
-        with patch("data.db.get_conn", return_value=conn):
+        with patch("core.db.get_conn", return_value=conn):
             result = get_broker_views("VNINDEX")
         assert result.status == "ok"
         assert len(result.data) == 3

@@ -16,10 +16,10 @@ New:
                                  (used by dashboard SSE streaming)
   _redact()                    — strips API keys/tokens from error strings
 
-File layout:
-  traces/YYYY-MM-DD.jsonl      — daily trace (all events, never rotated)
-  traces/latest.jsonl          — rolling 2000-line window of same events
-  traces/usage.jsonl           — permanent LLM cost ledger (never rotated)
+Storage (Postgres):
+  trace_events                 — all events (kind, ts, request_id, payload jsonb)
+  llm_usage                    — permanent LLM cost ledger
+  read_events() / read_usage() — read helpers used by ops/ and ui/
 """
 from __future__ import annotations
 
@@ -30,7 +30,6 @@ import re
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -48,42 +47,119 @@ current_observer: contextvars.ContextVar[Observer | None] = contextvars.ContextV
     "current_observer", default=None
 )
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
-_TRACES_DIR = Path(__file__).parent / "traces"
-_LATEST_FILE = _TRACES_DIR / "latest.jsonl"
-_USAGE_FILE = _TRACES_DIR / "usage.jsonl"
-_MAX_LATEST_LINES = 2000
+# ── Storage (Postgres: trace_events + llm_usage, see infra/migrations/034_trace_events.sql) ──
+
+_MIGRATION = Path(__file__).parent / "infra" / "migrations" / "034_trace_events.sql"
+_db_lock = threading.Lock()
+_conn = None  # one autocommit connection reused by all writers; reopened on failure
+_schema_ready = False
+_retry_after = 0.0  # when Postgres is down, skip connect attempts until this time (no per-event stalls)
 
 
-# ── Write helpers ─────────────────────────────────────────────────────────────
+def _get_conn():
+    global _conn, _schema_ready, _retry_after
+    if _conn is not None and not _conn.closed:
+        return _conn
+    if time.time() < _retry_after:
+        raise ConnectionError("trace store unavailable (backing off)")
+    import psycopg2
+    from core.db import _dsn
+    try:
+        _conn = psycopg2.connect(_dsn(), connect_timeout=3)
+    except Exception:
+        _retry_after = time.time() + 30
+        raise
+    _conn.autocommit = True
+    if not _schema_ready:
+        with _conn.cursor() as cur:
+            cur.execute(_MIGRATION.read_text(encoding="utf-8"))
+        _schema_ready = True
+    return _conn
 
-def _dated_file() -> Path:
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    return _TRACES_DIR / f"{date_str}.jsonl"
+
+def _execute(sql: str, params: tuple) -> None:
+    global _conn
+    with _db_lock:
+        try:
+            with _get_conn().cursor() as cur:
+                cur.execute(sql, params)
+        except Exception:
+            _conn = None  # drop broken connection; next write reconnects
+            raise
 
 
 def _write_trace(entry: dict) -> None:
     try:
-        _TRACES_DIR.mkdir(exist_ok=True)
-        line = json.dumps(entry, ensure_ascii=False, default=str) + "\n"
-        with _dated_file().open("a", encoding="utf-8") as f:
-            f.write(line)
-        with _LATEST_FILE.open("a", encoding="utf-8") as f:
-            f.write(line)
-        lines = _LATEST_FILE.read_text(encoding="utf-8").splitlines()
-        if len(lines) > _MAX_LATEST_LINES:
-            _LATEST_FILE.write_text(
-                "\n".join(lines[-_MAX_LATEST_LINES:]) + "\n", encoding="utf-8"
-            )
+        entry = dict(entry)
+        kind = entry.pop("type", "")
+        ts = entry.pop("ts", time.time())
+        rid = entry.pop("request_id", "") or ""
+        _execute(
+            "INSERT INTO trace_events (ts, kind, request_id, payload) VALUES (%s, %s, %s, %s)",
+            (ts, kind, rid, json.dumps(entry, ensure_ascii=False, default=str)),
+        )
     except Exception:
         pass
 
 
 def _write_usage(entry: dict) -> None:
     try:
-        _TRACES_DIR.mkdir(exist_ok=True)
-        with _USAGE_FILE.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
+        _execute(
+            "INSERT INTO llm_usage (ts, request_id, provider, model, input_tokens, output_tokens, cost_usd) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (
+                entry.get("ts", time.time()), entry.get("request_id", "") or "",
+                entry.get("provider", ""), entry.get("model", ""),
+                int(entry.get("input_tokens", 0) or 0), int(entry.get("output_tokens", 0) or 0),
+                float(entry.get("cost_usd", 0) or 0),
+            ),
+        )
+    except Exception:
+        pass
+
+
+def read_events(limit: int = 2000, since_ts: float = 0.0) -> list[dict]:
+    """Latest `limit` trace events, oldest first, in the original flat shape
+    ({"type", "ts", "request_id", **payload}). [] if Postgres is unreachable."""
+    global _conn
+    try:
+        with _db_lock:
+            with _get_conn().cursor() as cur:
+                cur.execute(
+                    "SELECT kind, ts, request_id, payload FROM trace_events "
+                    "WHERE ts >= %s ORDER BY id DESC LIMIT %s",
+                    (since_ts, limit),
+                )
+                rows = cur.fetchall()
+    except Exception:
+        _conn = None
+        return []
+    return [{"type": k, "ts": t, "request_id": r, **(p or {})} for k, t, r, p in reversed(rows)]
+
+
+def read_usage(limit: int = 5000) -> list[dict]:
+    """Latest `limit` LLM usage rows, oldest first. [] if Postgres is unreachable."""
+    global _conn
+    try:
+        with _db_lock:
+            with _get_conn().cursor() as cur:
+                cur.execute(
+                    "SELECT ts, request_id, provider, model, input_tokens, output_tokens, cost_usd "
+                    "FROM llm_usage ORDER BY id DESC LIMIT %s",
+                    (limit,),
+                )
+                rows = cur.fetchall()
+    except Exception:
+        _conn = None
+        return []
+    cols = ("ts", "request_id", "provider", "model", "input_tokens", "output_tokens", "cost_usd")
+    return [dict(zip(cols, r)) for r in reversed(rows)]
+
+
+def clear_events() -> None:
+    """Delete all trace events (usage ledger is kept)."""
+    try:
+        _execute("DELETE FROM trace_events", ())
     except Exception:
         pass
 
@@ -220,7 +296,7 @@ def _emit(kind: str, data: dict) -> None:
 def emit_llm_delta(text: str) -> None:
     """Push a token-level text delta to current_observer (kind="llm_delta").
 
-    No trace file write — token spam stays out of traces/latest.jsonl.
+    No DB write — token spam stays out of trace_events.
     Used by streamed synthesize nodes so the SSE client sees text as it generates.
     """
     if not text:

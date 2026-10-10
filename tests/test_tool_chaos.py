@@ -21,6 +21,12 @@ from tools.price import PriceProvider, get_realtime_price, get_historical_ohlcv
 from tools.result import ToolResult
 
 
+@pytest.fixture(autouse=True)
+def _no_db_first(monkeypatch):
+    """get_historical_ohlcv is DB-first; force the injected mock provider path."""
+    monkeypatch.setattr("tools.ohlcv_db.query_ohlcv", lambda *a, **k: None)
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _make_ohlcv(n: int = 60) -> pd.DataFrame:

@@ -2,7 +2,7 @@
 
 ## Kết quả
 
-- **42 tests xanh** (`tests/test_phase5.py`)
+- **42 tests xanh** (`tests/test_corporate_events_broker_views.py`)
 - **2 migration** mới: `011_corporate_events`, `012_broker_views`
 - **2 tool** mới đăng ký registry: `get_corporate_events`, `get_broker_views`
 

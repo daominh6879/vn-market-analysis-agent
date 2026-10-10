@@ -12,7 +12,7 @@ tools/
   price.py         — PriceProvider, VnstockProvider, YFinanceProvider, 5 tool functions
   cli.py           — CLI: price, ohlcv, indicators, price-intl, ohlcv-intl, indicators-intl
 tests/
-  test_tools.py    — 44 tests, mock cả 2 provider
+  test_price_tools.py    — 44 tests, mock cả 2 provider
 ```
 
 ## Tool functions

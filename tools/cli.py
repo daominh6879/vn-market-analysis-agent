@@ -33,7 +33,7 @@ def cmd_price(args: argparse.Namespace) -> None:
     from tools.price import get_realtime_price
     result = get_realtime_price(args.ticker)
     if _check(result):
-        print(f"{args.ticker}: {result.data:,.0f} VND")
+        print(result.message)
 
 
 def cmd_price_intl(args: argparse.Namespace) -> None:

@@ -14,7 +14,7 @@
 | `tools/cli.py` | Unpack `result.data`, in `result.message` khi lỗi |
 | `tools/registry.py` | Mới. Metadata (version, timeout, cost_hint, side_effect) cho 7 tool |
 | `tests/test_tool_chaos.py` | Mới. 5 tình huống lỗi thực tế |
-| `tests/test_tools.py` | Cập nhật toàn bộ assertions → check `result.status` và `result.data` |
+| `tests/test_price_tools.py` | Cập nhật toàn bộ assertions → check `result.status` và `result.data` |
 
 ## 5 Status trong ToolResult
 
@@ -60,5 +60,5 @@ Viết như hướng dẫn đồng nghiệp mới:
 ## Lệnh chạy lại
 
 ```bash
-python -m pytest tests/test_tool_chaos.py tests/test_tools.py -v
+python -m pytest tests/test_tool_chaos.py tests/test_price_tools.py -v
 ```
