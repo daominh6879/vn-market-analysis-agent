@@ -61,6 +61,7 @@ MIGRATION_ORDER = [
     "031_stock_ratios.sql",
     "032_enrich_securities.sql",
     "033_messages_trace_meta.sql",
+    "038_dividends_snapshots.sql",
     "004_readonly_role.sql",  # last: GRANTs need tables to exist
 ]
 
@@ -287,8 +288,8 @@ def backfill_market_index(dry: bool) -> bool:
 def populate_ratios(dry: bool) -> bool:
     print("\n[8/9] Stock ratios (vnstock KBS → stock_ratios)")
     from pipeline.assets_vnstock import _UPSERT_SQL
-    from core.tickers import get_ratio_tickers
-    ticker_list = get_ratio_tickers()
+    from core.tickers import get_tickers
+    ticker_list = get_tickers()
     print(f"  tickers ({len(ticker_list)}): {ticker_list}")
     if dry:
         print(f"  [DRY] would fetch {len(ticker_list)} tickers via vnstock KBS")

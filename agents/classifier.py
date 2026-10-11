@@ -27,7 +27,7 @@ class RouterResult:
 INTENTS = (
     "price_action", "technical_analysis", "rag_qa", "valuation", "macro_sector",
     "news_sentiment", "investment_case", "screening", "market_brief",
-    "breakout_scan", "conversation", "out_of_scope",
+    "breakout_scan", "market_data", "conversation", "out_of_scope",
 )
 
 # Fixed decline used when the classifier/router decides a subject is outside the VN
@@ -74,10 +74,11 @@ Classify the user's message into exactly one intent:
   news_sentiment      — news, community sentiment, analyst commentary, market buzz around a stock
   investment_case     — buy/sell/hold recommendation, bull/bear thesis, comprehensive analysis
   screening           — filter or rank stocks by a criterion across many tickers
-  market_brief        — overall market overview: VNINDEX/VN30 breadth, gainers/losers, session recap
+  market_brief        — a full pre-market / session-recap NEWSLETTER only ("bản tin thị trường", "tổng quan thị trường hôm nay", "đọc gì trước giờ mở cửa")
+  market_data         — a SPECIFIC market-wide factual question: top gainers/losers ("mã nào tăng mạnh nhất"), index close ("VN-Index đóng cửa bao nhiêu điểm"), top foreign net buy/sell, top liquidity, top market cap, "liệt kê các mã trong ngành X". NOT a newsletter.
   breakout_scan       — scan for stocks breaking out of a base or making new highs
-  conversation        — general chat, greeting, or clearly non-financial question
-  out_of_scope        — crypto (Bitcoin/Ethereum), US/foreign stocks, or non-VND forex (EUR/USD, USD/JPY — no VND leg) — outside the Vietnamese equity universe
+  conversation        — ONLY greeting / thanks / acknowledgement / "what can you do". Requests to write poems, stories, code, translate, weather etc. are NOT financial → out_of_scope
+  out_of_scope        — crypto (Bitcoin/Ethereum), US/foreign stocks, non-VND forex (EUR/USD, USD/JPY — no VND leg), or any non-financial task (poems, stories, code, translation, weather) — outside the Vietnamese equity universe
 
 Rules:
 - A ticker alone with no other signal → technical_analysis
@@ -122,7 +123,8 @@ _TOOL = {
                     "or comparing two or more stocks against each other (so sánh A và B, A vs B). "
                     "Use 'rag_qa' for financial-report content (revenue, profit, balance sheet). "
                     "Use 'price_action' only for a single stock's price/volume action. "
-                    "Use 'market_brief' for broad market overview (VNINDEX, HNX, overall session). "
+                    "Use 'market_brief' ONLY for the full newsletter/session recap. "
+                    "Use 'market_data' for a specific market-wide fact (top gainers/losers, index close, foreign net buy/sell, top market cap, list tickers of a sector). "
                     "Use 'screening' for filter/scan queries. "
                     "Use 'investment_case' for buy/sell/hold on a specific stock. "
                     "Use 'out_of_scope' for crypto, US/foreign stocks, or non-VND forex "
@@ -151,7 +153,7 @@ _TOOL = {
                     "indicator is the lower-case metric code — ratio: 'pe', 'pb', 'roe', "
                     "'roa', 'eps', 'ev_ebitda', 'de', 'gross_margin', 'net_margin', "
                     "'revenue_growth', 'earnings_growth'; absolute (tỷ VND): 'revenue', "
-                    "'profit'; technical: 'rsi', 'macd', 'volume', 'adx', 'ma20', 'ma50', "
+                    "'profit', 'market_cap' (vốn hóa); technical: 'rsi', 'macd', 'volume', 'adx', 'ma20', 'ma50', "
                     "'ma200' (giá so MA, %), 'pct_52w_high', 'pct_52w_low' (%). "
                     "op is the comparison, threshold the number."
                 ),
@@ -233,7 +235,11 @@ def llm_classify(query: str, client=None, messages: list | None = None) -> Route
 def classify_hybrid(query: str, client=None, messages: list | None = None) -> RouterResult:
     """LLM-based classifier with conversation history support.
 
-    Always calls LLM. Falls back to `conversation` on failure.
+    Always calls LLM (except deterministic off-topic requests). Falls back to `conversation`
+    on failure.
     """
+    from agents.guardrails import is_off_topic
+    if is_off_topic(query):
+        return RouterResult("out_of_scope", None, "guardrail:off_topic")
     result = llm_classify(query, client=client, messages=messages)
     return result or RouterResult("conversation", None, "llm:fallback")

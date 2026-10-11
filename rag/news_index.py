@@ -24,6 +24,7 @@ from qdrant_client.models import (
     Distance,
     FieldCondition,
     Filter,
+    PointIdsList,
     PointStruct,
     VectorParams,
 )
@@ -264,19 +265,29 @@ def purge_old_articles_qdrant(days_to_keep: int = 90) -> int:
     if COLLECTION not in existing:
         return 0
 
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days_to_keep)).isoformat()
-    result = client.delete(
-        collection_name=COLLECTION,
-        points_selector=Filter(
-            must=[
-                FieldCondition(
-                    key="published_at",
-                    range=DatetimeRange(lt=cutoff),
-                )
-            ]
-        ),
-    )
-    return getattr(result, "deleted_count", 0) or 0
+    # A server-side datetime range filter makes Qdrant panic (500 "OffsetZero") on some stored
+    # timestamps, so select the stale points client-side and delete them by id.
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
+    stale: list = []
+    offset = None
+    while True:
+        points, offset = client.scroll(COLLECTION, limit=1000, offset=offset,
+                                       with_payload=["published_at"], with_vectors=False)
+        for p in points:
+            raw = (p.payload or {}).get("published_at")
+            try:
+                ts = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            if ts < cutoff:
+                stale.append(p.id)
+        if offset is None:
+            break
+    for i in range(0, len(stale), 500):
+        client.delete(collection_name=COLLECTION, points_selector=PointIdsList(points=stale[i:i + 500]))
+    return len(stale)
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────

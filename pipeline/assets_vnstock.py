@@ -33,6 +33,7 @@ class VnstockFinancialsConfig(Config):
     period_to: int = date.today().year
     report_type: str = "consolidated"
     source: str = "VCI"
+    quarterly: bool = False   # True → quarterly statements (period 'Q3/2024'); needs source="KBS"
 
 
 class VnstockPricesConfig(Config):
@@ -65,6 +66,7 @@ def vnstock_financials(context: AssetExecutionContext, config: VnstockFinancials
                 period_from=config.period_from,
                 period_to=config.period_to,
                 source=config.source,
+                quarterly=config.quarterly,
             )
             if facts:
                 n = insert_vnstock_facts(facts)
@@ -72,7 +74,7 @@ def vnstock_financials(context: AssetExecutionContext, config: VnstockFinancials
                 context.log.info(f"  {ticker}: {n} facts upserted")
             else:
                 context.log.warning(f"  {ticker}: 0 facts returned")
-        except Exception as exc:
+        except (Exception, SystemExit) as exc:   # vnstock raises SystemExit on rate limit
             context.log.error(f"  {ticker} FAILED: {exc}")
             failed.append(ticker)
         time.sleep(1.5)
@@ -80,6 +82,8 @@ def vnstock_financials(context: AssetExecutionContext, config: VnstockFinancials
     if failed:
         context.log.warning(f"vnstock_financials: {len(failed)} tickers failed: {failed}")
     context.log.info(f"vnstock_financials done: {total_facts} total facts")
+    if ticker_list and total_facts == 0:
+        raise RuntimeError(f"vnstock_financials: 0 facts for {len(ticker_list)} tickers; failed={failed[:10]}")
     return {"total_facts": total_facts, "tickers": ticker_list, "failed": failed}
 
 
@@ -106,7 +110,7 @@ def vnstock_prices(context: AssetExecutionContext, config: VnstockPricesConfig) 
             n = fetch_and_insert(ticker, from_date, to_date)
             total_rows += n
             context.log.info(f"  {ticker}: {n} rows upserted")
-        except Exception as exc:
+        except (Exception, SystemExit) as exc:   # vnstock raises SystemExit on rate limit
             context.log.error(f"  {ticker} FAILED: {exc}")
             failed.append(ticker)
         time.sleep(1.1)
@@ -156,9 +160,9 @@ ON CONFLICT (ticker) DO UPDATE SET
 )
 def vnstock_ratios(context: AssetExecutionContext) -> dict:
     import time
-    from core.tickers import get_ratio_tickers
+    from core.tickers import get_tickers
 
-    ticker_list = get_ratio_tickers()
+    ticker_list = get_tickers()   # every active security, not just the VN30/VN100 labels
     context.log.info(f"vnstock_ratios: {len(ticker_list)} tickers from securities table")
     upserted = 0
     failed: list[str] = []
@@ -170,7 +174,7 @@ def vnstock_ratios(context: AssetExecutionContext) -> dict:
             row = fetch_and_upsert(ticker)
             upserted += 1
             context.log.info(f"  {ticker}: upserted (pe={row['pe']}, pb={row['pb']}, roe={row['roe_pct']}%)")
-        except Exception as exc:
+        except (Exception, SystemExit) as exc:   # vnstock raises SystemExit on rate limit
             context.log.error(f"  {ticker} FAILED: {exc}")
             failed.append(ticker)
 

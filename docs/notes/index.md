@@ -81,3 +81,4 @@ Ghi chép thực nghiệm, số đo, quyết định kỹ thuật. Không giải
 | Bài 28 | [bai-28-conversation-memory.md](bai-28-conversation-memory.md) | conversations/messages/user_memory; LLM extractor confidence >= 0.7; supersede logic; 9 tests |
 | Bài 29 | [bai-29-episodic-memory.md](bai-29-episodic-memory.md) | episodic_memory Qdrant; decay exp(-d/30); expiry 90d; top-3 limit; user isolation; 9 tests xanh |
 | Bài 31 | [bai-31-streaming.md](bai-31-streaming.md) | SSE stream_turn(); thread+queue; heartbeat 15s; cancel→no save; endpoint /messages/stream; 4 tests |
+- [Xử lý báo cáo test agent 10/10/2026](bao-cao-test-agent-2026-10-10.md) — ánh xạ 15 lỗi → sửa, chưa chạy

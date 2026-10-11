@@ -9,6 +9,7 @@ Market-brief pattern:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -119,11 +120,12 @@ def _load_ohlcv(
     ticker: str,
     start_date: str | None = None,
     end_date: str | None = None,
+    default_days: int = 25,
 ) -> pd.DataFrame | None:
     """DB-first for indices (market_index_daily); live API for stocks; CSV cache fallback."""
     t = ticker.strip().upper()
     from core.time_context import to_days
-    days = to_days(start_date, end_date, default=25) if (start_date or end_date) else 25
+    days = to_days(start_date, end_date, default=default_days) if (start_date or end_date) else default_days
 
     # Index path: DB → live API (skip stale DB)
     if t in _INDEX_CODES:
@@ -171,18 +173,100 @@ def gather_data(ticker: str, query: str, time_context: dict | None = None) -> st
     start = tc.get("start_date") if explicit else None
     end = tc.get("end_date") if explicit else None
     price_r = get_realtime_price(ticker)
-    df = _load_ohlcv(ticker, start_date=start, end_date=end)
+    n_sessions = _session_count(query)
+    # ~1.6 calendar days per session (weekends/holidays) + a buffer for the previous-close row.
+    days = max(25, int((n_sessions or 0) * 1.6) + 5)
+    df = _load_ohlcv(ticker, start_date=start, end_date=end, default_days=days)
     price_line  = price_r.message
     change_line = _price_change_summary(df, ticker) if df is not None else "Không có dữ liệu OHLCV."
     vol_line    = _volume_vs_ma(df)         if df is not None else "Không có dữ liệu khối lượng."
     flow_line   = _get_foreign_flow_summary(ticker, as_of=end)
+    is_index = ticker.strip().upper() in _INDEX_CODES
+    extras: list[str] = []
+    if n_sessions and df is not None:
+        table = _session_table(df, n_sessions, is_index)
+        if table:
+            extras.append(table)
+    if df is not None and not df.empty and "close" in df.columns:
+        if not is_index:
+            cap = _market_cap_line(ticker.strip().upper(), float(df["close"].iloc[-1]))
+            if cap:
+                extras.append(cap)
+        if "time" in df.columns:
+            extras.append(f"Dữ liệu tính đến phiên {str(df['time'].iloc[-1])[:10]}.")
+    tail = ("\n" + "\n".join(extras)) if extras else ""
     return (
         f"[GIÁ & DÒNG TIỀN {ticker}]\n"
         f"{price_line}\n"
         f"{change_line}\n"
         f"{vol_line}\n"
         f"{flow_line}"
+        f"{tail}"
     )
+
+
+_SESSIONS_RE = re.compile(r"(\d{1,2})\s*phiên", re.IGNORECASE)
+_HISTORY_HINT_RE = re.compile(
+    r"phiên|lịch sử giá|diễn biến giá|hôm qua|so với hôm qua|tuần qua|tháng qua", re.IGNORECASE
+)
+_MAX_SESSIONS = 30
+
+
+def _session_count(query: str) -> int | None:
+    """Number of sessions to tabulate: "5 phiên" -> 5, "hôm qua" -> 2, history hint -> 5, else None."""
+    q = query or ""
+    m = _SESSIONS_RE.search(q)
+    if m:
+        return max(2, min(int(m.group(1)), _MAX_SESSIONS))
+    if "hôm qua" in q.lower():
+        return 2
+    if "tuần qua" in q.lower():
+        return 5
+    if "tháng qua" in q.lower():
+        return 22
+    if _HISTORY_HINT_RE.search(q):
+        return 5
+    return None
+
+
+def _session_table(df: pd.DataFrame, n: int, is_index: bool) -> str:
+    """Last n sessions: date, close, change vs previous session, volume."""
+    if df is None or df.empty or "close" not in df.columns or "time" not in df.columns:
+        return ""
+    tail = df.tail(n + 1).reset_index(drop=True)
+    unit = "điểm" if is_index else "VND"
+    fmt = "{:,.2f}" if is_index else "{:,.0f}"
+    rows = []
+    for i in range(1, len(tail)):
+        prev, cur = float(tail["close"].iloc[i - 1]), float(tail["close"].iloc[i])
+        pct = (cur - prev) / prev * 100 if prev else 0.0
+        vol = tail["volume"].iloc[i] if "volume" in tail.columns else None
+        vol_s = f"{int(vol):,}" if vol is not None and pd.notna(vol) else "N/A"
+        rows.append(f"| {str(tail['time'].iloc[i])[:10]} | {fmt.format(cur)} | {pct:+.2f}% | {vol_s} |")
+    if not rows:
+        return ""
+    head = (f"Diễn biến {len(rows)} phiên gần nhất (giá đóng cửa, đơn vị {unit}):\n"
+            "| Ngày | Đóng cửa | Thay đổi | KLGD |\n|---|---|---|---|\n")
+    return head + "\n".join(rows)
+
+
+def _market_cap_line(ticker: str, close_vnd: float | None) -> str:
+    """Market cap = listed shares x last close (needs securities.listed_shares)."""
+    if not close_vnd:
+        return ""
+    try:
+        from core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT listed_shares FROM securities WHERE ticker = %s", (ticker,))
+                row = cur.fetchone()
+    except Exception:
+        return ""
+    if not row or not row[0]:
+        return ""
+    shares = float(row[0])
+    return (f"Vốn hóa ước tính: {shares * close_vnd / 1e9:,.0f} tỷ VND "
+            f"({shares:,.0f} cp niêm yết × {close_vnd:,.0f} VND, giá đóng cửa gần nhất)")
 
 
 @observe(name="intent.price_action")

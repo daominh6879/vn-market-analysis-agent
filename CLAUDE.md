@@ -21,6 +21,17 @@ Activate venv first: `.venv\Scripts\activate`
 
 ---
 
+## Data jobs — no manual steps
+
+**Every dataset the agent reads must be produced by a Dagster asset that writes to Postgres, with a schedule AND a bootstrap path.** Never ship a table that needs the user to run an `ingest/*.py` CLI by hand (CLIs are only thin wrappers around the same functions for debugging).
+
+- New table/dataset → asset in `pipeline/assets_*.py`, job, `ScheduleDefinition` (`default_status=RUNNING`), registered in `defs` (`pipeline/assets.py`).
+- Add an emptiness check to `data_bootstrap_sensor` (`pipeline/assets_market_data.py`) so a fresh DB fills itself on first run.
+- Schema changes → a numbered file in `infra/migrations/` (run by `scripts/migrate.py`).
+- A run that produces nothing must raise (not "succeed" empty), so retries/alerts fire.
+
+---
+
 ## Language rules — code & schema
 
 **All code identifiers and database column names must be in English.** No exceptions.

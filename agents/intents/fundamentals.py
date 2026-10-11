@@ -188,15 +188,14 @@ def _rank_text(value, all_values: list, metric: str, higher_is_better: bool = Tr
     below = [(t, v) for t, v in valid if v < value and not _na(v)]
     equal = [(t, v) for t, v in valid if abs(v - value) < 1e-9 and t != subject]
 
+    # Wording compares the subject's VALUE with each peer's value ("thấp hơn X" when X's number
+    # is larger), regardless of whether a higher or lower value is "better" — the old branch
+    # inverted this for P/E and wrote "cao hơn" for peers with a larger P/E.
     parts: list[str] = []
-    if above and higher_is_better:
+    if above:
         parts.append(f"thấp hơn {', '.join(f'{t}({v:.1f})' for t,v in above[:3])}")
-    elif above and not higher_is_better:
-        parts.append(f"cao hơn {', '.join(f'{t}({v:.1f})' for t,v in above[:3])}")
-    if below and higher_is_better:
+    if below:
         parts.append(f"cao hơn {', '.join(f'{t}({v:.1f})' for t,v in below[:3])}")
-    elif below and not higher_is_better:
-        parts.append(f"thấp hơn {', '.join(f'{t}({v:.1f})' for t,v in below[:3])}")
     if equal:
         parts.append(f"tương đương {', '.join(t for t,_ in equal[:2])}")
 
@@ -204,8 +203,16 @@ def _rank_text(value, all_values: list, metric: str, higher_is_better: bool = Tr
     return f"Xếp hạng {rank}/{n} trong nhóm{': ' + peer_str if peer_str else '.'}"
 
 
-def _build_analysis(ticker: str, rows: list[dict]) -> str:
-    """Pre-compute all factual comparisons. Return as structured text for LLM prompt."""
+_PE_SUSPECT_LOW = 5.0
+_PE_SUSPECT_HIGH = 100.0
+
+
+def _build_analysis(ticker: str, rows: list[dict], avg_label: str = "TB ngành") -> str:
+    """Pre-compute all factual comparisons. Return as structured text for LLM prompt.
+
+    avg_label: "TB ngành" when `rows` are the ticker's sector peers; "TB nhóm so sánh" when
+    `rows` are just the tickers the user asked to compare (their mean is not a sector mean).
+    """
     target = next((r for r in rows if r["ticker"] == ticker), None)
     if not target:
         return "Không lấy được dữ liệu."
@@ -215,6 +222,7 @@ def _build_analysis(ticker: str, rows: list[dict]) -> str:
     roe_pairs = [(r["ticker"], r["roe_pct"]) for r in rows if not _na(r["roe_pct"])]
     eps_pairs = [(r["ticker"], r["eps"])     for r in rows if not _na(r["eps"])]
 
+    avg_label_l = "trung bình ngành" if avg_label == "TB ngành" else "trung bình nhóm so sánh"
     avg_pe  = sum(v for _, v in pe_pairs)  / len(pe_pairs)  if pe_pairs  else None
     avg_roe = sum(v for _, v in roe_pairs) / len(roe_pairs) if roe_pairs else None
 
@@ -234,10 +242,18 @@ def _build_analysis(ticker: str, rows: list[dict]) -> str:
             f"| {_fmt(r['eps'], ',.0f')} |"
         )
     if avg_pe:
-        lines.append(f"| **TB ngành** | **{avg_pe:.1f}** | - | {_fmt(avg_roe, '.1f', '%') if avg_roe else '-'} | - |")
+        lines.append(f"| **{avg_label}** | **{avg_pe:.1f}** | - | {_fmt(avg_roe, '.1f', '%') if avg_roe else '-'} | - |")
     lines.append("Lưu ý: P/E, P/B quy về giá đóng cửa gần nhất; EPS là EPS năm tài chính gần nhất "
                  "đã điều chỉnh theo cổ tức cổ phiếu/tách cổ phiếu (P/E × EPS = giá hiện tại). "
                  "EV/EBITDA giữ nguyên theo báo cáo năm.")
+
+    suspects = [f"{r['ticker']} {r['pe']:.1f}" for r in rows
+                if not _na(r["pe"]) and (r["pe"] < _PE_SUSPECT_LOW or r["pe"] > _PE_SUSPECT_HIGH)]
+    if suspects:
+        lines.append(
+            f"Cảnh báo dữ liệu: P/E bất thường ({', '.join(suspects)}) — thường do EPS 12 tháng/điều chỉnh "
+            "cổ phiếu chưa khớp, nên đối chiếu thêm nguồn khác trước khi dùng để định giá."
+        )
 
     lines.append("")
     lines.append("### Phân tích thực tế đã tính sẵn (DÙNG NGUYÊN CÁC CON SỐ NÀY)")
@@ -279,11 +295,11 @@ def _build_analysis(ticker: str, rows: list[dict]) -> str:
     if not _na(target["pe"]) and avg_pe:
         premium = (target["pe"] - avg_pe) / avg_pe * 100
         if premium > 5:
-            pe_verdict = f"P/E {target['pe']:.1f}x PREMIUM +{premium:.0f}% so với trung bình ngành {avg_pe:.1f}x"
+            pe_verdict = f"P/E {target['pe']:.1f}x PREMIUM +{premium:.0f}% so với {avg_label_l} {avg_pe:.1f}x"
         elif premium < -5:
-            pe_verdict = f"P/E {target['pe']:.1f}x DISCOUNT {premium:.0f}% so với trung bình ngành {avg_pe:.1f}x"
+            pe_verdict = f"P/E {target['pe']:.1f}x DISCOUNT {premium:.0f}% so với {avg_label_l} {avg_pe:.1f}x"
         else:
-            pe_verdict = f"P/E {target['pe']:.1f}x NGANG BẰNG trung bình ngành {avg_pe:.1f}x"
+            pe_verdict = f"P/E {target['pe']:.1f}x NGANG BẰNG {avg_label_l} {avg_pe:.1f}x"
         lines.append(f"P/E: {pe_verdict}")
         rank_pe = _rank_text(target["pe"], pe_pairs, "P/E", higher_is_better=False, subject=ticker)
         if rank_pe:
@@ -293,11 +309,11 @@ def _build_analysis(ticker: str, rows: list[dict]) -> str:
     if not _na(target["roe_pct"]) and avg_roe:
         diff_roe = target["roe_pct"] - avg_roe
         if diff_roe > 1:
-            roe_verdict = f"ROE {target['roe_pct']:.1f}% CAO HƠN trung bình ngành {avg_roe:.1f}% (+{diff_roe:.1f}pp)"
+            roe_verdict = f"ROE {target['roe_pct']:.1f}% CAO HƠN {avg_label_l} {avg_roe:.1f}% (+{diff_roe:.1f}pp)"
         elif diff_roe < -1:
-            roe_verdict = f"ROE {target['roe_pct']:.1f}% THẤP HƠN trung bình ngành {avg_roe:.1f}% ({diff_roe:.1f}pp)"
+            roe_verdict = f"ROE {target['roe_pct']:.1f}% THẤP HƠN {avg_label_l} {avg_roe:.1f}% ({diff_roe:.1f}pp)"
         else:
-            roe_verdict = f"ROE {target['roe_pct']:.1f}% TƯƠNG ĐƯƠNG trung bình ngành {avg_roe:.1f}%"
+            roe_verdict = f"ROE {target['roe_pct']:.1f}% TƯƠNG ĐƯƠNG {avg_label_l} {avg_roe:.1f}%"
         lines.append(f"ROE: {roe_verdict}")
         rank_roe = _rank_text(target["roe_pct"], roe_pairs, "ROE", higher_is_better=True, subject=ticker)
         if rank_roe:
@@ -413,14 +429,14 @@ def gather_data(ticker: str | None, query: str, time_context: dict | None = None
     if tickers and len(tickers) >= 2:
         peers = list(dict.fromkeys(tickers))
         rows = [_fetch_valuation(t) for t in peers]
-        return f"[SO SÁNH {' & '.join(peers)}]\n{_build_analysis(ticker, rows)}"
+        return f"[SO SÁNH {' & '.join(peers)}]\n{_build_analysis(ticker, rows, 'TB nhóm so sánh')}"
 
     explicit_tickers = _extract_tickers_from_query(query)
     compare_tickers = [t for t in explicit_tickers if t != ticker]
     if compare_tickers:
         peers = list(dict.fromkeys([ticker] + compare_tickers))
         rows = [_fetch_valuation(t) for t in peers]
-        return f"[SO SÁNH {' & '.join(peers)}]\n{_build_analysis(ticker, rows)}"
+        return f"[SO SÁNH {' & '.join(peers)}]\n{_build_analysis(ticker, rows, 'TB nhóm so sánh')}"
 
     peers = get_sector_peers(ticker)
     rows = [_fetch_valuation(t) for t in peers]

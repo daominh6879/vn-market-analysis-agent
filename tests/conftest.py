@@ -21,3 +21,16 @@ def _clear_tool_cache():
     clear()
     yield
     clear()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_daily_snapshots(request, monkeypatch):
+    """Keep unit tests from writing mocked gold/FX values into the real daily_snapshots table.
+
+    Opt out with @pytest.mark.real_snapshots (tests that exercise data/snapshots.py itself).
+    """
+    if request.node.get_closest_marker("real_snapshots"):
+        return
+    import data.snapshots as snap
+    monkeypatch.setattr(snap, "save_snapshot", lambda *a, **k: False)
+    monkeypatch.setattr(snap, "previous_snapshot", lambda *a, **k: None)

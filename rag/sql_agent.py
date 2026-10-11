@@ -35,7 +35,7 @@ from llm.types import Message
 
 # ── allowed tables ────────────────────────────────────────────────────────────
 
-ALLOWED_TABLES: frozenset[str] = frozenset({"financial_facts", "stock_prices", "securities"})
+ALLOWED_TABLES: frozenset[str] = frozenset({"financial_facts", "stock_prices", "securities", "dividends"})
 
 # Statement type names that are always forbidden (covers all dialects).
 # Using name strings for robustness across sqlglot versions.
@@ -60,6 +60,8 @@ TABLE financial_facts
   metric_code  TEXT     -- actual codes in DB (use ILIKE or exact match):
                         --   Revenue:   'doanh_thu_thuan', 'doanh_thu_ban_hang_va_cung_cap_dich_vu'
                         --   Profit:    'lailo_thuan_sau_thue', 'loi_nhuan_truoc_thue', 'loi_nhuan_gop'
+                        --   Quarterly profit (period 'Qn/YYYY'): 'loi_nhuan_sau_thue',
+                        --              'loi_nhuan_sau_thue_cua_co_ong_cua_cong_ty_me' (attributable to parent)
                         --   Assets:    'tong_tai_san', 'tai_san_ngan_han', 'tai_san_dai_han'
                         --   Equity:    'von_chu_so_huu', 'von_gop'
                         --   Debt:      'no_phai_tra', 'vay_ngan_han', 'vay_dai_han'
@@ -87,9 +89,26 @@ TABLE securities
   index_member  TEXT[]   -- 'VN30' / 'VN100'
   is_active     BOOLEAN
 
+TABLE dividends  -- corporate dividend events (cash and stock), one row per event
+  ticker          TEXT
+  kind            TEXT     -- 'cash' or 'stock'
+  ex_date         DATE     -- ex-dividend date
+  record_date     DATE
+  payment_date    DATE
+  cash_per_share  NUMERIC  -- VND per share (kind='cash')
+  stock_ratio_pct NUMERIC  -- stock dividend ratio in % (kind='stock')
+  note            TEXT     -- e.g. 'Đợt 2 2025 - 1,850 VND'
+
 Period filter rules:
 - Annual data: WHERE period = '{_LATEST_YEAR}'
 - Quarterly: WHERE period LIKE 'Q%/{_LATEST_YEAR}' (e.g. 'Q3/{_LATEST_YEAR}')
+- Latest quarters of a ticker (no subquery needed; newest first):
+  SELECT period, metric_code, value FROM financial_facts
+  WHERE ticker = 'FPT' AND report_type = 'consolidated' AND period LIKE 'Q%'
+    AND metric_code IN ('doanh_thu_thuan', 'loi_nhuan_sau_thue')
+  ORDER BY RIGHT(period, 4) DESC, LEFT(period, 2) DESC LIMIT 8;
+- Dividends of a ticker: SELECT kind, ex_date, payment_date, cash_per_share, stock_ratio_pct, note
+  FROM dividends WHERE ticker = 'VNM' ORDER BY ex_date DESC LIMIT 10;
 - Any {_LATEST_YEAR} data: WHERE period = '{_LATEST_YEAR}' OR period LIKE '%/{_LATEST_YEAR}'
 
 Example — top 5 ROE cao nhất (một dòng mỗi ticker, period='{_LATEST_YEAR}'):
@@ -115,7 +134,7 @@ Rules:
 - Return ONLY the SQL query — no explanation, no markdown fences, no notes after the query.
 - End the query with a semicolon (;).
 - Do NOT include any DML (INSERT/UPDATE/DELETE) or DDL (CREATE/DROP/ALTER).
-- Use ONLY the three tables: financial_facts, stock_prices, securities. NO other tables or views.
+- Use ONLY the four tables: financial_facts, stock_prices, securities, dividends. NO other tables or views.
 - NEVER use: latest, latest_annual, company_metrics, financials, or any unlisted name.
 - When using ROUND with a decimal places argument, always cast to ::numeric first: ROUND(expr::numeric, 2).
 - Keep queries focused on the user's question."""

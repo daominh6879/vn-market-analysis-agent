@@ -5,7 +5,7 @@ Single-command daily refresh of P/E, P/B, ROE, EPS… for VN30+VN100 tickers.
 Mirrors the Dagster asset vnstock_ratios (pipeline/assets_vnstock.py).
 
 Usage:
-    python ingest/fetch_ratios.py                 # all ratio tickers (get_ratio_tickers)
+    python ingest/fetch_ratios.py                 # every active security (get_tickers)
     python ingest/fetch_ratios.py --tickers HPG,VCB
 """
 
@@ -131,27 +131,88 @@ def fetch_and_upsert(ticker: str) -> dict:
     return row
 
 
+# KBS ratio item_id → financial_facts.metric_code for the per-year history (ROE 2020 vs 2024, EPS 2023...).
+_HISTORY_METRICS = {
+    "roe": "ratio_roe_pct",
+    "roa": "ratio_roa_pct",
+    "trailing_eps": "ratio_eps",
+    "pe_ratio": "ratio_pe",
+    "pb_ratio": "ratio_pb",
+    "gross_margin": "ratio_gross_margin_pct",
+    "net_margin": "ratio_net_margin_pct",
+}
+
+
+def ratio_history_facts(ticker: str, df) -> list[dict]:
+    """KBS ratio frame (rows=item_id, cols=years) → financial_facts rows, one per (year, ratio).
+
+    Values are as published for that fiscal year (EPS is NOT adjusted for later splits/stock
+    dividends; P/E and P/B are at that year's closing price) — the stock_ratios snapshot is the
+    re-priced one.
+    """
+    import re
+    df = df.set_index("item_id").drop(columns=["item"], errors="ignore")
+    facts: list[dict] = []
+    for col in df.columns:
+        m = re.match(r"(\d{4})(?:-\S+)?$", str(col))   # KBS labels annual columns '2025-Năm'
+        if not m:
+            continue
+        year = m.group(1)
+        for item_id, metric in _HISTORY_METRICS.items():
+            if item_id not in df.index:
+                continue
+            v = _get(df[col], item_id)
+            if v is None:
+                continue
+            facts.append(dict(
+                ticker=ticker, period=year, report_type="consolidated", metric_code=metric,
+                value=v, unit="VND" if metric == "ratio_eps" else ("x" if metric in ("ratio_pe", "ratio_pb") else "%"),
+                source_file="vnstock_kbs_ratio", source_page=0, source="vnstock_ratio",
+            ))
+    return facts
+
+
+def fetch_and_upsert_history(ticker: str) -> int:
+    from vnstock.api.financial import Finance as VnFinance
+    from ingest.fetch_financials import insert_vnstock_facts
+
+    df = VnFinance(symbol=ticker, source="KBS").ratio(period="year", lang="en")
+    facts = ratio_history_facts(ticker, df)
+    return insert_vnstock_facts(facts) if facts else 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch KBS valuation ratios → stock_ratios")
     parser.add_argument("--tickers", default="",
-                        help="Comma-separated tickers; empty = get_ratio_tickers()")
+                        help="Comma-separated tickers; empty = every active security")
+    parser.add_argument("--history", action="store_true",
+                        help="Store every fiscal year's ROE/ROA/EPS/PE/PB/margins in financial_facts "
+                             "(metric_code ratio_*) instead of refreshing the stock_ratios snapshot")
     args = parser.parse_args()
 
-    from core.tickers import get_ratio_tickers
+    from core.tickers import get_tickers
     if args.tickers:
         tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
     else:
-        tickers = get_ratio_tickers()
+        tickers = get_tickers()
 
     if not tickers:
         print("No ratio tickers found.")
         sys.exit(1)
 
-    print(f"stock_ratios: {len(tickers)} tickers")
+    print(f"{'ratio history' if args.history else 'stock_ratios'}: {len(tickers)} tickers")
     upserted = 0
     failed = []
     for t in tickers:
         try:
+            if args.history:
+                n = fetch_and_upsert_history(t)
+                if n == 0:
+                    raise ValueError("no ratio history returned")
+                upserted += 1
+                print(f"  {t}: {n} yearly ratio facts")
+                time.sleep(3.2)
+                continue
             row = fetch_and_upsert(t)
             upserted += 1
             print(f"  {t}: pe={row['pe']} pb={row['pb']} roe={row['roe_pct']}%")

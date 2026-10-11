@@ -21,7 +21,8 @@ from llm.types import Message
 LABELS = ("diễn_giải", "số_liệu", "cả_hai", "ngoài_phạm_vi")
 
 _SYSTEM = """\
-You are a financial question router for an HPG (Hòa Phát) financial assistant.
+You are a financial question router for a Vietnamese listed-company financial assistant
+(any VN ticker; the DB covers many listed companies, the indexed documents cover the ingested reports).
 Classify the user's question into exactly one of these labels:
 
   diễn_giải   — qualitative/textual lookup FROM DOCUMENTS: auditor info, business
@@ -41,19 +42,22 @@ Classify the user's question into exactly one of these labels:
                   Vector search CANNOT answer these; they need SQL.
 
   cả_hai      — needs BOTH: a numerical result from DB AND explanatory text context
-                  (e.g. "tổng tài sản HPG 2025 là bao nhiêu và tăng trưởng này phản ánh
+                  (e.g. "tổng tài sản công ty X năm 2025 là bao nhiêu và tăng trưởng này phản ánh
                   chiến lược gì?" — number from DB + strategy explanation from document).
                   Also: stock price TREND + business result correlation → cả_hai.
 
   ngoài_phạm_vi — NOT in any data source (financial reports OR the database):
                   • Commodity/market prices (HRC, steel spot prices)
                   • Direct buy/sell advice with no screenable metric
-                    ("có nên mua HPG không?" — subjective, no DB criterion)
+                    ("có nên mua mã X không?" — subjective, no DB criterion)
                   • Manufacturing/operational details (production volume in tonnes,
                     furnace technology, steel plant operations) — these are NOT in
                     financial reports or financial_facts/stock_prices tables
-                  • Competitor data (other companies not in our DB)
-                  • Future projections/dividend policy not yet disclosed
+                  • Companies NOT listed on HOSE/HNX/UPCOM
+                  • Future projections not yet disclosed
+                  NOTE: other listed companies / competitors / peers ARE in the DB → số_liệu.
+                  Dividend history and corporate events (cổ tức, chia thưởng) are answered from
+                  structured data → số_liệu, NOT ngoài_phạm_vi.
 
   IMPORTANT — time phrases do NOT make a question out of scope:
     "trong thời gian này", "hiện tại", "gần đây", "thời điểm này" are all
@@ -71,7 +75,7 @@ Key distinctions:
   "cổ phiếu nào đáng chú ý?"        → screen financial_facts DB → số_liệu
   "production volume in tonnes?"     → NOT IN ANY DATA → ngoài_phạm_vi
   "furnace technology at Dung Quat?" → NOT IN ANY DATA → ngoài_phạm_vi
-  "có nên mua HPG không?"            → subjective advice → ngoài_phạm_vi
+  "có nên mua mã X không?"           → subjective advice → ngoài_phạm_vi
 
 Call the route_question tool with the correct label and a one-sentence reason."""
 

@@ -67,7 +67,7 @@ def generate_sub_queries(query: str, n: int = 4) -> list[str]:
 # minus conversation/market_brief (those never gather data through sub-tasks).
 _SUB_INTENTS = (
     "price_action", "technical_analysis", "rag_qa", "valuation", "macro_sector",
-    "news_sentiment", "investment_case", "screening", "breakout_scan",
+    "news_sentiment", "investment_case", "screening", "breakout_scan", "market_data",
 )
 
 

@@ -16,6 +16,8 @@ No LLM calls here — pure, unit-testable functions.
 
 from __future__ import annotations
 
+import re
+
 from dataclasses import dataclass, field
 
 # Follow-ups that name no financial action of their own → the turn inherits the prior
@@ -58,6 +60,19 @@ _INDEX_SUBJECTS = (
 )
 
 
+_SECTOR_ALIASES: tuple[tuple[str, str], ...] = (
+    ("bank", "ngan hang"), ("thep con", "thep"), ("bds", "bat dong san"),
+    ("bat dong san", "bat dong san"), ("dau khi", "dau khi"),
+    ("oil", "dau khi"), ("steel", "thep"), ("real estate", "bat dong san"), ("securities", "chung khoan"),
+)
+
+
+def _strip_accents(text: str) -> str:
+    import unicodedata
+    t = unicodedata.normalize("NFD", (text or "").lower().replace("đ", "d"))
+    return "".join(c for c in t if unicodedata.category(c) != "Mn")
+
+
 def extract_focus_sector(query: str) -> str:
     """Deterministic sector/index subject for macro_sector / market_brief queries.
 
@@ -73,8 +88,19 @@ def extract_focus_sector(query: str) -> str:
         if kw in q:
             return label
     from core.tickers import _load_sector_labels
-    for label in _load_sector_labels():
+    labels = _load_sector_labels()
+    for label in labels:
         if label in q:
+            return label
+    # Slang / unaccented fallback: "bank", "thép con", "bds", "ngan hang" -> a known label.
+    q_plain = _strip_accents(q)
+    for alias, target in _SECTOR_ALIASES:
+        if re.search(rf"(?<!\w){re.escape(alias)}(?!\w)", q_plain):
+            for label in labels:
+                if target in _strip_accents(label):
+                    return label
+    for label in sorted(labels, key=len, reverse=True):
+        if _strip_accents(label) in q_plain:
             return label
     return ""
 

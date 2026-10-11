@@ -337,6 +337,7 @@ def get_fx_rates() -> ToolResult:
     Returns buy, sell, transfer, and central_rate (None if SBV unavailable).
     """
     try:
+        from datetime import datetime
         from data.fx_scraper import fetch_vcb_usdvnd, fetch_sbv_central_rate
         data = fetch_vcb_usdvnd()
         if data is None:
@@ -348,11 +349,22 @@ def get_fx_rates() -> ToolResult:
 
         lines = []
         if central:
-            lines.append(f"Tỷ giá trung tâm (SBV): {central:,.0f} VND/USD")
+            from data import fx_scraper
+            d = fx_scraper.LAST_CENTRAL_RATE_DATE
+            lines.append(f"Tỷ giá trung tâm (NHNN{f', ngày {d:%d/%m/%Y}' if d else ''}): {central:,.0f} VND/USD")
         lines.append(
-            f"Vietcombank — mua: {data['buy']:,.0f} | bán: {data['sell']:,.0f} | "
-            f"CK: {data['transfer']:,.0f} VND"
+            f"Vietcombank (lấy lúc {datetime.now():%H:%M %d/%m/%Y}) — mua: {data['buy']:,.0f} | "
+            f"bán: {data['sell']:,.0f} | CK: {data['transfer']:,.0f} VND"
         )
+        # Day-over-day from our own daily snapshots (written through here so history builds up).
+        from data.snapshots import change_note, save_snapshot
+        if central:
+            lines.append("Tỷ giá trung tâm " + change_note("sbv_central_rate", value=central, unit="VND/USD", decimals=0))
+            save_snapshot("sbv_central_rate", value=central, unit="VND/USD", source="sbv")
+        else:
+            lines.append("Tỷ giá trung tâm NHNN: chưa lấy được từ nguồn nào (sbv.gov.vn chặn truy cập tự động).")
+        lines.append("Vietcombank " + change_note("vcb_usd", buy=data["buy"], sell=data["sell"], unit="VND/USD", decimals=0))
+        save_snapshot("vcb_usd", buy=data["buy"], sell=data["sell"], unit="VND/USD", source="vietcombank")
         msg = "\n".join(lines)
         return ToolResult(status="ok", data=data, message=msg)
     except Exception as e:
@@ -397,6 +409,13 @@ def get_vn_gold() -> ToolResult:
             f"Vàng SJC: mua {sjc['buy_vnd']:.1f} – bán {sjc['sell_vnd']:.1f} triệu đồng/lượng"
             f"{premium_note}"
         )
+        # The yfinance fallback is a world-price estimate, not an SJC quote — don't snapshot or diff it.
+        if not str(sjc.get("source", "")).startswith("world_estimate"):
+            from data.snapshots import change_note, save_snapshot
+            msg += "\n" + change_note("sjc_gold", buy=sjc["buy_vnd"], sell=sjc["sell_vnd"],
+                                      unit="triệu đồng/lượng", decimals=2)
+            save_snapshot("sjc_gold", buy=sjc["buy_vnd"], sell=sjc["sell_vnd"],
+                          unit="triệu đồng/lượng", source=sjc["source"])
         return ToolResult(status="ok", data=sjc, message=msg)
 
     except Exception as e:

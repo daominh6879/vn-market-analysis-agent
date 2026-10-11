@@ -226,6 +226,9 @@ _FACTS_METRICS: dict[str, tuple[str, ...]] = {
     "profit": ("lai_lo_thuan_sau_thue", "loi_nhuan_sau_thue"),
 }
 
+# Market capitalisation (tỷ VND) = securities.listed_shares × latest ohlcv_daily close.
+_MARKET_CAP_INDICATOR = "market_cap"
+
 _RSI_FILTER_RE = re.compile(
     r"rsi\s*(?P<op>dưới|trên|nhỏ hơn|lớn hơn|thấp hơn|cao hơn|<=|>=|<|>|=)?\s*(?P<n>\d{1,3})",
     re.IGNORECASE,
@@ -416,14 +419,55 @@ def _screen_fundamental(tickers: list[str], filters: list[dict]) -> list[tuple[s
     return out
 
 
+_MIN_AVG_VOLUME = 10_000     # volume-ratio screens ignore illiquid prints (avg 20-session volume)
+_FALLBACK_MAX_TICKERS = 60   # per-ticker live fallback only — DB bulk path scans every ticker
+
+
+def _load_ohlcv_bulk(tickers: list[str], end_date: str | None, calendar_days: int = 420) -> dict[str, pd.DataFrame]:
+    """One query for every ticker's recent OHLCV (ohlcv_daily). {} when the DB is unavailable.
+
+    Replaces the old per-ticker loop that was capped at `tickers[:20]` — alphabetical order,
+    so every market-wide technical screen silently scanned only the A* tickers.
+    """
+    from datetime import date, timedelta
+    try:
+        end = date.fromisoformat(end_date[:10]) if end_date else date.today()
+        start = end - timedelta(days=calendar_days)
+        from core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT ticker, date, open, high, low, close, volume FROM ohlcv_daily "
+                    "WHERE ticker = ANY(%s) AND date <= %s AND date >= %s ORDER BY ticker, date",
+                    (list(tickers), end, start),
+                )
+                rows = cur.fetchall()
+    except Exception:
+        return {}
+    if not rows:
+        return {}
+    df = pd.DataFrame(rows, columns=["ticker", "date", "open", "high", "low", "close", "volume"])
+    for c in ("open", "high", "low", "close", "volume"):
+        df[c] = df[c].astype(float)
+    return {t: g.drop(columns=["ticker"]).reset_index(drop=True) for t, g in df.groupby("ticker")}
+
+
 def _screen_technical(tickers: list[str], filters: list[dict], end_date: str | None) -> list[tuple[str, dict]]:
-    from tools.price import get_historical_ohlcv
+    """Scan every ticker's technicals from ohlcv_daily in one DB round-trip."""
+    frames = _load_ohlcv_bulk(tickers, end_date)
+    if not frames:
+        # DB unavailable/empty → live per-ticker fallback (slow, so bounded).
+        from tools.price import get_historical_ohlcv
+        for t in tickers[:_FALLBACK_MAX_TICKERS]:
+            r = get_historical_ohlcv(t, days=300, end_date=end_date)
+            if r.status == "ok" and r.data is not None:
+                frames[t] = r.data
+    wants_volume = any(f["indicator"] == "volume" for f in filters)
     out: list[tuple[str, dict]] = []
-    for t in tickers[:20]:
-        r = get_historical_ohlcv(t, days=300, end_date=end_date)
-        if r.status != "ok" or r.data is None:
+    for t, df in frames.items():
+        if wants_volume and (len(df) < 21 or float(df["volume"].iloc[-21:-1].mean()) < _MIN_AVG_VOLUME):
             continue
-        values = {f["indicator"]: _TECHNICAL_FNS[f["indicator"]](r.data) for f in filters}
+        values = {f["indicator"]: _TECHNICAL_FNS[f["indicator"]](df) for f in filters}
         if _matches_all(values, filters):
             out.append((t, values))
     return out
@@ -459,6 +503,58 @@ def _screen_financial_facts(tickers: list[str], filters: list[dict], as_of_date:
     return out
 
 
+def _screen_market_cap(tickers: list[str], filters: list[dict]) -> list[tuple[str, dict]]:
+    """Filter by market cap (tỷ VND) from listed_shares × latest close. [] when shares are not loaded."""
+    from core.db import get_conn
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT s.ticker, ROUND((s.listed_shares * c.close * 1000 / 1e9)::numeric, 1) "
+                    "FROM securities s "
+                    "JOIN LATERAL (SELECT close FROM ohlcv_daily WHERE ticker = s.ticker "
+                    "              ORDER BY date DESC LIMIT 1) c ON TRUE "
+                    "WHERE s.ticker = ANY(%s) AND s.listed_shares > 0",
+                    (list(tickers),),
+                )
+                rows = cur.fetchall()
+    except Exception:
+        return []
+    out: list[tuple[str, dict]] = []
+    for ticker, mcap in rows:
+        values = {f["indicator"]: _to_float(mcap) for f in filters}
+        if _matches_all(values, filters):
+            out.append((ticker, values))
+    return out
+
+
+def _latest_session_note(end_date) -> str:
+    """"Dữ liệu tính đến phiên YYYY-MM-DD" from the newest ohlcv_daily row (<= end_date)."""
+    try:
+        from core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                if end_date:
+                    cur.execute("SELECT MAX(date) FROM ohlcv_daily WHERE date <= %s", (end_date,))
+                else:
+                    cur.execute("SELECT MAX(date) FROM ohlcv_daily")
+                row = cur.fetchone()
+        return f"\nDữ liệu kỹ thuật tính đến phiên {row[0]}." if row and row[0] else ""
+    except Exception:
+        return ""
+
+
+_VOLUME_SPIKE_DEFAULT = 1.5  # same "đột biến" threshold as price_action._volume_vs_ma
+
+
+def _format_value(indicator: str, v: float) -> str:
+    if indicator == "volume":
+        return f"khối lượng = {v:.2f} lần TB20 phiên"
+    if indicator == _MARKET_CAP_INDICATOR:
+        return f"vốn hóa = {v:,.0f} tỷ VND"
+    return f"{indicator}={v:.2f}"
+
+
 def gather_data(ticker: str | None, query: str, time_context: dict | None = None,
                 screening=None) -> str:
     """Execute screening and return raw rows — no LLM narration.
@@ -476,6 +572,10 @@ def gather_data(ticker: str | None, query: str, time_context: dict | None = None
     filters = _normalize_filters(screening)
     if not filters:
         filters = _parse_filters(query)
+    if not filters:
+        from agents.intent_rules import is_volume_spike_query
+        if is_volume_spike_query(query):
+            filters = [{"indicator": "volume", "op": ">", "threshold": _VOLUME_SPIKE_DEFAULT}]
 
     if filters:
         label = extract_focus_sector(query)
@@ -486,18 +586,21 @@ def gather_data(ticker: str | None, query: str, time_context: dict | None = None
 
         fund_filters = [f for f in filters if f["indicator"] in _FUNDAMENTAL_COLS]
         facts_filters = [f for f in filters if f["indicator"] in _FACTS_METRICS]
+        mcap_filters = [f for f in filters if f["indicator"] == _MARKET_CAP_INDICATOR]
         tech_filters = [f for f in filters if f["indicator"] in _TECHNICAL_FNS]
         unknown = [f for f in filters
                    if f["indicator"] not in _FUNDAMENTAL_COLS
                    and f["indicator"] not in _FACTS_METRICS
+                   and f["indicator"] != _MARKET_CAP_INDICATOR
                    and f["indicator"] not in _TECHNICAL_FNS]
 
         fund_hits = _screen_fundamental(tickers, fund_filters) if fund_filters else None
         facts_hits = _screen_financial_facts(tickers, facts_filters, end) if facts_filters else None
+        mcap_hits = _screen_market_cap(tickers, mcap_filters) if mcap_filters else None
         tech_hits = _screen_technical(tickers, tech_filters, end) if tech_filters else None
 
         # Intersect surviving tickers across sources (each source AND-ed internally).
-        hit_sets = [h for h in (fund_hits, facts_hits, tech_hits) if h is not None]
+        hit_sets = [h for h in (fund_hits, facts_hits, mcap_hits, tech_hits) if h is not None]
         if not hit_sets:
             hits = []
         else:
@@ -509,7 +612,13 @@ def gather_data(ticker: str | None, query: str, time_context: dict | None = None
                 for t, vals in h:
                     if t in common:
                         merged.setdefault(t, {}).update(vals)
-            hits = sorted(((t, merged[t]) for t in common if t in merged), key=lambda x: x[0])
+            hits = [(t, merged[t]) for t in common if t in merged]
+            # Rank by the first filter (low-first for "<", high-first for ">") - NOT by ticker
+            # name, which made every market-wide result an alphabetical A* list.
+            lead = filters[0]
+            sign = 1 if lead["op"] in ("<", "<=") else -1
+            hits.sort(key=lambda x: (x[1].get(lead["indicator"]) is None,
+                                     sign * (x[1].get(lead["indicator"]) or 0), x[0]))
 
         cond = " AND ".join(f"{f['indicator']} {f['op']} {f['threshold']}" for f in filters)
         if unknown:
@@ -518,10 +627,13 @@ def gather_data(ticker: str | None, query: str, time_context: dict | None = None
             return f"[SCREENING]\nKhông có mã nào trong {scope} thỏa {cond}."
 
         lines = []
-        for t, vals in hits[:20]:
-            detail = ", ".join(f"{k}={v:.2f}" for k, v in vals.items() if v is not None)
-            lines.append(f"- {t}: {detail}")
-        return f"[SCREENING]\nLọc {scope} ({cond}):\n" + "\n".join(lines)
+        for i, (t, vals) in enumerate(hits[:20], 1):
+            detail = ", ".join(_format_value(k, v) for k, v in vals.items() if v is not None)
+            lines.append(f"{i}. {t}: {detail}")
+        shown = f", hiển thị {min(20, len(hits))} mã đầu theo thứ tự xếp hạng" if len(hits) > 20 else ""
+        as_of = _latest_session_note(end) if tech_filters else ""
+        return (f"[SCREENING]\nLọc {scope} ({cond}) — {len(hits)} mã thỏa{shown}:\n"
+                + "\n".join(lines) + as_of)
 
     # No structured/regex filter → legacy top-N SQL templates.
     sql = _pick_template(query, as_of_date=end)
@@ -534,7 +646,11 @@ def gather_data(ticker: str | None, query: str, time_context: dict | None = None
             return "[SCREENING]\nKhông có dữ liệu trong database cho tiêu chí này."
         except Exception as exc:
             return f"[SCREENING]\nLỗi SQL: {exc}"
-    return "[SCREENING]\nKhông có template SQL phù hợp cho câu hỏi này."
+    return (
+        "[SCREENING]\nChưa hỗ trợ tiêu chí lọc/xếp hạng này. Đang hỗ trợ: P/E, P/B, ROE, ROA, EPS, EV/EBITDA, "
+        "D/E, biên lợi nhuận, tăng trưởng, doanh thu, lợi nhuận, vốn hóa, RSI, MACD, ADX, khối lượng đột biến, "
+        "giá so với MA20/50/200, khoảng cách tới đỉnh/đáy 52 tuần."
+    )
 
 
 @observe(name="intent.screening")

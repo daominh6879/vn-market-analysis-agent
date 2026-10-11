@@ -83,7 +83,7 @@ _COMPLEX_INTENTS = frozenset({"market_brief", "investment_case", "macro_sector"}
 # they also can't take the ticker-gated "simple" branch above. Route them to the fast
 # path with an empty ticker — their gather_data resolves the subject from the query
 # itself (screening resolves its sector; breakout_scan scans sector or full market).
-_SECTOR_LEAF_INTENTS = frozenset({"screening", "breakout_scan"})
+_SECTOR_LEAF_INTENTS = frozenset({"screening", "breakout_scan", "market_data"})
 
 def _looks_like_screening(query: str) -> bool:
     """Alias of agents.classifier.is_screening_query (graph guard + tests)."""
@@ -144,6 +144,17 @@ def classify_node(state: AgentState) -> dict:
         result.intent = "screening"
         result.reason = f"{result.reason} [screening:lọc]"
 
+    # Deterministic rule layer (market-wide asks, indicator asks, dividends ...) — same
+    # overrides the conversation router applies, so direct graph invocations agree.
+    from agents.intent_rules import override_intent
+    q_tickers = state.get("tickers") or extract_tickers(q)
+    new_intent, new_screening, rule_reason = override_intent(q, result.intent, q_tickers, screening_filter)
+    if rule_reason and new_intent != result.intent:
+        result.intent = new_intent
+        result.reason = f"{result.reason} [{rule_reason}]"
+    if new_screening:
+        screening_filter = new_screening
+
     try:
         from langfuse import get_client, observe  # noqa: F401
         get_client().update_current_trace(
@@ -185,7 +196,10 @@ def node_out_of_scope(state: AgentState) -> dict:
         get_tracer().event("gate", {"node": "out_of_scope"})
     except Exception:
         pass
-    return {"report": OUT_OF_SCOPE_REPLY, "intent": "out_of_scope"}
+    from agents.guardrails import is_off_topic, off_topic_reply
+    q = state.get("original_query") or state.get("query", "")
+    reply = off_topic_reply(q) if is_off_topic(q) else OUT_OF_SCOPE_REPLY
+    return {"report": reply, "intent": "out_of_scope"}
 
 
 # ── Node 0a: clarify_node ─────────────────────────────────────────────────────
@@ -355,7 +369,7 @@ def _get_gather_map() -> dict:
     if not _GATHER_MAP:
         from agents.intents import (
             price_action, technical, news_sentiment, fundamentals,
-            macro_sector, investment_case, screening, breakout,
+            macro_sector, investment_case, screening, breakout, market_data, rag_extras,
         )
         from rag import qa as _qa
 
@@ -366,9 +380,12 @@ def _get_gather_map() -> dict:
             "macro_sector":       lambda t, q, tc=None: macro_sector.gather_data(t, q, tc),
             "investment_case":    lambda t, q, tc=None: investment_case.gather_data(t, q, tc),
             "screening":          lambda t, q, tc=None, sf=None: screening.gather_data(t, q, tc, screening=sf),
-            "rag_qa":             lambda t, q, tc=None: _qa.retrieve_only(q, ticker=t),
+            "rag_qa":             lambda t, q, tc=None: "\n\n".join(
+                p for p in (rag_extras.gather_extras(t, q), _qa.retrieve_only(q, ticker=t)) if p
+            ),
             "valuation":          lambda t, q, tc=None, tickers=None: fundamentals.gather_data(t, q, tc, tickers=tickers),
             "breakout_scan":      lambda t, q, tc=None: breakout.gather_data(t, q, tc),
+            "market_data":        lambda t, q, tc=None: market_data.gather_data(t, q, tc),
             "market_brief":       lambda t, q, tc=None: "[market_brief: xem riêng]",
         })
     return _GATHER_MAP
@@ -571,7 +588,13 @@ def synthesize_final(state: AgentState) -> dict:
     # Answer the user's verbatim question, not the router's rewritten "self-contained"
     # query — otherwise a simple "giá cổ phiếu X?" echoes as "cho tôi phân tích tổng hợp...".
     query = state.get("original_query") or state.get("query", "")
-    context = _strip_subresult_labels(sub_results)
+    from agents.guardrails import (
+        detect_language, disclaimer_for, prompt_rules_for, risk_flags, scrub_internal,
+    )
+    # Internal table names / SQL markers in the gathered data must never be echoed to the user.
+    context = scrub_internal(_strip_subresult_labels(sub_results))
+    lang = detect_language(query)
+    flags = risk_flags(query)
 
     # Date-aware synthesis: anchor the report to the resolved time window.
     tc = state.get("time_context") or {}
@@ -598,6 +621,9 @@ def synthesize_final(state: AgentState) -> dict:
         )
 
     strict_note = " TUYỆT ĐỐI không đưa khuyến nghị mua/bán/nắm giữ." if strict else ""
+    risk_rules = prompt_rules_for(flags - {"advice"} if strict else flags, lang)
+    if risk_rules:
+        strict_note += " " + risk_rules
     # Block-count-aware synthesis rule: the old fixed prompt forced "synthesize ALL
     # blocks, miss none" even when the context held a single block, so the model added
     # an empty "tổng hợp các khối khác" section plus a redundant "kết luận". Scope the
@@ -621,7 +647,17 @@ def synthesize_final(state: AgentState) -> dict:
         + block_rule
         + "KHÔNG thêm mục 'Tổng hợp các khối khác', 'Kết luận', 'Lưu ý', "
         "hay chú thích rằng ngữ cảnh thiếu/đủ dữ liệu. "
-        "KHÔNG nhắc lại các nhãn nội bộ trong ngoặc vuông."
+        "KHÔNG nhắc lại các nhãn nội bộ trong ngoặc vuông. "
+        "CHỈ trả lời đúng câu hỏi hiện tại; bỏ qua mọi mã/chủ đề khác xuất hiện trong ngữ cảnh mà câu hỏi không nhắc tới, "
+        "không nhắc lại câu hỏi hay câu trả lời của lượt trước. "
+        "KHÔNG nhắc tên bảng/cột/cơ sở dữ liệu nội bộ (financial_facts, stock_prices, template SQL...); "
+        "nếu thiếu dữ liệu, nói rõ đang thiếu loại dữ liệu nào bằng ngôn ngữ thường và nêu phần dữ liệu CÓ sẵn gần nhất. "
+        "Nêu NGÀY của dữ liệu/phiên giao dịch và nguồn nếu ngữ cảnh có. "
+        "Định dạng số thống nhất: dấu phẩy ngăn cách hàng nghìn, dấu chấm cho phần thập phân (20,100 VND; 15.9x; 2.35%). "
+        "Khi so sánh hai số bằng chữ 'cao hơn/thấp hơn', đối chiếu lại số thực tế trước khi viết. "
+        "Chỉ dùng cụm 'trung bình ngành' khi ngữ cảnh ghi rõ là trung bình ngành; "
+        "nếu là trung bình của các mã được so sánh thì gọi là 'trung bình nhóm so sánh'. "
+        "Với câu hỏi xếp hạng/liệt kê: trình bày bảng đầy đủ các dòng có trong ngữ cảnh, không tự cắt bớt."
         + strict_note
     )
     critique_feedback = state.get("critique_feedback", "")
@@ -658,6 +694,19 @@ def synthesize_final(state: AgentState) -> dict:
     if not streamed:
         resp = client.generate(messages, max_tokens=4000, system=system_prompt)
         report = resp.text.strip()
+
+    # Fixed risk text is appended in Python (never left to the LLM). Streamed turns emit it
+    # as one more delta so the client sees exactly what is saved.
+    disclaimer = disclaimer_for(flags, lang)
+    if disclaimer and disclaimer[:20] not in report:
+        suffix = "\n\n" + disclaimer
+        report += suffix
+        if streamed:
+            try:
+                from tracing import emit_llm_delta
+                emit_llm_delta(suffix)
+            except Exception:
+                pass
 
     elapsed = time.perf_counter() - t0
 

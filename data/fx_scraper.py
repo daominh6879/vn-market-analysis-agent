@@ -101,31 +101,74 @@ def fetch_sbv_central_rate() -> Optional[float]:
     except Exception as e:
         sys.stderr.write(f"[fx_scraper] fetch_sbv_central_rate VCB source failed: {e}\n")
 
-    # --- Source 2: SBV website HTML ---
+    # --- Source 2: sbv.gov.vn homepage chart (dated series: tyGiaLabels / tyGiaValues) ---
+    rate = _fetch_sbv_homepage_chart()
+    if rate is not None:
+        return rate
+
+    # --- Source 3: tygiausd.org republishes the SBV rate with its date (sbv.gov.vn blocks bots) ---
+    return _fetch_central_rate_mirror()
+
+
+LAST_CENTRAL_RATE_DATE: Optional["date"] = None   # date of the rate last returned by fetch_sbv_central_rate
+
+
+def _fetch_sbv_homepage_chart(max_age_days: int = 4) -> Optional[float]:
+    """Latest point of the central-rate chart on www.sbv.gov.vn; None when missing or stale."""
+    global LAST_CENTRAL_RATE_DATE
+    import re
+    from datetime import date, datetime
     try:
         import httpx
-        resp = httpx.get(
-            "https://www.sbv.gov.vn/webcenter/portal/vi/menu/fm/tghh",
-            timeout=10,
-            headers={"User-Agent": "Mozilla/5.0"},
-            follow_redirects=True,
-        )
-        text = resp.text
-        # Find USD section then extract the first 5-digit rate number
-        usd_idx = text.find("USD")
-        if usd_idx == -1:
-            usd_idx = text.find("Đô la Mỹ")
-        if usd_idx != -1:
-            snippet = text[usd_idx: usd_idx + 600]
-            matches = re.findall(r"\b(2[4-6]\s*[.,]\s*\d{3}(?:[.,]\d{1,2})?)\b", snippet)
-            for m in matches:
-                cleaned = re.sub(r"[\s.,]", "", m)
-                if len(cleaned) == 5 and cleaned.isdigit():
-                    return float(cleaned)
+        resp = httpx.get("https://www.sbv.gov.vn/", timeout=15, follow_redirects=True,
+                         headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120"})
+        resp.raise_for_status()
+        html = resp.text
+        v = re.search(r"tyGiaValues\s*=\s*\[([^\]]*)\]", html)
+        # labels are the dd-mm-yyyy array declared just before tyGiaValues
+        labels = re.findall(r'"(\d{2}-\d{2}-\d{4})"', html[: v.start()]) if v else []
+        values = re.findall(r"\d{5}(?:\.\d+)?", v.group(1)) if v else []
+        if not values or len(labels) < len(values):
+            sys.stderr.write("[fx_scraper] SBV homepage chart: labels/values missing or misaligned\n")
+            return None
+        labels = labels[-len(values):]
+        published = datetime.strptime(labels[-1], "%d-%m-%Y").date()
+        if (date.today() - published).days > max_age_days:
+            sys.stderr.write(f"[fx_scraper] SBV homepage rate is stale ({published}); ignored\n")
+            return None
+        LAST_CENTRAL_RATE_DATE = published
+        return float(values[-1])
     except Exception as e:
-        sys.stderr.write(f"[fx_scraper] fetch_sbv_central_rate SBV source failed: {e}\n")
+        sys.stderr.write(f"[fx_scraper] SBV homepage chart failed: {e}\n")
+        return None
 
-    return None
+
+def _fetch_central_rate_mirror(max_age_days: int = 4) -> Optional[float]:
+    """SBV central rate from a dated mirror page; None when the printed date is stale.
+
+    A stale rate must never be presented as today's, so the page date is checked against today.
+    """
+    import re
+    from datetime import date
+    try:
+        import httpx
+        resp = httpx.get("https://tygiausd.org/", timeout=10, headers={"User-Agent": "Mozilla/5.0"},
+                         follow_redirects=True)
+        resp.raise_for_status()
+        text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", resp.text))
+        m = re.search(r"Tỷ giá trung tâm\s+(\d{2})/(\d{2})/(\d{4})\s+1 Đô la Mỹ\s*=\s*(\d{2})[.,](\d{3})", text)
+        if not m:
+            return None
+        published = date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        if (date.today() - published).days > max_age_days:
+            sys.stderr.write(f"[fx_scraper] central-rate mirror is stale ({published}); ignored\n")
+            return None
+        global LAST_CENTRAL_RATE_DATE
+        LAST_CENTRAL_RATE_DATE = published
+        return float(m.group(4) + m.group(5))
+    except Exception as e:
+        sys.stderr.write(f"[fx_scraper] central-rate mirror failed: {e}\n")
+        return None
 
 
 def midpoint_rate(data: dict) -> float:

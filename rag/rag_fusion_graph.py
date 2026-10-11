@@ -167,7 +167,7 @@ def make_multi_retrieve_node(
 ):
     def multi_retrieve_node(state: FusionState) -> FusionState:
         sub_queries = state.get("sub_queries", [state["query"]])
-        ticker = state.get("ticker", "HPG")
+        ticker = state.get("ticker")
 
         t0 = time.perf_counter()
 
@@ -202,7 +202,7 @@ def make_multi_retrieve_node(
 
         # Postgres structured data
         postgres_chunks: list[str] = []
-        pg_facts = query_postgres_facts(ticker, limit=30)
+        pg_facts = query_postgres_facts(ticker, limit=30) if ticker else []
         if pg_facts:
             pg_text = format_postgres_facts_as_text(pg_facts, ticker)
             postgres_chunks = [pg_text]
@@ -378,7 +378,7 @@ def run_rag_fusion(
     collection: str,
     embed_model: str,
     bm25_retriever,
-    ticker: str = "HPG",
+    ticker: str | None = None,
     n_sub_queries: int = 4,
     candidate_k: int = 10,
     top_k: int = 5,

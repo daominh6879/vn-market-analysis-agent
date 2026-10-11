@@ -93,11 +93,24 @@ _ITEM_ID_MAP: dict[str, str] = {
 
 # ── KBS parser (rows=indicators, cols=periods) ─────────────────────────────────
 
+_QUARTER_COL_RE = re.compile(r"^(\d{4})-Q([1-4])$")
+
+
+def _period_label(col: str, quarterly: bool) -> str | None:
+    """KBS column → financial_facts.period: '2024' (annual) or 'Q3/2024' (quarterly)."""
+    m = _QUARTER_COL_RE.match(col)
+    if quarterly:
+        return f"Q{m.group(2)}/{m.group(1)}" if m else None
+    return None if m else col[:4]
+
+
 def _facts_from_kbs(
-    df, ticker: str, report_type: str, vnstock_report: str, period_from: int, period_to: int
+    df, ticker: str, report_type: str, vnstock_report: str, period_from: int, period_to: int,
+    quarterly: bool = False,
 ) -> list[dict]:
-    # KBS: period columns are year strings like '2024', '2023'
-    periods = [c for c in _period_cols(df) if period_from <= int(c[:4]) <= period_to]
+    # KBS: period columns are year strings ('2024') or quarter labels ('2024-Q3')
+    periods = [c for c in _period_cols(df)
+               if period_from <= int(c[:4]) <= period_to and _period_label(c, quarterly)]
     if not periods:
         raise ValueError(
             f"No period column in range {period_from}–{period_to}. "
@@ -138,7 +151,8 @@ def _facts_from_kbs(
                 continue
             if fval == 0 or fval != fval:  # skip 0 and NaN
                 continue
-            facts.append(_make_fact(ticker, col[:4], report_type, metric_code, fval, vnstock_report))
+            facts.append(_make_fact(ticker, _period_label(col, quarterly), report_type,
+                                    metric_code, fval, vnstock_report))
     return facts
 
 
@@ -229,10 +243,13 @@ def _make_fact(ticker, period, report_type, metric_code, value, vnstock_report) 
     )
 
 
-def _parse_df(df, ticker, report_type, vnstock_report, period_from, period_to) -> list[dict]:
+def _parse_df(df, ticker, report_type, vnstock_report, period_from, period_to,
+              quarterly: bool = False) -> list[dict]:
     """Auto-detect KBS (period cols) vs VCI (period rows) format."""
     if _period_cols(df):
-        return _facts_from_kbs(df, ticker, report_type, vnstock_report, period_from, period_to)
+        return _facts_from_kbs(df, ticker, report_type, vnstock_report, period_from, period_to, quarterly)
+    if quarterly:
+        raise ValueError("Quarterly statements are only parsed for the KBS layout (use --source KBS)")
     return _facts_from_vci(df, ticker, report_type, vnstock_report, period_from, period_to)
 
 
@@ -253,6 +270,7 @@ def fetch_finance_facts(
     period_to: int,
     source: str = "VCI",
     show_schema: bool = False,
+    quarterly: bool = False,
 ) -> list[dict]:
     # Uses vnstock SDK — source must be "VCI" or "KBS"
     try:
@@ -271,7 +289,11 @@ def fetch_finance_facts(
             _time.sleep(1.1)  # stay under 60 req/min community limit
         print(f"  Fetching {label} (source={source})...")
         try:
-            df = getattr(f, method_name)(period="year")
+            try:
+                df = getattr(f, method_name)(period="quarter" if quarterly else "year")
+            except Exception:   # transient read timeout (iq.vietcap.com.vn): one retry before giving up
+                _time.sleep(5)
+                df = getattr(f, method_name)(period="quarter" if quarterly else "year")
         except Exception as exc:
             print(f"  [WARN] {label} failed: {exc}")
             continue
@@ -288,7 +310,7 @@ def fetch_finance_facts(
             continue
 
         try:
-            facts = _parse_df(df, ticker, report_type, method_name, period_from, period_to)
+            facts = _parse_df(df, ticker, report_type, method_name, period_from, period_to, quarterly)
             print(f"  → {len(facts)} facts")
             all_facts.extend(facts)
         except Exception as exc:
@@ -324,26 +346,48 @@ def insert_vnstock_facts(facts: list[dict]) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch financial statements from vnstock Finance API → Postgres")
-    parser.add_argument("--ticker",       default="HPG")
+    parser.add_argument("--ticker",       default="HPG",
+                        help="One ticker, a comma-separated list, or 'all' (every active security)")
     parser.add_argument("--period-from",  dest="period_from", type=int, default=2020)
     parser.add_argument("--period-to",    dest="period_to",   type=int, default=2024)
     parser.add_argument("--report-type",  dest="report_type", default="consolidated",
                         choices=["standalone", "consolidated"])
     parser.add_argument("--source",       default="VCI", choices=["VCI", "KBS"])
+    parser.add_argument("--quarterly",    action="store_true",
+                        help="Fetch quarterly statements (period 'Q3/2024'); requires --source KBS")
     parser.add_argument("--dry-run",      action="store_true", help="Print only, no insert")
     parser.add_argument("--show-schema",  action="store_true", help="Print DataFrame schema and exit")
     args = parser.parse_args()
 
-    print(f"Fetching {args.ticker} ({args.period_from}–{args.period_to}, {args.source}, {args.report_type})...")
+    if args.ticker.strip().lower() == "all":
+        from core.tickers import get_tickers
+        tickers = get_tickers()
+    else:
+        tickers = [t.strip().upper() for t in args.ticker.split(",") if t.strip()]
 
-    facts = fetch_finance_facts(
-        ticker=args.ticker,
-        report_type=args.report_type,
-        period_from=args.period_from,
-        period_to=args.period_to,
-        source=args.source,
-        show_schema=args.show_schema,
-    )
+    facts: list[dict] = []
+    inserted = 0
+    for i, ticker in enumerate(tickers):
+        if i > 0:
+            import time as _t
+            _t.sleep(1.5)  # between tickers; fetch_finance_facts already paces its 3 requests
+        print(f"Fetching {ticker} ({args.period_from}–{args.period_to}, {args.source}, "
+              f"{'quarterly' if args.quarterly else 'annual'}, {args.report_type})...")
+        try:
+            batch = fetch_finance_facts(
+                ticker=ticker,
+                report_type=args.report_type,
+                period_from=args.period_from,
+                period_to=args.period_to,
+                source=args.source,
+                show_schema=args.show_schema,
+                quarterly=args.quarterly,
+            )
+            facts.extend(batch)
+            if batch and not (args.dry_run or args.show_schema):
+                inserted += insert_vnstock_facts(batch)   # per ticker: one failure doesn't lose the run
+        except Exception as exc:
+            print(f"  [WARN] {ticker} failed: {exc}")
 
     if args.show_schema:
         return
@@ -351,16 +395,14 @@ def main() -> None:
     print(f"\nTotal: {len(facts)} facts")
 
     if args.dry_run:
-        shown = facts[:20]
-        for f in shown:
-            print(f"  {f['period']} | {f['metric_code']:35s} | {f['value']:>25,.0f} | {f['source_file']}")
+        for f in facts[:20]:
+            print(f"  {f['ticker']} | {f['period']} | {f['metric_code']:35s} | {f['value']:>25,.0f} | {f['source_file']}")
         if len(facts) > 20:
             print(f"  ... ({len(facts) - 20} more facts)")
         print("--dry-run: no insert")
         return
 
-    n = insert_vnstock_facts(facts)
-    print(f"Inserted {n} rows into financial_facts (source='vnstock')")
+    print(f"Inserted {inserted} rows into financial_facts (source='vnstock')")
 
 
 if __name__ == "__main__":

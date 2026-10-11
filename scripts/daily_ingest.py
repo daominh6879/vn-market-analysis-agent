@@ -9,6 +9,7 @@ Runs every table's incremental fetch in order:
   5. stock_prices (vnstock, incremental)
   6. stock_ratios (vnstock KBS)
   7. market_quotes (global quotes — commodity/fx/crypto)
+  8. daily_snapshots (SJC gold, SBV central rate, VCB USD → "so với hôm qua")
 
 Step 2 derives foreign value from volume x close because Fireant only exposes
 foreign volume, and it writes with ON CONFLICT DO NOTHING so it never clobbers
@@ -111,6 +112,15 @@ def main() -> None:
             "Global quotes (market_quotes)",
         )
 
+        # Market cap inputs, dividend history, per-year ratios, quarterly statements.
+        # Slow (vnstock rate limit) — one-off backfill; failures are non-fatal.
+        run([PYTHON, "ingest/fetch_shares.py"], "Shares outstanding (securities.listed_shares)")
+        run([PYTHON, "ingest/fetch_dividends.py"], "Dividend history (dividends)")
+        run([PYTHON, "ingest/fetch_ratios.py", "--history"], "Yearly ratio history (financial_facts ratio_*)")
+        run([PYTHON, "ingest/fetch_financials.py", "--ticker", "all", "--quarterly", "--source", "KBS",
+             "--period-from", "2023", "--period-to", str(date.today().year)],
+            "Quarterly statements (KBS, 2023+)")
+
     else:
         print(f"=== DAILY INGEST — {today} ===")
 
@@ -152,6 +162,9 @@ def main() -> None:
             [PYTHON, "ingest/fetch_global_quotes.py"],
             "Global quotes (market_quotes)",
         )
+
+    # Day-over-day history for SJC gold / FX. Runs in both modes; a missing source is not fatal.
+    run([PYTHON, "ingest/fetch_daily_snapshots.py"], "Daily snapshots (SJC gold, FX)")
 
     # Audit at end
     ok &= run(

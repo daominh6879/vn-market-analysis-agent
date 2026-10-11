@@ -856,6 +856,19 @@ def render_report(state: MarketBriefState) -> dict:
         outlook_text=state.get("outlook_text", _MISSING),
     )
 
+    # Non-trading day (weekend / VN holiday): the "pre-market today" headings would be wrong.
+    try:
+        from datetime import datetime as _dt
+        from tools.vn_holidays import is_vn_holiday
+        _d = _dt.strptime(date_str, "%Y-%m-%d") if date_str else _dt.now()
+        if _d.weekday() >= 5 or is_vn_holiday(_d.strftime("%Y-%m-%d")):
+            report = report.replace(
+                "ĐỌC GÌ TRƯỚC GIỜ THỊ TRƯỜNG MỞ CỬA",
+                "TỔNG KẾT PHIÊN GẦN NHẤT (hôm nay thị trường nghỉ giao dịch)",
+            ).replace("NHẬN ĐỊNH PHIÊN HÔM NAY", "NHẬN ĐỊNH PHIÊN GIAO DỊCH TIẾP THEO")
+    except Exception:
+        pass
+
     # Write to file if output_path given
     output_file = ""
     out_path = state.get("output_path", "")

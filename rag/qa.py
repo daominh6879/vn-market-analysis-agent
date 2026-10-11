@@ -76,7 +76,7 @@ def _rag_answer(question: str, ticker: Optional[str], client) -> str:
             collection=_COLLECTION,
             embed_model=_EMBED_MODEL,
             bm25_retriever=bm25,
-            ticker=ticker or "HPG",
+            ticker=ticker,
             n_sub_queries=4,
         )
         return result.get("report") or result.get("analysis") or "Không tìm thấy thông tin liên quan."
@@ -160,7 +160,7 @@ def retrieve_only(question: str, ticker: Optional[str] = None, client=None) -> s
     """Retrieve context (SQL rows + RAG chunks) without LLM synthesis."""
     route = route_classify(question)
     if route.label == "ngoài_phạm_vi":
-        return f"Ngoài phạm vi: {route.reason}"
+        return "Ngoài phạm vi: dữ liệu hiện có chưa bao gồm nội dung này."
 
     if client is None:
         from llm.factory import create_client as _create
@@ -179,7 +179,7 @@ def retrieve_only(question: str, ticker: Optional[str] = None, client=None) -> s
             from rag.multi_query import generate_sub_queries
             bm25 = _get_bm25(_COLLECTION)
             sub_queries = generate_sub_queries(question, n=4)
-            state: dict = {"query": question, "ticker": ticker or "HPG", "sub_queries": sub_queries}
+            state: dict = {"query": question, "ticker": ticker, "sub_queries": sub_queries}
             retrieve_fn = make_multi_retrieve_node(_COLLECTION, _EMBED_MODEL, bm25)
             state = {**state, **retrieve_fn(state)}
             fuse_fn = make_rrf_fuse_node(top_k=5)
@@ -203,8 +203,8 @@ def answer(question: str, ticker: Optional[str] = None, client=None) -> str:
 
     if route.label == "ngoài_phạm_vi":
         return (
-            f"Câu hỏi này nằm ngoài phạm vi dữ liệu hiện có.\n"
-            f"Lý do: {route.reason}"
+            "Câu hỏi này nằm ngoài phạm vi dữ liệu hiện có. "
+            "Bạn có thể hỏi về giá, chỉ số tài chính, báo cáo tài chính, cổ tức hoặc định giá của một mã cụ thể."
         )
 
     if route.label == "số_liệu":

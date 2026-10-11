@@ -801,3 +801,6 @@ Dagster phủ đủ daily: `foreign_flows_1730` (VCI, value thật) → `market_
 Hai hạn chế còn lại: (1) incremental `MAX(date)+1` không lấp được lỗ ở giữa — phải dùng `--start-date/--end-date`; (2) không có sensor/alert, job fail thì im lặng, `RetryPolicy(max_retries=3, delay=120)` chỉ che lỗi transient.
 
 ---
+
+**Q:** Vì sao "Mã nào tăng mạnh nhất hôm nay?" từng trả về bản tin market_brief?
+**A:** Router LLM gom mọi câu hỏi toàn thị trường vào `market_brief`. Đã thêm intent `market_data` (đọc trực tiếp `ohlcv_daily`/`market_index_daily`/`foreign_flows`/`securities`) và luật xác định `agents/intent_rules.py` ghi đè kết quả LLM; bản tin chỉ dành cho câu hỏi "bản tin/tổng quan/đọc gì".

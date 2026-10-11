@@ -639,6 +639,26 @@ TICKER_ENRICHMENT: dict[str, dict] = {
 }
 
 
+# Curated corrections to the sector / ICB industry that the seed list and vnstock produce.
+# Applied last (load + fetch + seed), so they survive a `--refresh` of the universe.
+#   VRE: owns shopping malls (real estate), not a retailer.
+#   EVF: a finance company, vnstock's ICB industry "Ngân hàng" put it in every bank list.
+#   PNJ: jewelry/gold maker-retailer, kept out of the generic "bán lẻ" (electronics/grocery) group.
+#   HDG: diversified; kept under Tiện ích (power generation) instead of Bất động sản — judgment call,
+#        edit here if you prefer the other classification.
+SECTOR_OVERRIDES: dict[str, dict] = {
+    "VRE": {"sector": "Bất động sản", "industry": "Bất động sản", "tags": ["bất động sản", "trung tâm thương mại"]},
+    "EVF": {"sector": "Tài chính", "industry": "Dịch vụ tài chính", "tags": ["công ty tài chính"]},
+    "PNJ": {"sector": "Hàng tiêu dùng", "industry": "Trang sức", "tags": ["trang sức", "vàng bạc", "tiêu dùng"]},
+    "HDG": {"sector": "Tiện ích", "industry": "Điện", "tags": ["điện", "thủy điện", "năng lượng"]},
+}
+
+
+def _apply_override(rec: dict) -> dict:
+    ov = SECTOR_OVERRIDES.get(rec.get("ticker", ""))
+    return {**rec, **ov} if ov else rec
+
+
 def _enrich(ticker: str, sector: str) -> dict:
     """Merge sector-derived tags + curated per-ticker metadata into one record."""
     enr = TICKER_ENRICHMENT.get(ticker, {})
@@ -653,7 +673,7 @@ def _enrich(ticker: str, sector: str) -> dict:
 def _seed_record(ticker: str, sector: str, index_member: str) -> dict:
     """Full-record shape for one HOSE_SEED entry (company_name filled by vnstock later)."""
     enr = _enrich(ticker, sector)
-    return {
+    return _apply_override({
         "ticker": ticker,
         "sector": sector,
         "index_member": index_member,
@@ -661,7 +681,7 @@ def _seed_record(ticker: str, sector: str, index_member: str) -> dict:
         "industry": enr["industry"],
         "name_aliases": enr["name_aliases"],
         "tags": enr["tags"],
-    }
+    })
 
 
 def load_hose_tickers() -> list[str]:
@@ -691,7 +711,7 @@ def load_hose_universe() -> list[dict]:
             for row in data:
                 if row.get("exchange") != "HOSE":
                     continue
-                result.append({
+                result.append(_apply_override({
                     "ticker": row["ticker"],
                     "sector": row.get("sector", "Unknown"),
                     "index_member": row.get("index_member", "HOSE"),
@@ -699,7 +719,7 @@ def load_hose_universe() -> list[dict]:
                     "industry": row.get("industry", "Unknown"),
                     "name_aliases": row.get("name_aliases", []),
                     "tags": row.get("tags", []),
-                })
+                }))
             if result:
                 return result
         except Exception:
@@ -808,7 +828,7 @@ def fetch_and_save_hose_universe() -> int:
             if industry and industry.lower() not in tags:
                 tags.append(industry.lower())
 
-            rows.append({
+            rows.append(_apply_override({
                 "ticker": sym,
                 "exchange": "HOSE",
                 "sector": sector,
@@ -817,7 +837,7 @@ def fetch_and_save_hose_universe() -> int:
                 "industry": industry,
                 "name_aliases": sorted(set(aliases)),
                 "tags": sorted(set(tags)),
-            })
+            }))
 
         _CACHE_PATH.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
         return len(rows)

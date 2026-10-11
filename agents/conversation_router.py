@@ -19,6 +19,8 @@ from __future__ import annotations
 from typing import TypedDict
 
 from agents.classifier import INTENTS, OUT_OF_SCOPE_REPLY, is_screening_query
+from agents.guardrails import has_finance_terms, is_off_topic, is_social_turn, off_topic_reply
+from agents.intent_rules import override_intent
 from agents.focus import Focus, extract_focus_entities, extract_focus_sector, resolve_focus
 
 AGENT_RUN_TOOL: dict = {
@@ -53,7 +55,11 @@ AGENT_RUN_TOOL: dict = {
                     "(e.g., banking sector, construction sector, VN30 index, sector ETF), "
                     "FX/tỷ giá (USD/VND, EUR/VND), interest rates, and commodity prices. "
                     "Use 'price_action' only for a single named stock's price/volume action. "
-                    "Use 'market_brief' for broad market overview (VNINDEX, HNX, overall session). "
+                    "Use 'market_brief' ONLY when the user wants the full pre-market/session newsletter "
+                    "('bản tin thị trường', 'tổng quan thị trường hôm nay'). "
+                    "Use 'market_data' for a SPECIFIC market-wide fact: top gainers/losers ('mã nào tăng mạnh nhất'), "
+                    "index close ('VN-Index đóng cửa bao nhiêu điểm'), foreign net buy/sell ranking, top liquidity, "
+                    "top market cap, or 'liệt kê các mã ngành X'. "
                     "Use 'screening' for filter/scan queries (ROE > x, P/E < y, RSI < z) — "
                     "any 'lọc/lọc cổ phiếu/filter/screen' query is screening even when it "
                     "names a technical indicator like RSI. "
@@ -83,7 +89,9 @@ AGENT_RUN_TOOL: dict = {
                 "description": (
                     "A self-contained query for the agent. "
                     "Resolve any implicit references using conversation context so the agent "
-                    "can execute it without needing the conversation history."
+                    "can execute it without needing the conversation history. "
+                    "Resolve ONLY the subject (ticker/sector) of the current message — NEVER append, quote or "
+                    "answer an earlier question; the query must be about the current question alone."
                 ),
             },
             "reason": {
@@ -99,7 +107,7 @@ AGENT_RUN_TOOL: dict = {
                     "indicator is the lower-case metric code — ratio: 'pe', 'pb', 'roe', "
                     "'roa', 'eps', 'ev_ebitda', 'de', 'gross_margin', 'net_margin', "
                     "'revenue_growth', 'earnings_growth'; absolute (tỷ VND): 'revenue', "
-                    "'profit'; technical: 'rsi', 'macd', 'volume', 'adx', 'ma20', 'ma50', "
+                    "'profit', 'market_cap' (vốn hóa); technical: 'rsi', 'macd', 'volume', 'adx', 'ma20', 'ma50', "
                     "'ma200' (giá so MA, %), 'pct_52w_high', 'pct_52w_low' (%). "
                     "op is the comparison, threshold the number."
                 ),
@@ -140,7 +148,9 @@ DIRECT_REPLY_TOOL: dict = {
     "description": (
         "Use ONLY for pure social turns that contain no financial subject whatsoever: "
         "greetings, thanks, acknowledgements ('I see', 'makes sense', 'cũng hợp lý'), "
-        "simple yes/no reactions to prior results. "
+        "simple yes/no reactions to prior results, 'what can you do'. "
+        "NEVER use it to write poems, stories, code, translations or answer weather/cooking/other "
+        "non-financial tasks — those must use out_of_scope. "
         "Do NOT use if the user's message references any stock ticker, sector name, "
         "market index, or financial metric — even implicitly or as a follow-up. "
         "When in doubt, use needs_agent_run instead."
@@ -164,7 +174,8 @@ DIRECT_REPLY_TOOL: dict = {
 OUT_OF_SCOPE_TOOL: dict = {
     "name": "out_of_scope",
     "description": (
-        "Use when the user asks about a financial subject OUTSIDE Vietnamese equities: "
+        "Use when the user asks about a financial subject OUTSIDE Vietnamese equities, OR asks for any "
+        "non-financial task (poems, stories, code, translation, weather, cooking): "
         "crypto/bitcoin, US or foreign stocks (Apple, Tesla, ...), or non-VND forex "
         "(EUR/USD, USD/JPY, GBP/USD — pairs with no VND leg). "
         "VND-related FX (USD/VND, EUR/VND, tỷ giá USD) is IN scope — use needs_agent_run "
@@ -425,13 +436,19 @@ def _parse_agent_fields(
         else:
             tickers = extract_focus_entities(q) or ([ticker] if ticker else [])
     sector = "" if tickers else extract_focus_sector(q)
+    screening = inp.get("screening") or None
+    # Deterministic overrides on the verbatim question (market-wide asks, indicator asks,
+    # dividends/quarters ...) — the LLM's intent is not trusted for these shapes.
+    intent, screening, rule_reason = override_intent(query_fallback or q, intent, tickers, screening)
+    if rule_reason:
+        reason = f"{reason} [{rule_reason}]".strip()
     return {
         "intent": intent,
         "ticker": ticker,
         "tickers": tickers,
         "sector": sector,
         "query": q,
-        "screening": inp.get("screening") or None,
+        "screening": screening,
         "time_context": time_context,
         "reason": reason,
     }
@@ -483,14 +500,17 @@ def _fallback_classify(query: str, history: list[dict], focus: Focus | None = No
             ticker = tickers[0]
         elif ticker:
             tickers = [ticker]
+        intent, screening, rule_reason = override_intent(query, r.intent, tickers, r.screening)
+        if rule_reason:
+            reason = f"{reason} [{rule_reason}]".strip()
         return RouteResult(
             type="agent",
-            intent=r.intent,
+            intent=intent,
             ticker=ticker,
             tickers=tickers,
             sector="" if tickers else extract_focus_sector(query),
             query=query,
-            screening=r.screening,
+            screening=screening,
             time_context=_parse_time_context(None),
             reason=reason,
         )
@@ -560,6 +580,23 @@ def llm_route(
     Returns:
         RouteResult with type="agent" (needs_agent_run called) or type="text" (direct_reply called).
     """
+    # Deterministic off-topic gate (poems, code, translation, weather ...) — no LLM call, so
+    # the router can never "helpfully" answer a non-financial task via direct_reply.
+    if is_off_topic(query):
+        _trace("out_of_scope", deterministic=True)
+        return RouteResult(type="text", text=off_topic_reply(query), reason="guardrail:off_topic")
+
+    # Gold / SJC / oil prices: macro_sector already fetches them (same data as the market brief).
+    # Decided here so the LLM can never refuse them as "not a stock".
+    from agents.intent_rules import _COMMODITY_RE, _CRYPTO_RE
+    if _COMMODITY_RE.search(query) and not _CRYPTO_RE.search(query):
+        _trace("needs_agent_run", intent="macro_sector", deterministic=True)
+        return RouteResult(
+            type="agent", intent="macro_sector", ticker=None, tickers=[], sector="",
+            query=query, screening=None, time_context=_parse_time_context(None),
+            reason="rule:commodity→macro_sector",
+        )
+
     kind = "fresh"
     entities: list[str] = []
     if focus:
@@ -676,6 +713,11 @@ def llm_route(
             if r:
                 _trace(r.get("type", "agent"), intent=r.get("intent", ""), ticker=r.get("ticker", ""), fallback_used=True)
                 return r
+            if not is_social_turn(query) and not has_finance_terms(query):
+                # Not a greeting/thanks and no finance vocabulary: the LLM is about to
+                # free-answer a non-financial request. Decline instead.
+                _trace("out_of_scope", deterministic=True)
+                return RouteResult(type="text", text=off_topic_reply(query), reason="guardrail:direct_reply_off_topic")
             _trace("text")
             text = tc.input.get("text", "").strip()
             if not text:
@@ -695,6 +737,9 @@ def llm_route(
 
     # Genuine conversational turn (classifier says "conversation") or classifier failed.
     text = (resp.text or "").strip()
+    if text and not is_social_turn(query) and not has_finance_terms(query):
+        _trace("out_of_scope", fallback_used=True, deterministic=True)
+        return RouteResult(type="text", text=off_topic_reply(query), reason="guardrail:free_text_off_topic")
     if text:
         _trace("text", fallback_used=True)
         return RouteResult(type="text", text=text, reason="fallback_free_text")
