@@ -65,3 +65,7 @@ Các mục dưới đây là điểm nghi vấn nêu trong `vn_stock_agent_test_
 
 - [x] **TCBS `bars-long-term` trả 404**: `TcbsDirectProvider._fetch_ohlcv` (tools/providers.py) lỗi `404 Not Found` cho HPG (probe 12/10 12:04). Chỉ là fallback cuối sau Fireant → VCI nên chưa ảnh hưởng kết quả; cần endpoint TCBS mới hoặc bỏ khỏi chain. Giải quyết: chain fallback giá đổi từ Fireant → VCI → TCBS thành Fireant → VCI → KBS (`KbsProvider`, đã kiểm tra trả nến 12/10, đơn vị VND đúng).
 - [x] **Giá HPG trả phiên 09/10 thay vì hôm nay**: `_is_db_fresh` coi DB phiên thứ Sáu là fresh cả ngày thứ Hai (DB nạp 18:00). Đã sửa: trong ngày giao dịch sau 09:00 DB phải có nến hôm nay, nếu không thì gọi API live (Fireant/VCI đều trả nến hôm nay).
+
+## Tỷ giá trung tâm (quan sát 12/10/2026)
+
+- [ ] **`fx_scraper` không lấy được tỷ giá trung tâm SBV**: log khi chạy eval: `SBV homepage chart failed: Client error '403 No server' for url 'https://www.sbv.gov.vn/'` và `central-rate mirror is stale (2025-04-24); ignored`. Câu hỏi tỷ giá trung tâm hiện dựa vào nguồn còn lại; cần nguồn/endpoint mới hoặc header/proxy cho SBV.

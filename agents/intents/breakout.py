@@ -106,9 +106,19 @@ def gather_data(ticker: str, query: str, time_context: dict | None = None) -> st
     stats = " | ".join(f"{t}: {len(v)}" for t, v in by_type.items())
     top_signals = signals[:15]
     signals_block = "\n\n".join(_format_signal(s) for s in top_signals)
+    # SHORT/MID can fire via MA20 reclaim with price still under the pivot, and *_PRE
+    # signals are by definition under it — only price > pivot counts as a real break.
+    confirmed = sum(1 for s in signals if s.price > s.pivot and not s.signal_type.endswith("_PRE"))
+    notice = ""
+    if confirmed < len(signals):
+        notice = (
+            "LƯU Ý: Mã có Giá <= Pivot (tín hiệu *_PRE hoặc hồi lại MA20) CHƯA vượt đỉnh/pivot — "
+            "chỉ được mô tả là sắp breakout hoặc hồi về MA20, không được nói đã vượt đỉnh.\n"
+        )
     return (
         f"[BREAKOUT {mode_label}]\n"
-        f"Tổng: {len(signals)} tín hiệu | {stats}\n\n"
+        f"Tổng: {len(signals)} tín hiệu ({confirmed} đã breakout) | {stats}\n"
+        f"{notice}\n"
         f"{signals_block}"
     )
 

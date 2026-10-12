@@ -13,7 +13,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from agents.intents.screening import (
-    _parse_rsi_filter,
     _normalize_filters,
     _cmp,
     _matches_all,
@@ -21,28 +20,6 @@ from agents.intents.screening import (
     _FACTS_METRICS,
     _TECHNICAL_FNS,
 )
-
-
-def test_rsi_dưới_threshold():
-    assert _parse_rsi_filter("Lọc RSI dưới 30 ngành thép") == ("<", 30)
-
-
-def test_rsi_trên_threshold():
-    assert _parse_rsi_filter("cổ phiếu RSI trên 70") == (">", 70)
-
-
-def test_rsi_symbol_operator():
-    assert _parse_rsi_filter("RSI < 40") == ("<", 40)
-    assert _parse_rsi_filter("RSI > 60") == (">", 60)
-
-
-def test_rsi_no_direction_defaults_below():
-    assert _parse_rsi_filter("RSI 30") == ("<", 30)
-
-
-def test_not_rsi_returns_none():
-    assert _parse_rsi_filter("top 5 mã ROE cao nhất") is None
-    assert _parse_rsi_filter("giá cổ phiếu HPG hôm nay") is None
 
 
 # ── Filter normalization / comparison / matching ─────────────────────────────
@@ -93,3 +70,15 @@ def test_technical_fns_cover_key_indicators():
 def test_facts_metrics_cover_revenue_profit():
     for ind in ("revenue", "profit"):
         assert ind in _FACTS_METRICS, f"missing financial_facts indicator {ind}"
+
+
+def test_untraded_ticker_is_skipped_by_technical_screen(monkeypatch):
+    """BCG case: 30 sessions of zero volume + flat price gave RSI 0.00 and topped 'RSI < 30'."""
+    import pandas as pd
+    import agents.intents.screening as sc
+    n = 40
+    halted = pd.DataFrame({"close": [3.0] * 20 + [2.5] * 20, "high": [3.0] * n, "low": [2.5] * n,
+                           "volume": [1000.0] * 20 + [0.0] * 20})
+    assert sc._is_untraded(halted)
+    monkeypatch.setattr(sc, "_load_ohlcv_bulk", lambda tickers, end: {"BCG": halted})
+    assert sc._screen_technical(["BCG"], [{"indicator": "rsi", "op": "<", "threshold": 30}], None) == []

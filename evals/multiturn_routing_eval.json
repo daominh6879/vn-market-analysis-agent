@@ -1,0 +1,132 @@
+[
+  {
+    "id": "deepen_comparison",
+    "turn1": "so sánh P/E của BID và CTG",
+    "turn2": "phân tích sâu hơn",
+    "errors": [],
+    "turn1_route": {
+      "intent": "valuation",
+      "tickers": [
+        "BID",
+        "CTG"
+      ],
+      "sector": ""
+    },
+    "turn2_route": {
+      "type": "agent",
+      "intent": "valuation",
+      "tickers": [
+        "BID",
+        "CTG"
+      ],
+      "sector": "",
+      "query": "Phân tích sâu hơn so sánh định giá P/E, P/B, ROE của BID và CTG, so với trung bình ngành ngân hàng"
+    }
+  },
+  {
+    "id": "deepen_single",
+    "turn1": "phân tích kỹ thuật HPG",
+    "turn2": "chi tiết hơn",
+    "errors": [],
+    "turn1_route": {
+      "intent": "technical_analysis",
+      "tickers": [
+        "HPG"
+      ],
+      "sector": ""
+    },
+    "turn2_route": {
+      "type": "agent",
+      "intent": "technical_analysis",
+      "tickers": [
+        "HPG"
+      ],
+      "sector": "",
+      "query": "Phân tích kỹ thuật chi tiết cổ phiếu HPG: xu hướng, các chỉ báo RSI, MACD, MA20/MA50/MA200, Bollinger Bands, khối lượng, hỗ trợ/kháng cự"
+    }
+  },
+  {
+    "id": "deepen_sector",
+    "turn1": "phân tích ngành ngân hàng",
+    "turn2": "phân tích sâu hơn",
+    "errors": [],
+    "turn1_route": {
+      "intent": "macro_sector",
+      "tickers": [],
+      "sector": "ngân hàng"
+    },
+    "turn2_route": {
+      "type": "agent",
+      "intent": "macro_sector",
+      "tickers": [],
+      "sector": "ngân hàng",
+      "query": "Phân tích sâu hơn ngành ngân hàng Việt Nam: diễn biến cổ phiếu ngân hàng, định giá, tăng trưởng tín dụng, chất lượng tài sản, thanh khoản và triển vọng"
+    }
+  },
+  {
+    "id": "new_action_same_subject",
+    "turn1": "P/E của VCB",
+    "turn2": "giá cổ phiếu hôm nay?",
+    "errors": [],
+    "turn1_route": {
+      "intent": "valuation",
+      "tickers": [
+        "VCB"
+      ],
+      "sector": ""
+    },
+    "turn2_route": {
+      "type": "agent",
+      "intent": "price_action",
+      "tickers": [
+        "VCB"
+      ],
+      "sector": "",
+      "query": "Giá cổ phiếu VCB hôm nay"
+    }
+  },
+  {
+    "id": "new_ticker_not_inherited",
+    "turn1": "phân tích kỹ thuật HPG",
+    "turn2": "còn VNM thì sao?",
+    "errors": [],
+    "turn1_route": {
+      "intent": "technical_analysis",
+      "tickers": [
+        "HPG"
+      ],
+      "sector": ""
+    },
+    "turn2_route": {
+      "type": "agent",
+      "intent": "technical_analysis",
+      "tickers": [
+        "VNM"
+      ],
+      "sector": "",
+      "query": "Phân tích kỹ thuật cổ phiếu VNM (Vinamilk): xu hướng giá, các chỉ báo RSI, MACD, đường trung bình động MA20/MA50/MA200, hỗ trợ và kháng cự, khối lượng giao dịch."
+    }
+  },
+  {
+    "id": "continue_with_new_ticker",
+    "turn1": "phân tích kỹ thuật HPG",
+    "turn2": "phân tích thêm FPT",
+    "errors": [],
+    "turn1_route": {
+      "intent": "technical_analysis",
+      "tickers": [
+        "HPG"
+      ],
+      "sector": ""
+    },
+    "turn2_route": {
+      "type": "agent",
+      "intent": "technical_analysis",
+      "tickers": [
+        "FPT"
+      ],
+      "sector": "",
+      "query": "Phân tích kỹ thuật cổ phiếu FPT: xu hướng, các chỉ báo RSI, MACD, đường trung bình động, hỗ trợ/kháng cự, khối lượng giao dịch"
+    }
+  }
+]

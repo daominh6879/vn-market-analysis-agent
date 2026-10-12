@@ -22,6 +22,72 @@ class RouterResult:
     screening: list | None = None  # [{indicator, op, threshold}, ...] for screening intents
     market_topics: list | None = None  # data blocks a market_data question needs (index, movers, ...)
     macro_topics: list | None = None  # data blocks a macro_sector question needs (fx, commodities, gold, sector)
+    rag_topics: list | None = None  # extra blocks a rag_qa question needs (dividend, quarterly, yearly_metric, marketcap)
+    risk_flags: list | None = None  # advice / personal / prediction — drives disclaimers
+    language: str | None = None  # "vi" | "en" — reply language
+
+
+# ── routing decisions shared with agents/conversation_router.py ───────────────
+# The LLM decides all of these; no keyword/regex layer overrides them downstream.
+
+RAG_TOPICS = ("dividend", "quarterly", "yearly_metric", "marketcap")
+RISK_FLAGS = ("advice", "personal", "prediction")
+LANGUAGES = ("vi", "en")
+
+RAG_TOPICS_SCHEMA = {
+    "type": "array",
+    "description": (
+        "Only when intent='rag_qa' about ONE stock: extra data blocks the question needs, chosen by meaning. "
+        "dividend = cổ tức / chia cổ phiếu / quyền mua; quarterly = revenue or profit of a specific quarter; "
+        "yearly_metric = ROE/ROA/EPS/margin for specific years; marketcap = that stock's market capitalisation. "
+        "Leave empty for plain financial-report questions."
+    ),
+    "items": {"type": "string", "enum": list(RAG_TOPICS)},
+}
+RISK_FLAGS_SCHEMA = {
+    "type": "array",
+    "description": (
+        "Risk markers in the question. advice = asks whether to buy/sell/hold/cut loss/take profit; "
+        "personal = commits all savings, borrowed money, margin or leverage (all-in); "
+        "prediction = asks for a future price, forecast, target price, tomorrow/next week. Empty when none."
+    ),
+    "items": {"type": "string", "enum": list(RISK_FLAGS)},
+}
+LANGUAGE_SCHEMA = {
+    "type": "string",
+    "enum": list(LANGUAGES),
+    "description": "Language the user wrote the question in; the reply follows it.",
+}
+
+# Rules that used to live in keyword/regex overrides. Appended to the classifier system prompt
+# and the router's needs_agent_run description.
+ROUTING_RULES = (
+    "- A single stock's indicator question (RSI, MACD, MA, Bollinger, support/resistance, overbought/oversold) → technical_analysis, never screening.\n"
+    "- A single stock's price over the last N sessions ('5 phiên gần nhất', 'hôm qua so với hôm nay', 'tuần qua') → price_action.\n"
+    "- Dividends, a specific quarter's revenue/profit, a metric for a SPECIFIC year or period ('ROE của HPG năm 2024'), or ONE stock's market cap → rag_qa with the matching rag_topics. "
+    "The same metric with NO period ('ROE của HPG', 'P/E của VCB', current EPS) → valuation.\n"
+    "- 'Analyze a company/ticker' ('phân tích HPG') with no specific indicator or metric → investment_case (comprehensive view); an indicator question stays technical_analysis.\n"
+    "- A market-wide question with no single stock (top gainers/losers, index level, foreign net buy/sell ranking, top liquidity, top market cap, list of a sector's tickers) → market_data with market_topics, even when worded loosely. "
+    "Only the full newsletter ('bản tin', 'đọc gì trước giờ mở cửa') is market_brief. A ranking with no numeric threshold is NOT screening.\n"
+    "- Unusual volume across the market or a sector ('khối lượng đột biến') → screening with the filter {indicator: volume, op: >, threshold: 1.5}.\n"
+    "- End-of-session market commentary ('nhận định cuối phiên', 'tổng kết phiên', 'thị trường chiều nay') → closing_commentary.\n"
+    "- Domestic gold (SJC), oil and commodity prices are IN scope → macro_sector (macro_topics gold/commodities), never out_of_scope. Crypto (Bitcoin, Ethereum) stays out_of_scope.\n"
+    "- A question about a market index as a whole (VN-Index, VN30, HNX), including 'có nên mua không' or an outlook, is market_brief — investment_case is for a single stock only.\n"
+    "- Always fill risk_flags and language from the question itself."
+)
+
+
+def clean_enum_list(values, allowed) -> list[str]:
+    """Keep only strings in `allowed`, preserving order and dropping duplicates."""
+    out: list[str] = []
+    for v in values or []:
+        if isinstance(v, str) and v in allowed and v not in out:
+            out.append(v)
+    return out
+
+
+def clean_language(value) -> str:
+    return value if value in LANGUAGES else "vi"
 
 
 # ── intents ───────────────────────────────────────────────────────────────────
@@ -29,7 +95,7 @@ class RouterResult:
 INTENTS = (
     "price_action", "technical_analysis", "rag_qa", "valuation", "macro_sector",
     "news_sentiment", "investment_case", "screening", "market_brief",
-    "breakout_scan", "market_data", "conversation", "out_of_scope",
+    "breakout_scan", "market_data", "closing_commentary", "conversation", "out_of_scope",
 )
 
 # Fixed decline used when the classifier/router decides a subject is outside the VN
@@ -39,19 +105,6 @@ OUT_OF_SCOPE_REPLY = (
     "Xin lỗi, tôi chỉ hỗ trợ phân tích chứng khoán Việt Nam (HOSE/HNX/UPCOM). "
     "Tôi chưa hỗ trợ chứng khoán nước ngoài, tiền mã hoá (crypto) hay ngoại hối ngoài VND."
 )
-
-_SCREENING_HINTS = ("lọc", "filter", "screen", "sàng lọc")
-
-
-def is_screening_query(query: str) -> bool:
-    """Deterministic screening signal: "lọc"/"filter"/"screen" → screening.
-
-    Overrides an ambiguous LLM intent (RSI/MACD keywords pull toward technical_analysis)
-    or a misroute to decompose ("lọc nhiều mã" misread as multi-task).
-    """
-    q = (query or "").lower()
-    return any(h in q for h in _SCREENING_HINTS)
-
 
 # ── LLM classifier ────────────────────────────────────────────────────────────
 
@@ -63,7 +116,7 @@ the current message does not name a company or ticker explicitly.
 If the current query explicitly mentions a different ticker or asks about all stocks, use that context instead.
 
 IMPORTANT: History is ONLY for resolving the ticker of the current query — never to change its intent.
-Classify based solely on what the current query is asking. If it carries no financial intent, classify as `conversation`.
+Classify based solely on what the current query is asking. A pure social turn (greeting, thanks, acknowledgement) is `conversation`; any other request with no Vietnamese-equity subject (crypto, foreign stocks, poems, code, weather...) is `out_of_scope`.
 A separate routing step decides whether a `conversation` result should trigger an agent run — do not anticipate that here.
 
 Classify the user's message into exactly one intent:
@@ -78,13 +131,14 @@ Classify the user's message into exactly one intent:
   screening           — filter or rank stocks by a criterion across many tickers
   market_brief        — a full pre-market / session-recap NEWSLETTER only ("bản tin thị trường", "tổng quan thị trường hôm nay", "đọc gì trước giờ mở cửa")
   market_data         — a SPECIFIC market-wide factual question: top gainers/losers ("mã nào tăng mạnh nhất"), index close ("VN-Index đóng cửa bao nhiêu điểm"), top foreign net buy/sell, top liquidity, top market cap, "liệt kê các mã trong ngành X". NOT a newsletter.
+  closing_commentary  — end-of-session market commentary ("nhận định cuối phiên", "nhận định thị trường chiều nay", "tổng kết phiên hôm nay và kịch bản phiên sau"): index, liquidity, breadth, leading sectors, foreign flow and next-session levels in one short note. NOT the full newsletter, NOT a single fact.
   breakout_scan       — scan for stocks breaking out of a base or making new highs
-  conversation        — ONLY greeting / thanks / acknowledgement / "what can you do". Requests to write poems, stories, code, translate, weather etc. are NOT financial → out_of_scope
+  conversation        — ONLY greeting / thanks / acknowledgement / "what can you do", or unintelligible input (random characters, no request to decline). Requests to write poems, stories, code, translate, weather etc. are NOT financial → out_of_scope
   out_of_scope        — crypto (Bitcoin/Ethereum), US/foreign stocks, non-VND forex (EUR/USD, USD/JPY — no VND leg), or any non-financial task (poems, stories, code, translation, weather) — outside the Vietnamese equity universe
 
 Rules:
 - A ticker alone with no other signal → technical_analysis
-- A query asking to analyze a company or ticker → technical_analysis
+- A query asking to analyze a company or ticker without naming an indicator or metric ("phân tích HPG") → investment_case
 - A query asking for a buy/sell/hold recommendation or comprehensive evaluation → investment_case
 - A query asking for a valuation metric (P/E, P/B, ROE, EPS, EV/EBITDA) of a company, or comparing it against its sector → valuation
 - A query asking about financial-report content (revenue, profit, balance sheet, specific period figures) → rag_qa
@@ -104,6 +158,8 @@ Rules:
   filter {indicator, op, threshold} — multiple filters are AND-ed. Do not leave it out.
 
 Call the classify_intent tool."""
+
+_SYSTEM += "\n\nMore routing rules (decide by meaning, not by keywords):\n" + ROUTING_RULES
 
 _TOOL = {
     "name": "classify_intent",
@@ -126,6 +182,7 @@ _TOOL = {
                     "Use 'rag_qa' for financial-report content (revenue, profit, balance sheet). "
                     "Use 'price_action' only for a single stock's price/volume action. "
                     "Use 'market_brief' ONLY for the full newsletter/session recap. "
+                    "Use 'closing_commentary' for an end-of-session market commentary ('nhận định cuối phiên', 'tổng kết phiên hôm nay'). "
                     "Use 'market_data' for a specific market-wide fact (top gainers/losers, index close, foreign net buy/sell, top market cap, list tickers of a sector). "
                     "Use 'screening' for filter/scan queries. "
                     "Use 'investment_case' for buy/sell/hold on a specific stock. "
@@ -160,6 +217,9 @@ _TOOL = {
                 ),
                 "items": {"type": "string", "enum": ["fx", "commodities", "gold", "sector"]},
             },
+            "rag_topics": RAG_TOPICS_SCHEMA,
+            "risk_flags": RISK_FLAGS_SCHEMA,
+            "language": LANGUAGE_SCHEMA,
             "screening": {
                 "type": "array",
                 "description": (
@@ -220,7 +280,7 @@ def llm_classify(query: str, client=None, messages: list | None = None) -> Route
             messages=history_msgs,
             system=system,
             tools=[_TOOL],
-            max_tokens=256,
+            max_tokens=384,
             temperature=0,
         )
 
@@ -237,7 +297,10 @@ def llm_classify(query: str, client=None, messages: list | None = None) -> Route
             if ticker and not ticker.strip():
                 ticker = None
             return RouterResult(intent=intent, ticker=ticker, reason=f"llm:{reason}", screening=screening,
-                                market_topics=market_topics, macro_topics=macro_topics)
+                                market_topics=market_topics, macro_topics=macro_topics,
+                                rag_topics=clean_enum_list(tc.input.get("rag_topics"), RAG_TOPICS) or None,
+                                risk_flags=clean_enum_list(tc.input.get("risk_flags"), RISK_FLAGS) or None,
+                                language=clean_language(tc.input.get("language")))
 
         # Text-scan fallback when LLM skips tool call
         text_lower = resp.text.strip().lower()
@@ -254,11 +317,7 @@ def llm_classify(query: str, client=None, messages: list | None = None) -> Route
 def classify_hybrid(query: str, client=None, messages: list | None = None) -> RouterResult:
     """LLM-based classifier with conversation history support.
 
-    Always calls LLM (except deterministic off-topic requests). Falls back to `conversation`
-    on failure.
+    Always calls the LLM. Falls back to `conversation` on failure.
     """
-    from agents.guardrails import is_off_topic
-    if is_off_topic(query):
-        return RouterResult("out_of_scope", None, "guardrail:off_topic")
     result = llm_classify(query, client=client, messages=messages)
     return result or RouterResult("conversation", None, "llm:fallback")

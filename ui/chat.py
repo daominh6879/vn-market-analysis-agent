@@ -509,6 +509,13 @@ _AGENT_LABELS = {
     "news_sentiment":     "📰 Tin tức",
     "screening":          "🔍 Lọc cổ phiếu",
     "market_brief":       "🌏 Thị trường",
+    "valuation":          "💹 Định giá",
+    "rag_qa":             "📑 Báo cáo tài chính",
+    "investment_case":    "🧭 Luận điểm đầu tư",
+    "market_data":        "🗂️ Dữ liệu thị trường",
+    "breakout_scan":      "🚀 Breakout",
+    "out_of_scope":       "🚫 Ngoài phạm vi",
+    "closing_commentary": "🔔 Nhận định cuối phiên",
     "qa_document":        "📄 Tài liệu",
     "conversation":       "💬 Hội thoại",
 }

@@ -229,49 +229,6 @@ _FACTS_METRICS: dict[str, tuple[str, ...]] = {
 # Market capitalisation (tỷ VND) = securities.listed_shares × latest ohlcv_daily close.
 _MARKET_CAP_INDICATOR = "market_cap"
 
-_RSI_FILTER_RE = re.compile(
-    r"rsi\s*(?P<op>dưới|trên|nhỏ hơn|lớn hơn|thấp hơn|cao hơn|<=|>=|<|>|=)?\s*(?P<n>\d{1,3})",
-    re.IGNORECASE,
-)
-
-_ABOVE_OPS = frozenset({"trên", "lớn hơn", "cao hơn", ">", ">="})
-
-
-def _parse_rsi_filter(query: str) -> tuple[str, int] | None:
-    """Return (op, threshold) for an RSI filter query, or None if not an RSI screen.
-
-    Regex fallback only — the router/classifier LLM is the primary extractor.
-    """
-    m = _RSI_FILTER_RE.search(query or "")
-    if not m:
-        return None
-    op = ">" if (m.group("op") or "") in _ABOVE_OPS else "<"
-    return op, int(m.group("n"))
-
-
-_FILTER_RE = re.compile(
-    r"(?<![\w/])(?P<ind>p/e|pe|p/b|pb|roe|roa|eps|rsi|adx|ev/ebitda|d/e)(?![\w/])\s*"
-    r"(?P<op>dưới|trên|nhỏ hơn|lớn hơn|thấp hơn|cao hơn|<=|>=|<|>|=)?\s*(?P<n>\d+(?:[.,]\d+)?)",
-    re.IGNORECASE,
-)
-
-
-def _parse_filters(query: str) -> list[dict]:
-    """Regex fallback: every "<indicator> <op> <number>" in the query → filter list.
-
-    Used when the router/classifier LLM did not supply structured filters. An operator
-    word without a direction defaults to "<", matching _parse_rsi_filter.
-    """
-    out: list[dict] = []
-    for m in _FILTER_RE.finditer(query or ""):
-        ind = m.group("ind").lower()
-        op = ">" if (m.group("op") or "").lower() in _ABOVE_OPS else "<"
-        if (m.group("op") or "") in ("<=", ">=", "="):
-            op = m.group("op") if m.group("op") != "=" else ">="
-        out.append({"indicator": ind, "op": op, "threshold": float(m.group("n").replace(",", "."))})
-    return out
-
-
 def _to_float(v) -> float | None:
     if v is None:
         return None
@@ -455,6 +412,16 @@ def _load_ohlcv_bulk(tickers: list[str], end_date: str | None, calendar_days: in
     return {t: g.drop(columns=["ticker"]).reset_index(drop=True) for t, g in df.groupby("ticker")}
 
 
+_UNTRADED_SESSIONS = 5
+
+
+def _is_untraded(df: pd.DataFrame) -> bool:
+    """True when the last few sessions all have zero volume (halted / suspended ticker)."""
+    if "volume" not in df.columns or len(df) < _UNTRADED_SESSIONS:
+        return False
+    return float(df["volume"].iloc[-_UNTRADED_SESSIONS:].sum()) == 0.0
+
+
 def _screen_technical(tickers: list[str], filters: list[dict], end_date: str | None) -> list[tuple[str, dict]]:
     """Scan every ticker's technicals from ohlcv_daily in one DB round-trip."""
     frames = _load_ohlcv_bulk(tickers, end_date)
@@ -468,6 +435,8 @@ def _screen_technical(tickers: list[str], filters: list[dict], end_date: str | N
     wants_volume = any(f["indicator"] == "volume" for f in filters)
     out: list[tuple[str, dict]] = []
     for t, df in frames.items():
+        if _is_untraded(df):
+            continue  # halted/suspended: flat price + zero volume makes RSI etc. meaningless (e.g. RSI 0.00)
         if wants_volume and (len(df) < 21 or float(df["volume"].iloc[-21:-1].mean()) < _MIN_AVG_VOLUME):
             continue
         values = {f["indicator"]: _TECHNICAL_FNS[f["indicator"]](df) for f in filters}
@@ -547,7 +516,6 @@ def _latest_session_note(end_date) -> str:
         return ""
 
 
-_VOLUME_SPIKE_DEFAULT = 1.5  # same "đột biến" threshold as price_action._volume_vs_ma
 
 
 def _format_value(indicator: str, v: float) -> str:
@@ -566,8 +534,7 @@ def gather_data(ticker: str | None, query: str, time_context: dict | None = None
     """Execute screening and return raw rows — no LLM narration.
 
     screening: structured filters [{indicator, op, threshold}, ...] from the router/
-    classifier LLM (or a single dict). When absent, regex fallback (RSI only) then the
-    legacy top-N SQL templates.
+    classifier LLM (or a single dict). When absent, the legacy top-N SQL templates.
     """
     from agents.focus import extract_focus_sector
     from core.tickers import get_sector_tickers, get_tickers
@@ -576,12 +543,6 @@ def gather_data(ticker: str | None, query: str, time_context: dict | None = None
     end = tc.get("end_date") if tc.get("explicit") else None
 
     filters = _normalize_filters(screening)
-    if not filters:
-        filters = _parse_filters(query)
-    if not filters:
-        from agents.intent_rules import is_volume_spike_query
-        if is_volume_spike_query(query):
-            filters = [{"indicator": "volume", "op": ">", "threshold": _VOLUME_SPIKE_DEFAULT}]
 
     if filters:
         label = extract_focus_sector(query)
@@ -641,7 +602,7 @@ def gather_data(ticker: str | None, query: str, time_context: dict | None = None
         return (f"[SCREENING]\nLọc {scope} ({cond}) — {len(hits)} mã thỏa{shown}:\n"
                 + "\n".join(lines) + as_of)
 
-    # No structured/regex filter → legacy top-N SQL templates.
+    # No structured filter → legacy top-N SQL templates.
     sql = _pick_template(query, as_of_date=end)
     if sql:
         try:

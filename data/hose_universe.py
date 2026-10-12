@@ -696,6 +696,11 @@ def load_hose_tickers() -> list[str]:
     return [t for t, _, _ in HOSE_SEED]
 
 
+def _union(base, extra) -> list:
+    """Order-preserving union: the cache's values first, then curated TICKER_ENRICHMENT additions."""
+    return list(dict.fromkeys([*base, *extra]))
+
+
 def load_hose_universe() -> list[dict]:
     """
     Return full universe records: [{"ticker", "sector", "index_member", "company_name",
@@ -716,8 +721,8 @@ def load_hose_universe() -> list[dict]:
                     "index_member": row.get("index_member", "HOSE"),
                     "company_name": row.get("company_name", ""),
                     "industry": row.get("industry", "Unknown"),
-                    "name_aliases": row.get("name_aliases", []),
-                    "tags": row.get("tags", []),
+                    "name_aliases": _union(row.get("name_aliases", []), TICKER_ENRICHMENT.get(row["ticker"], {}).get("name_aliases", ())),
+                    "tags": _union(row.get("tags", []), TICKER_ENRICHMENT.get(row["ticker"], {}).get("tags", ())),
                 }))
             if result:
                 return result

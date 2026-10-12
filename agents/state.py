@@ -38,6 +38,9 @@ class AgentState(TypedDict, total=False):
     screening_filter: list   # [{indicator, op, threshold}, ...] for screening intents (router/classifier)
     macro_topics: list       # data blocks for macro_sector (fx, commodities, gold, sector) chosen by router/classifier
     market_topics: list      # data blocks for market_data (index, movers, foreign, ...) chosen by router/classifier
+    rag_topics: list         # extra blocks for rag_qa (dividend, quarterly, yearly_metric, marketcap) chosen by router/classifier
+    risk_flags: list         # advice / personal / prediction — chosen by router/classifier, drives disclaimers
+    language: str            # "vi" | "en" — reply language chosen by router/classifier
     classify_reason: str     # reason string from RouterResult — e.g. "ticker HPG default"
     # Clarification (set by verify_context node; pending saved to Postgres by verify_context)
     needs_clarification: bool

@@ -18,9 +18,10 @@ from __future__ import annotations
 
 from typing import TypedDict
 
-from agents.classifier import INTENTS, OUT_OF_SCOPE_REPLY, is_screening_query
-from agents.guardrails import has_finance_terms, is_off_topic, is_social_turn, off_topic_reply
-from agents.intent_rules import override_intent
+from agents.classifier import (
+    INTENTS, LANGUAGE_SCHEMA, OUT_OF_SCOPE_REPLY, RAG_TOPICS, RAG_TOPICS_SCHEMA, RISK_FLAGS,
+    RISK_FLAGS_SCHEMA, ROUTING_RULES, clean_enum_list, clean_language,
+)
 from agents.focus import Focus, extract_focus_entities, extract_focus_sector, resolve_focus
 
 AGENT_RUN_TOOL: dict = {
@@ -58,9 +59,11 @@ AGENT_RUN_TOOL: dict = {
                     "including that one stock's foreign net buy/sell ('khối ngoại HPG mua bán ròng'). "
                     "Use 'market_brief' ONLY when the user wants the full pre-market/session newsletter "
                     "('bản tin thị trường', 'tổng quan thị trường hôm nay'). "
+                    "Use 'closing_commentary' for an end-of-session market commentary ('nhận định cuối phiên', 'tổng kết phiên hôm nay', 'thị trường chiều nay thế nào'). "
                     "Use 'market_data' for a SPECIFIC market-wide fact: top gainers/losers ('mã nào tăng mạnh nhất'), "
                     "index close ('VN-Index đóng cửa bao nhiêu điểm'), market-wide foreign net buy/sell ranking (not one named stock), top liquidity, "
                     "top market cap, or 'liệt kê các mã ngành X'. "
+                    "Routing rules (decide by meaning, not keywords):\n" + ROUTING_RULES + "\n"
                     "Use 'screening' for filter/scan queries (ROE > x, P/E < y, RSI < z) — "
                     "any 'lọc/lọc cổ phiếu/filter/screen' query is screening even when it "
                     "names a technical indicator like RSI. "
@@ -113,6 +116,9 @@ AGENT_RUN_TOOL: dict = {
                 ),
                 "items": {"type": "string", "enum": ["fx", "commodities", "gold", "sector"]},
             },
+            "rag_topics": RAG_TOPICS_SCHEMA,
+            "risk_flags": RISK_FLAGS_SCHEMA,
+            "language": LANGUAGE_SCHEMA,
             "screening": {
                 "type": "array",
                 "description": (
@@ -190,11 +196,11 @@ OUT_OF_SCOPE_TOOL: dict = {
     "name": "out_of_scope",
     "description": (
         "Use when the user asks about a financial subject OUTSIDE Vietnamese equities, OR asks for any "
-        "non-financial task (poems, stories, code, translation, weather, cooking): "
+        "non-financial task (poems, stories, code, translation, weather, cooking, sports): "
         "crypto/bitcoin, US or foreign stocks (Apple, Tesla, ...), or non-VND forex "
         "(EUR/USD, USD/JPY, GBP/USD — pairs with no VND leg). "
-        "VND-related FX (USD/VND, EUR/VND, tỷ giá USD) is IN scope — use needs_agent_run "
-        "with intent=macro_sector instead of this tool. "
+        "VND-related FX (USD/VND, EUR/VND, tỷ giá USD) and domestic gold (SJC) / oil / commodity prices "
+        "are IN scope — use needs_agent_run with intent=macro_sector instead of this tool. "
         "Reply politely that you only cover Vietnamese listed securities "
         "(HOSE/HNX/UPCOM) and cannot analyze this subject."
     ),
@@ -211,6 +217,23 @@ OUT_OF_SCOPE_TOOL: dict = {
             },
         },
         "required": ["text"],
+    },
+}
+
+MARKET_RULES_TOOL: dict = {
+    "name": "market_rules_answer",
+    "description": (
+        "Use for questions about Vietnamese stock-market TRADING RULES that need no market data: "
+        "price limits (biên độ, giá trần/sàn/tham chiếu), settlement cycle (T+2), lot size (lô chẵn/lẻ), "
+        "tick size (bước giá), trading sessions (ATO/ATC/giờ giao dịch), fees and taxes. "
+        "NOT for a specific stock's current price or limit-up status — that is needs_agent_run."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "reason": {"type": "string", "description": "One short sentence naming the rule asked about."},
+        },
+        "required": [],
     },
 }
 
@@ -259,6 +282,11 @@ DECOMPOSE_TOOL: dict = {
                             "description": "Self-contained query for the agent segment.",
                         },
                         "time_context": {"type": "object"},
+                        "market_topics": {"type": "array", "items": {"type": "string"}},
+                        "macro_topics": {"type": "array", "items": {"type": "string"}},
+                        "rag_topics": RAG_TOPICS_SCHEMA,
+                        "risk_flags": RISK_FLAGS_SCHEMA,
+                        "language": LANGUAGE_SCHEMA,
                     },
                     "required": ["kind"],
                 },
@@ -298,6 +326,9 @@ class RouteResult(TypedDict, total=False):
     screening: list  # present when type == "agent" — [{indicator, op, threshold}, ...] for screening
     market_topics: list  # present when intent == "market_data" — data blocks the question needs
     macro_topics: list  # present when intent == "macro_sector" — data blocks the question needs
+    rag_topics: list  # present when intent == "rag_qa" — extra data blocks (dividend, quarterly, ...)
+    risk_flags: list  # advice / personal / prediction — drives disclaimers
+    language: str   # "vi" | "en" — reply language
     time_context: dict  # present when type == "agent" — {anchor, start_date, end_date, explicit}
     text: str       # present when type == "text"
     segments: list[dict]  # present when type == "mixed" — list[Segment]
@@ -309,42 +340,31 @@ _ROUTE_ERROR_TEXT = (
 )
 
 
-def _inject_last_context(system_prompt: str, focus: Focus, inherit_intent: bool = True) -> str:
-    """Append the prior turn's focus (all tickers, and intent only for bare continuations).
+def _inject_last_context(system_prompt: str, focus: Focus) -> str:
+    """Append the prior turn's focus (all tickers + intent) and let the LLM decide the carry-forward.
 
-    inherit_intent=True  → bare continuation ("phân tích sâu hơn"): the router inherits
-                           the prior intent AND subject.
-    inherit_intent=False → the current query names its own financial action: inject ONLY
-                           the subject (tickers) for resolution, and let the router classify
-                           the intent fresh. This is the deterministic guard that prevents
-                           a follow-up like "giá cổ phiếu X?" after a P/E turn from being
-                           inherited as `valuation` — prompt hints alone were not enough.
-
-    The subject note lists ALL prior tickers, so a continuation after a comparison keeps
-    every ticker instead of collapsing to the single first one.
+    No phrase list: the router judges whether the current message is a bare follow-up
+    ("phân tích sâu hơn" → inherit intent and subject) or names its own financial action
+    ("giá cổ phiếu X?" after a P/E turn → classify a NEW intent, never inherit `valuation`).
+    The subject note lists ALL prior tickers, so a follow-up after a comparison keeps every
+    ticker in the self-contained query instead of collapsing to the first one.
     """
     subject = ", ".join(focus.tickers) if focus.tickers else (focus.sector or "")
     parts = []
     if subject:
         parts.append(f"chủ thể '{subject}'")
-    if inherit_intent and focus.intent:
+    if focus.intent:
         parts.append(f"intent '{focus.intent}'")
     if not parts:
         return system_prompt
-    if inherit_intent:
-        note = (
-            "\n\nLượt trước: " + ", ".join(parts) + ".\n"
-            "Nếu tin nhắn hiện tại là follow-up chỉ yêu cầu tiếp tục/đào sâu chủ thể cũ "
-            "(ví dụ 'phân tích sâu hơn', 'phân tích thêm', 'chi tiết hơn') mà không nêu chủ thể mới, "
-            "hãy kế thừa intent và chủ thể của lượt trước."
-        )
-    else:
-        note = (
-            "\n\nLượt trước chủ thể: " + ", ".join(parts) + ".\n"
-            "Câu hiện tại nêu một hành động tài chính riêng — hãy phân loại intent MỚI từ chính câu "
-            "hiện tại, KHÔNG kế thừa intent lượt trước. Chỉ dùng chủ thể lượt trước để điền ticker khi "
-            "câu hiện tại không nêu mã."
-        )
+    note = (
+        "\n\nLượt trước: " + ", ".join(parts) + ".\n"
+        "Nếu tin nhắn hiện tại chỉ là follow-up yêu cầu tiếp tục/đào sâu chủ thể cũ mà không nêu "
+        "chủ thể mới (ví dụ 'phân tích sâu hơn', 'chi tiết hơn'), hãy kế thừa intent và TOÀN BỘ chủ thể "
+        "của lượt trước vào query tự đủ nghĩa. Nếu tin nhắn nêu một hành động tài chính riêng, hãy phân "
+        "loại intent MỚI từ chính câu hiện tại, KHÔNG kế thừa intent lượt trước; chỉ dùng chủ thể lượt "
+        "trước để điền ticker khi câu hiện tại không nêu mã."
+    )
     return system_prompt + note
 
 
@@ -435,30 +455,18 @@ def _parse_agent_fields(
     ticker, reason = _validate_ticker_with_reason(inp.get("ticker"), inp.get("reason", ""))
     time_context = _parse_time_context(inp.get("time_context"))
     q = inp.get("query") or query_fallback
-    if kind == "continue" and entities:
-        # Bare continuation: force the full prior ticker list so a comparison turn's
-        # 2nd/3rd ticker survives even if the LLM dropped it in `query`.
-        tickers = list(entities)
-        if not ticker:
-            ticker = tickers[0]
+    # Honor focus.py's deterministic "did the user name a new subject" answer first
+    # (`entities` from resolve_focus), else the raw query. The LLM's rewrite can
+    # swallow a new subject ("còn vnm", bare "FPT" after a prior ticker) into the
+    # prior turn's ticker — never trust it over the deterministic extraction.
+    det = entities or extract_focus_entities(query_fallback)
+    if det:
+        tickers = list(det)
+        ticker = ticker if (ticker and ticker in det) else det[0]
     else:
-        # Honor focus.py's deterministic "did the user name a new subject" answer first
-        # (`entities` from resolve_focus), else the raw query. The LLM's rewrite can
-        # swallow a new subject ("còn vnm", bare "FPT" after a prior ticker) into the
-        # prior turn's ticker — never trust it over the deterministic extraction.
-        det = entities or extract_focus_entities(query_fallback)
-        if det:
-            tickers = list(det)
-            ticker = ticker if (ticker and ticker in det) else det[0]
-        else:
-            tickers = extract_focus_entities(q) or ([ticker] if ticker else [])
+        tickers = extract_focus_entities(q) or ([ticker] if ticker else [])
     sector = "" if tickers else extract_focus_sector(q)
     screening = inp.get("screening") or None
-    # Deterministic overrides on the verbatim question (market-wide asks, indicator asks,
-    # dividends/quarters ...) — the LLM's intent is not trusted for these shapes.
-    intent, screening, rule_reason = override_intent(query_fallback or q, intent, tickers, screening)
-    if rule_reason:
-        reason = f"{reason} [{rule_reason}]".strip()
     return {
         "intent": intent,
         "ticker": ticker,
@@ -468,6 +476,9 @@ def _parse_agent_fields(
         "screening": screening,
         "market_topics": [t for t in (inp.get("market_topics") or []) if isinstance(t, str)],
         "macro_topics": [t for t in (inp.get("macro_topics") or []) if isinstance(t, str)],
+        "rag_topics": clean_enum_list(inp.get("rag_topics"), RAG_TOPICS),
+        "risk_flags": clean_enum_list(inp.get("risk_flags"), RISK_FLAGS),
+        "language": clean_language(inp.get("language")),
         "time_context": time_context,
         "reason": reason,
     }
@@ -488,21 +499,6 @@ def _fallback_classify(query: str, history: list[dict], focus: Focus | None = No
     if focus:
         kind, entities = resolve_focus(query, focus)
 
-    if kind == "continue" and focus and focus.intent:
-        # Bare continuation — carry the prior intent + whole ticker list forward verbatim,
-        # reusing the prior self-contained query (this path never asks the LLM for one).
-        tickers = list(entities)  # == prior.tickers (empty for a sector-only focus)
-        return RouteResult(
-            type="agent",
-            intent=focus.intent,
-            ticker=tickers[0] if tickers else "",
-            tickers=tickers,
-            sector=focus.sector,
-            query=focus.query or query,
-            time_context=_parse_time_context(None),
-            reason="fallback_classify_continue",
-        )
-
     try:
         from agents.classifier import classify_hybrid
         r = classify_hybrid(query, messages=history)
@@ -519,19 +515,19 @@ def _fallback_classify(query: str, history: list[dict], focus: Focus | None = No
             ticker = tickers[0]
         elif ticker:
             tickers = [ticker]
-        intent, screening, rule_reason = override_intent(query, r.intent, tickers, r.screening)
-        if rule_reason:
-            reason = f"{reason} [{rule_reason}]".strip()
         return RouteResult(
             type="agent",
-            intent=intent,
+            intent=r.intent,
             ticker=ticker,
             tickers=tickers,
             sector="" if tickers else extract_focus_sector(query),
             query=query,
-            screening=screening,
+            screening=r.screening,
             market_topics=list(getattr(r, "market_topics", None) or []),
             macro_topics=list(getattr(r, "macro_topics", None) or []),
+            rag_topics=list(getattr(r, "rag_topics", None) or []),
+            risk_flags=list(getattr(r, "risk_flags", None) or []),
+            language=clean_language(getattr(r, "language", None)),
             time_context=_parse_time_context(None),
             reason=reason,
         )
@@ -552,26 +548,6 @@ def _trace(decision: str, intent: str = "", ticker: str = "", fallback_used: boo
         })
     except Exception:
         pass
-
-
-def _screening_route(query: str) -> RouteResult:
-    """Deterministic screening route for "lọc/filter/screen" queries the LLM misrouted.
-
-    Extracts numeric filters (P/E, ROE, RSI, ...) via regex when present. Never calls the LLM.
-    """
-    from agents.intents.screening import _parse_filters
-    filters = _parse_filters(query) or None
-    return RouteResult(
-        type="agent",
-        intent="screening",
-        ticker="",
-        tickers=[],
-        sector=extract_focus_sector(query),
-        query=query,
-        screening=filters,
-        time_context=_parse_time_context(None),
-        reason="screening:deterministic",
-    )
 
 
 _MARKET_RULES_SHEET = """\
@@ -632,42 +608,14 @@ def llm_route(
     Returns:
         RouteResult with type="agent" (needs_agent_run called) or type="text" (direct_reply called).
     """
-    # Deterministic off-topic gate (poems, code, translation, weather ...) — no LLM call, so
-    # the router can never "helpfully" answer a non-financial task via direct_reply.
-    if is_off_topic(query):
-        _trace("out_of_scope", deterministic=True)
-        return RouteResult(type="text", text=off_topic_reply(query), reason="guardrail:off_topic")
-
-    # Gold / SJC / oil prices: macro_sector already fetches them (same data as the market brief).
-    # Decided here so the LLM can never refuse them as "not a stock".
-    from agents.intent_rules import _COMMODITY_RE, _CRYPTO_RE
-    if _COMMODITY_RE.search(query) and not _CRYPTO_RE.search(query):
-        _trace("needs_agent_run", intent="macro_sector", deterministic=True)
-        return RouteResult(
-            type="agent", intent="macro_sector", ticker=None, tickers=[], sector="",
-            query=query, screening=None, time_context=_parse_time_context(None),
-            reason="rule:commodity→macro_sector",
-        )
-
-    # Trading-rule knowledge (price limits, T+2, sessions ...): the report RAG has no such content,
-    # so it would answer "out of scope". Answer from the fixed rule sheet instead.
-    from agents.intent_rules import MARKET_RULES_RE
-    if MARKET_RULES_RE.search(query) and not extract_focus_entities(query):
-        reply = _market_rules_reply(query, client)
-        if reply:
-            _trace("text", intent="market_rules", deterministic=True)
-            return RouteResult(type="text", text=reply, reason="rule:market_rules_knowledge")
-
     kind = "fresh"
     entities: list[str] = []
     if focus:
-        # Resolve carry-forward deterministically (no LLM). A message naming a new ticker
-        # is FRESH even if it also carries a continuation phrase — never inherited.
+        # A message naming a new ticker is FRESH — never inherited from the prior focus.
         kind, entities = resolve_focus(query, focus)
-        if kind == "continue":
-            system_prompt = _inject_last_context(system_prompt, focus, inherit_intent=True)
-        elif kind == "ambiguous":
-            system_prompt = _inject_last_context(system_prompt, focus, inherit_intent=False)
+        if kind == "ambiguous":
+            # No entity named: the LLM decides whether this inherits the prior intent+subject.
+            system_prompt = _inject_last_context(system_prompt, focus)
         # "fresh" → no injection: the query names its own entity, prior focus irrelevant.
 
     # Anchor time resolution to today so the router can map relative phrases to dates.
@@ -709,7 +657,7 @@ def llm_route(
         resp = client.generate(
             messages=msgs,
             system=system_prompt,
-            tools=[AGENT_RUN_TOOL, DIRECT_REPLY_TOOL, OUT_OF_SCOPE_TOOL, DECOMPOSE_TOOL],
+            tools=[AGENT_RUN_TOOL, DIRECT_REPLY_TOOL, OUT_OF_SCOPE_TOOL, DECOMPOSE_TOOL, MARKET_RULES_TOOL],
             max_tokens=max_tokens,
             temperature=0,
         )
@@ -719,19 +667,19 @@ def llm_route(
 
     if resp.tool_calls:
         tc = resp.tool_calls[0]
-        # Deterministic guard: a screening query must route via needs_agent_run(screening),
-        # never decompose/direct_reply — the LLM can misread "lọc nhiều mã" as a multi-task
-        # decompose. out_of_scope is respected (a "lọc cổ phiếu Mỹ" decline must stay a
-        # decline). Force a screening agent route instead.
-        if is_screening_query(query) and tc.name not in ("needs_agent_run", "out_of_scope"):
-            _trace("screening", deterministic=True)
-            return _screening_route(query)
         if tc.name == "needs_agent_run":
             fields = _parse_agent_fields(tc.input, kind=kind, entities=entities, query_fallback=query)
             if fields:
                 _trace("agent", intent=fields["intent"], ticker=fields["ticker"])
                 return RouteResult(type="agent", **fields)
             # needs_agent_run returned an invalid intent — fall through to re-classify.
+        elif tc.name == "market_rules_answer":
+            # Trading-rule knowledge (price limits, T+2, sessions ...): the report RAG has no such
+            # content, so answer from the fixed rule sheet. Never a blank reply.
+            reply = _market_rules_reply(query, client) or _ROUTE_ERROR_TEXT
+            _trace("text", intent="market_rules")
+            return RouteResult(type="text", text=reply,
+                               reason=f"market_rules:{tc.input.get('reason', '')}".rstrip(":"))
         elif tc.name == "decompose":
             segments = []
             for raw in (tc.input.get("segments") or []):
@@ -765,6 +713,7 @@ def llm_route(
             _trace("out_of_scope")
             return RouteResult(
                 type="text",
+                intent="out_of_scope",  # label only (UI/trace); the route still skips the agent
                 text=tc.input.get("text", "").strip() or OUT_OF_SCOPE_REPLY,
                 reason=tc.input.get("reason", "out_of_scope"),
             )
@@ -774,11 +723,6 @@ def llm_route(
             if r:
                 _trace(r.get("type", "agent"), intent=r.get("intent", ""), ticker=r.get("ticker", ""), fallback_used=True)
                 return r
-            if not is_social_turn(query) and not has_finance_terms(query):
-                # Not a greeting/thanks and no finance vocabulary: the LLM is about to
-                # free-answer a non-financial request. Decline instead.
-                _trace("out_of_scope", deterministic=True)
-                return RouteResult(type="text", text=off_topic_reply(query), reason="guardrail:direct_reply_off_topic")
             _trace("text")
             text = tc.input.get("text", "").strip()
             if not text:
@@ -798,9 +742,6 @@ def llm_route(
 
     # Genuine conversational turn (classifier says "conversation") or classifier failed.
     text = (resp.text or "").strip()
-    if text and not is_social_turn(query) and not has_finance_terms(query):
-        _trace("out_of_scope", fallback_used=True, deterministic=True)
-        return RouteResult(type="text", text=off_topic_reply(query), reason="guardrail:free_text_off_topic")
     if text:
         _trace("text", fallback_used=True)
         return RouteResult(type="text", text=text, reason="fallback_free_text")

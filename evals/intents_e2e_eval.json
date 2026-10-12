@@ -1,0 +1,312 @@
+[
+  {
+    "id": "price_action",
+    "query": "giá và dòng tiền HPG hôm nay",
+    "route_type": "agent",
+    "intent": "price_action",
+    "tickers": [
+      "HPG"
+    ],
+    "market_topics": [],
+    "rag_topics": [],
+    "screening": null,
+    "errors": [],
+    "report": "## Giá và dòng tiền HPG — phiên 2026-10-12\n\n**Giá**\n- Giá đóng cửa: **20,700 VND**, tăng **2.99%**\n- Vốn hóa ước tính: **174,769 tỷ VND** (trên 8,442,964,520 cp niêm yết × 20,700 VND)\n\n**Thanh khoản**\n- Khối lượng phiên gần nhất: **31,127,600 cp**, bằng **171.6%** so với MA20 — mức đột biến\n\n**Dòng tiền khối ngoại**\n- Mua: **193 tỷ VND**\n- Bán: **65 tỷ VND**\n- Ròng: **+128 tỷ VND**\n\nDữ liệu tính đến phiên **2026-10-12**.",
+    "final_intent": "price_action",
+    "seconds": 11.0
+  },
+  {
+    "id": "price_history",
+    "query": "5 phiên gần nhất của VIC",
+    "route_type": "agent",
+    "intent": "price_action",
+    "tickers": [
+      "VIC"
+    ],
+    "market_topics": [],
+    "rag_topics": [],
+    "screening": null,
+    "errors": [],
+    "report": "## VIC — Diễn biến 5 phiên gần nhất\n\nDữ liệu tính đến phiên **2026-10-12**.\n\n| Ngày | Đóng cửa (VND) | Thay đổi | KLGD (cp) |\n|---|---|---|---|\n| 2026-10-06 | 232,000 | +0.00% | 4,217,500 |\n| 2026-10-07 | 230,000 | -0.86% | 3,995,000 |\n| 2026-10-08 | 228,000 | -0.87% | 3,302,100 |\n| 2026-10-09 | 225,500 | -1.10% | 3,032,200 |\n| 2026-10-12 | 219,000 | -2.88% | 2,605,700 |\n\n**Bổ sung từ ngữ cảnh cho phiên 2026-10-12:**\n- Khối lượng 2,605,700 cp, bằng 76.8% so với MA20 — mức bình thường.\n- Khối ngoại: mua 47 tỷ, bán 93 tỷ, ròng -46 tỷ.\n- Vốn hóa ước tính 1,699,919 tỷ VND (7,762,186,429 cp niêm yết × 219,000 VND).",
+    "final_intent": "price_action",
+    "seconds": 9.4
+  },
+  {
+    "id": "technical",
+    "query": "phân tích kỹ thuật HPG: RSI, MACD, xu hướng",
+    "route_type": "agent",
+    "intent": "technical_analysis",
+    "tickers": [
+      "HPG"
+    ],
+    "market_topics": [],
+    "rag_topics": [],
+    "screening": null,
+    "errors": [],
+    "report": "## Phân tích kỹ thuật HPG — dữ liệu phiên mới nhất\n\n### RSI(14)\n- **RSI(14) = 48.6** → vùng trung tính, không rơi vào vùng quá mua (>70) hay quá bán (<30).\n\n### MACD(12,26,9)\n| Thành phần | Giá trị |\n|---|---|\n| MACD | -311.61 |\n| Signal | -340.97 |\n| Histogram | 29.36 |\n\n- MACD vẫn nằm dưới 0 (-311.61), nhưng nằm **trên** đường Signal (-340.97) → histogram dương (29.36). Theo cách đọc trong ngữ cảnh, đây là tín hiệu **xu hướng tăng**.\n\n### Xu hướng\n- **MA(20) = 20,635** → giá hiện tại 20,700 đang **trên** MA(20).\n- **MA(50) = 21,308** → giá đang **dưới** MA(50).\n- **MA(200) = 23,216** → giá đang **dưới** MA(200).\n- **EMA(200) = 22,838** → giá đang **dưới** EMA(200).\n- **ADX(14) = 27.8** → xu hướng mạnh.\n- **Ichimoku Kumo**: SpanA = 21,750, SpanB = 21,900 → giá **dưới** Kumo (bearish).\n\n### Bối cảnh bổ trợ cho xu hướng\n- Giá hiện tại: **20,700**.\n- Hỗ trợ: 20,100 và 19,600. Kháng cự: 21,600; 22,400; 22,650. Mốc tâm lý gần nhất: 21,000.\n- Fibonacci 60 phiên: đỉnh 22,600 (0.0%), đáy 20,004 (100%), mốc vàng 61.8% = 20,996. Giá 20,700 nằm giữa mốc 61.8% và đáy 100%, **chưa thủng đáy 20,004**.\n- Volume = 31,127,600, cao hơn trung bình 100 phiên khoảng **54%**.\n- OBV giảm, dòng tiền phân phối, giá trị hiện tại **-455,262,000**.\n- Mẫu nến phiên cuối: nến tăng thân vừa, chưa có mẫu đặc biệt.",
+    "final_intent": "technical_analysis",
+    "seconds": 13.6
+  },
+  {
+    "id": "rag_qa",
+    "query": "doanh thu HPG năm 2024 bao nhiêu?",
+    "route_type": "agent",
+    "intent": "rag_qa",
+    "tickers": [
+      "HPG"
+    ],
+    "market_topics": [],
+    "rag_topics": [
+      "yearly_metric"
+    ],
+    "screening": null,
+    "errors": [],
+    "report": "Theo ngữ cảnh, số liệu doanh thu của HPG năm 2024 được ghi nhận như sau:\n\n| Chỉ tiêu | Giá trị (tỷ VND) |\n|---|---|\n| Doanh thu bán hàng và cung cấp dịch vụ | 140,561.387448572 |\n| Doanh thu thuần | 138,855.112131387 |\n\nNguồn: chỉ số công bố theo từng năm tài chính (vnstock/KBS).",
+    "final_intent": "rag_qa",
+    "seconds": 7.1
+  },
+  {
+    "id": "rag_dividend",
+    "query": "Cổ tức của HPG năm nay?",
+    "route_type": "agent",
+    "intent": "rag_qa",
+    "tickers": [
+      "HPG"
+    ],
+    "market_topics": [],
+    "rag_topics": [
+      "dividend"
+    ],
+    "screening": null,
+    "errors": [],
+    "report": "## Cổ tức HPG năm 2026 (theo ngày giao dịch không hưởng quyền)\n\n| Ngày GDKHQ | Loại | Chi tiết | Ngày thanh toán |\n|---|---|---|---|\n| 2026-05-11 | Tiền mặt | 500 đồng/cp (cả năm 2025) | 2026-06-03 |\n| 2026-05-25 | Cổ phiếu | Tỷ lệ 10% (100 cp nhận thêm 10 cp) | — |\n\n**Tổng cổ tức tiền mặt năm 2026: 500 đồng/cp.**\n\n**Tỷ suất cổ tức 12 tháng gần nhất:** 500 đồng/cp ÷ 20,700 đồng (giá đóng cửa 2026-10-12) = **2.42%**.\n\n*Nguồn: dữ liệu cổ tức HPG, giá đóng cửa phiên 2026-10-12.*",
+    "final_intent": "rag_qa",
+    "seconds": 12.4
+  },
+  {
+    "id": "valuation",
+    "query": "P/E của HPG so với trung bình ngành thép?",
+    "route_type": "agent",
+    "intent": "valuation",
+    "tickers": [
+      "HPG"
+    ],
+    "market_topics": [],
+    "rag_topics": [],
+    "screening": null,
+    "errors": [],
+    "report": "P/E của HPG là **10.5x**, thấp hơn **trung bình ngành 15.2x** — mức chiết khấu **-31%**. Số liệu định giá cập nhật ngày 12/10/2026 (nguồn: vnstock/KBS, báo cáo năm gần nhất).",
+    "final_intent": "valuation",
+    "seconds": 4.5
+  },
+  {
+    "id": "macro_fx",
+    "query": "Tỷ giá trung tâm hôm nay",
+    "route_type": "agent",
+    "intent": "macro_sector",
+    "tickers": [],
+    "market_topics": [],
+    "rag_topics": [],
+    "screening": null,
+    "errors": [],
+    "report": "## Tỷ giá trung tâm ngày 12/10/2026\n\n- **Tỷ giá trung tâm (NHNN):** 25,621 VND/USD\n- **So với phiên 10/10/2026** (25,629 VND/USD): giảm 8 VND/USD, tương đương -0.03%.\n\n### Tỷ giá Vietcombank cùng ngày (lấy lúc 19:50 12/10/2026)\n\n| Loại | Giá (VND/USD) |\n|---|---|\n| Mua | 25,710 |\n| Bán | 26,120 |\n| Chuyển khoản | 25,740 |\n\nSo với snapshot 2026-10-11, giá mua và bán tại Vietcombank đều tăng 50 VND/USD (+0.19%).",
+    "final_intent": "macro_sector",
+    "seconds": 11.2
+  },
+  {
+    "id": "macro_gold",
+    "query": "Giá vàng SJC hôm nay",
+    "route_type": "agent",
+    "intent": "macro_sector",
+    "tickers": [],
+    "market_topics": [],
+    "rag_topics": [],
+    "screening": null,
+    "errors": [],
+    "report": "## Giá vàng SJC (ngày 2026-10-12)\n\n| Chỉ tiêu | Giá trị |\n|---|---|\n| Mua vào | 141.3 triệu đồng/lượng |\n| Bán ra | 144.3 triệu đồng/lượng |\n| Chênh lệch với giá thế giới | ~12.1 triệu đồng/lượng |\n\n**So với ngày 2026-10-11:**\n- Giá mua: giảm 0.50 triệu đồng/lượng (-0.35%)\n- Giá bán: giảm 0.50 triệu đồng/lượng (-0.35%)",
+    "final_intent": "macro_sector",
+    "seconds": 11.2
+  },
+  {
+    "id": "news",
+    "query": "tin tức về HPG trong 3 ngày gần nhất",
+    "route_type": "agent",
+    "intent": "news_sentiment",
+    "tickers": [
+      "HPG"
+    ],
+    "market_topics": [],
+    "rag_topics": [],
+    "screening": null,
+    "errors": [],
+    "report": "## Tin tức về HPG trong 3 ngày gần nhất (2026-10-09 → 2026-10-12)\n\n| Ngày | Nguồn | Tiêu đề |\n|------|-------|---------|\n| 2026-10-12 | tinnhanhchungkhoan | Hòa Phát (HPG) bán hơn 10,3 triệu tấn thép trong 9 tháng, tăng 39% so với cùng kỳ năm trước |\n| 2026-10-12 | Nhà báo & Công luận | Hòa Phát bán hơn 10,3 triệu tấn thép trong 9 tháng, tăng 39% so với cùng kỳ năm trước |\n| 2026-10-11 | Thời báo ngân hàng | Điểm tựa nội địa: Lợi nhuận doanh nghiệp thép đứng trước 'mùa gặt' |\n\n**Sắc thái thị trường:** Xu hướng TÍCH CỰC — kết quả bán hàng 9 tháng tăng 39% so với cùng kỳ và triển vọng lợi nhuận ngành thép bước vào \"mùa gặt\" cho thấy kết quả kinh doanh và sắc thái ngành đang cải thiện rõ rệt.\n\n*Lưu ý: Trong ngữ cảnh còn có tin ngày 2026-10-12 về ông Phạm Nhật Vượng sở hữu 35,2 tỷ USD, gấp hơn 8,5 lần người giàu thứ hai Việt Nam — tin này không liên quan trực tiếp đến HPG.*",
+    "final_intent": "news_sentiment",
+    "seconds": 15.9
+  },
+  {
+    "id": "investment_case",
+    "query": "HPG có đáng đầu tư không? Bull case và bear case",
+    "route_type": "agent",
+    "intent": "investment_case",
+    "tickers": [
+      "HPG"
+    ],
+    "market_topics": [],
+    "rag_topics": [],
+    "screening": null,
+    "errors": [],
+    "report": "# Phân tích HPG (Hòa Phát) — Dữ kiện từ ngữ cảnh\n\n## 1. Giá & Dòng tiền (phiên 2026-10-12)\n\n- Giá đóng cửa: **20,700 VND** (tăng **2.99%**)\n- Khối lượng phiên gần nhất: **31,127,600 cp** = **171.6%** so với MA20 — mức đột biến\n- Khối ngoại: mua **193 tỷ**, bán **65 tỷ**, ròng **+128 tỷ**\n- Vốn hóa ước tính: **174,769 tỷ VND** (8,442,964,520 cp niêm yết × 20,700 VND)\n\n## 2. Kỹ thuật\n\n**Chỉ báo:**\n- RSI(14) = **48.6** → vùng trung tính\n- MACD(12,26,9) = **-311.61**, Signal = **-340.97**, Histogram = **29.36** → xu hướng tăng\n- MA(20) = **20,635** → giá đang trên MA(20)\n- MA(50) = **21,308** → giá đang dưới MA(50)\n- MA(200) = **23,216** → giá đang dưới MA(200)\n- EMA(200) = **22,838** → giá đang dưới EMA(200)\n- ADX(14) = **27.8** → xu hướng mạnh\n- Ichimoku Kumo: SpanA = **21,750**, SpanB = **21,900** → giá dưới Kumo (bearish)\n- Volume = **31,127,600** → cao hơn trung bình 100 phiên ~**54%**\n\n**Hỗ trợ / Kháng cự:**\n- Giá hiện tại: 20,700\n- Hỗ trợ: **20,100**, **19,600**\n- Kháng cự: **21,600**, **22,400**, **22,650**\n- Mốc tâm lý gần nhất: **21,000**\n\n**Dòng tiền:** OBV GIẢM → dòng tiền phân phối (hiện tại: **-455,262,000**)\n\n**Fibonacci 60 phiên:**\n- 0.0% (đỉnh): 22,600\n- 23.6%: 21,987\n- 38.2%: 21,608\n- 50.0%: 21,302\n- 61.8% (vàng): 20,996\n- 100% (đáy): 20,004\n- Vị trí hiện tại: giá 20,700 nằm giữa mốc 61.8% (20,996) và 100% (20,004); CHƯA thủng đáy 20,004\n\n**Mô hình nến:** Nến tăng thân vừa — chưa có mẫu đặc biệt\n\n## 3. Cơ bản & Định giá (cập nhật 12/10/2026, nguồn vnstock/KBS)\n\n| Mã | P/E | P/B | ROE | EPS |\n|---|---|---|---|---|\n| **HPG** | 10.5 | 1.35 | 12.7% | 1,967 |\n| HSG | 11.3 | 0.73 | 6.6% | 910 |\n| NKG | 23.7 | 0.64 | 2.9% | 418 |\n| **TB ngành** | **15.2** | - | 7.4% | - |\n\n**Các chỉ tiêu đã tính sẵn:**\n- Tăng trưởng Doanh thu YoY: **12.4%** — TĂNG\n- Tăng trưởng LNST YoY: **28.6%** — TĂNG MẠNH\n- Biên lợi nhuận gộp: **15.7%**\n- Biên lợi nhuận ròng: **9.9%**\n- D/E Ratio: **0.70x** — VỪA PHẢI\n- ROA: **6.4%**\n- EV/EBITDA: **9.7x**\n\n**So sánh định giá:**\n- P/E 10.5x **DISCOUNT -31%** so với trung bình ngành 15.2x → xếp hạng **1/3** trong nhóm: thấp hơn HSG (11.3), NKG (23.7)\n- ROE 12.7% **CAO HƠN** trung bình ngành 7.4% (**+5.3pp**) → xếp hạng **1/3** trong nhóm: cao hơn HSG (6.6), NKG (2.9)\n- EPS 1,967 → xếp **1/3** (cao hơn HSG 910, NKG 418)\n\n## 4. Cổ tức & Kết quả kinh doanh gần nhất\n\n| kind | ex_date | record_date | payment_date | cash_per_share | stock_ratio_pct | note |\n|---|---|---|---|---|---|---|\n| stock | 2026-05-25 | 2026-05-26 | None | None | 10.0 | Phát hành cổ phiếu - Trả Cổ tức bằng Cổ phiếu tỉ lệ 10.0% |\n| cash | 2026-05-11 | 2026-05-12 | 2026-06-03 | 500.0 | None | Trả cổ tức bằng tiền mặt - Cả năm 2025 - 500 VND |\n| stock | 2025-06-26 | 2025-06-27 | None | None | 20.0 | Phát hành cổ phiếu - Trả Cổ tức bằng Cổ phiếu tỉ lệ 20.0% |\n| stock | 2024-05-23 | 2024-05-24 | None | None | 10.0 | Phát hành cổ phiếu - Cổ phiếu thưởng tỉ lệ 10.0% |\n| stock | 2022-06-17 | 2022-06-20 | None | None | 30.0 | Phát hành cổ phiếu - Trả Cổ tức bằng Cổ phiếu tỉ lệ 30.0% |\n| cash | 2022-06-17 | 2022-06-20 | 2022-07-06 | 500.0 | None | Trả cổ tức bằng tiền mặt - Cả năm 2021 - 500 VND |\n\n## 5. Tin tức & Sentiment\n\n**Tin tức:**\n- [tinnhanhchungkhoan | 2026-10-12] Hòa Phát (HPG) bán hơn **10,3 triệu tấn thép** trong 9 tháng, tăng **39%** so với cùng kỳ năm trước\n- [Nhà báo & Công luận | 2026-10-12] Hòa Phát bán hơn 10,3 triệu tấn thép trong 9 tháng, tăng 39% so với cùng kỳ năm trước\n- [Thời báo ngân hàng | 2026-10-11] Điểm tựa nội địa: Lợi nhuận doanh nghiệp thép đứng trước 'mùa gặt'\n- [Nhà báo & Công luận | 2026-10-12] Ông Phạm Nhật Vượng sở hữu 35,2 tỷ USD, gấp hơn 8,5 lần người giàu thứ hai Việt Nam\n\n**Sentiment:** Xu hướng **TÍCH CỰC** — HPG ghi nhận sản lượng bán thép 9 tháng tăng mạnh 39% so với cùng kỳ và được vinh danh trong Top 10 Thương hiệu mạnh Việt Nam, cho thấy hoạt động kinh doanh cốt lõi và uy tín thương hiệu đều khởi sắc.\n\n## 6. Vĩ mô & Ngành\n\n**Tỷ giá:**\n- Tỷ giá trung tâm (NHNN, 12/10/2026): **25,621 VND/USD**\n- Vietcombank (19:51 12/10/2026): mua **25,710** | bán **26,120** | CK **25,740 VND**\n- Tỷ giá trung tâm so với phiên 10/10/2026 (25,629): **-8 (-0.03%)** VND/USD\n- Vietcombank so với snapshot 2026-10-11: mua **+50 (+0.19%)**, bán **+50 (+0.19%)** VND/USD\n\n**Hàng hóa thế giới:**\n- Gold: **4,184.50 USD/oz** (-0.75%)\n- Silver: **60.85 USD/oz** (+0.29%)\n- WTI Crude: **93.74 USD/bbl** (+2.06%)\n- Brent Crude: **106.80 USD/bbl** (+1.99%)\n\n**Vàng SJC trong nước:** mua **141.3** – bán **144.3** triệu đồng/lượng (chênh vs thế giới ~**12.1 triệu đồng/lượng**); so với snapshot 2026-10-11: mua **-0.50 (-0.35%)**, bán **-0.50 (-0.35%)** triệu đồng/lượng\n\n**Hiệu suất nhóm ngành (phiên gần nhất):**\n- Vật liệu: **+3.14%** (29 mã, ~807 tỷ)\n- Xây dựng: +2.12% (31 mã, ~163 tỷ)\n- Dệt may: +1.66% (11 mã, ~57 tỷ)\n- Ngân hàng: +1.34% (24 mã, ~3447 tỷ)\n- Hàng không: +0.17% (2 mã, ~132 tỷ)\n- Tiện ích: +0.17% (34 mã, ~206 tỷ)\n- Du lịch: +0.12% (6 mã, ~2 tỷ)\n- Chứng khoán: +0.09% (23 mã, ~815 tỷ)\n- Tài chính: -0.12% (2 mã, ~8 tỷ)\n- Bán lẻ: -0.38% (23 mã, ~287 tỷ)\n- Bảo hiểm: -0.41% (8 mã, ~46 tỷ)\n- Thực phẩm & Đồ uống: -0.71% (29 mã, ~699 tỷ)\n- Logistics: -0.92% (35 mã, ~609 tỷ)\n- Nông nghiệp: -1.05% (17 mã, ~149 tỷ)\n- Bất động sản: -1.08% (64 mã, ~1782 tỷ)\n- Hóa chất: -1.14% (18 mã, ~149 tỷ)\n- Công nghệ: -1.26% (10 mã, ~363 tỷ)\n- Công nghiệp: -1.43% (34 mã, ~157 tỷ)\n- Dầu khí: -1.80% (12 mã, ~646 tỷ)\n- Y tế: -2.22% (15 mã, ~35 tỷ)\n- Hàng tiêu dùng: -6.92% (1 mã, ~346 tỷ)\n\n## 7. Bull case (dữ kiện ủng hộ)\n\n- Sản lượng bán thép 9 tháng đạt **hơn 10,3 triệu tấn**, tăng **39%** so với cùng kỳ\n- Tăng trưởng LNST YoY **28.6%** — mức tăng mạnh; doanh thu YoY **+12.4%**\n- Định giá P/E **10.5x**, chiết khấu **-31%** so với trung bình ngành **15.2x**; xếp hạng 1/3 nhóm so sánh (thấp hơn HSG 11.3 và NKG 23.7)\n- ROE **12.7%** cao hơn trung bình ngành 7.4% (**+5.3pp**) và cao hơn HSG (6.6%), NKG (2.9%)\n- EPS **1,967** cao nhất nhóm so sánh (HSG 910, NKG 418)\n- D/E **0.70x** ở mức vừa phải; ROA **6.4%**\n- Khối ngoại mua ròng **+128 tỷ** trong phiên\n- Nhóm ngành Vật liệu dẫn dắt hiệu suất phiên gần nhất **+3.14%**\n- Sentiment **TÍCH CỰC**; được vinh danh Top 10 Thương hiệu mạnh Việt Nam\n- MACD histogram dương (**29.36**), ADX **27.8** cho thấy xu hướng mạnh; giá trên MA(20)\n- Chưa thủng đáy Fibonacci 60 phiên tại **20,004**\n- Lịch sử trả cổ tức đều đặn (tiền mặt 500 VND/năm 2021, 2025; cổ phiếu các năm 2022, 2024, 2025, 2026)\n\n## 8. Bear case (dữ kiện rủi ro)\n\n- Giá **20,700** đang dưới MA(50) **21,308**, dưới MA(200) **23,216** và dưới EMA(200) **22,838**\n- Giá dưới Kumo (SpanA 21,750, SpanB 21,900) → tín hiệu bearish theo Ichimoku\n- OBV GIẢM, dòng tiền phân phối (**-455,262,000**)\n- RSI(14) **48.6** chỉ ở vùng trung tính, chưa xác nhận động lực\n- Giá còn cách đỉnh Fibonacci 60 phiên (22,600) khá xa; nằm giữa mốc 61.8% và đáy\n- Khối lượng **171.6% MA20** — mức đột biến có thể hàm ý áp lực cung\n- P/B **1.35** cao hơn HSG (0.73) và NKG (0.64)\n- Vĩ mô: tỷ giá trung tâm giảm nhẹ **-0.03%**; Brent Crude **+1.99%** và WTI **+2.06%** (chi phí năng lượng tăng có thể ảnh hưởng sản xuất thép)\n- Nhiều nhóm ngành khác trong phiên giảm (Bất động sản -1.08%, Hóa chất -1.14%, Công nghiệp -1.43%, Dầu khí -1.80%, Y tế -2.22%, Hàng tiêu dùng -6.92%)\n\n⚠️ Thông tin chỉ mang tính tham khảo, không phải khuyến nghị đầu tư. Quyết định mua/bán thuộc về bạn — hãy tự đánh giá khẩu vị rủi ro và đa dạng hóa danh mục.",
+    "final_intent": "investment_case",
+    "seconds": 33.3
+  },
+  {
+    "id": "screening_rsi",
+    "query": "lọc cổ phiếu RSI dưới 30",
+    "route_type": "agent",
+    "intent": "screening",
+    "tickers": [],
+    "market_topics": [],
+    "rag_topics": [],
+    "screening": [
+      {
+        "indicator": "rsi",
+        "op": "<",
+        "threshold": 30
+      }
+    ],
+    "errors": [],
+    "report": "## Kết quả lọc cổ phiếu RSI dưới 30\n\n**Dữ liệu kỹ thuật tính đến phiên 2026-10-12.**\n\nToàn thị trường có **52 mã** thỏa điều kiện RSI < 30. Dưới đây là 20 mã đầu tiên theo thứ tự xếp hạng:\n\n| # | Mã | RSI |\n|---|-----|------|\n| 1 | KOS | 1.27 |\n| 2 | BTT | 4.89 |\n| 3 | PNC | 11.09 |\n| 4 | NO1 | 12.52 |\n| 5 | AAT | 13.77 |\n| 6 | DRH | 14.52 |\n| 7 | PNJ | 16.57 |\n| 8 | FPT | 17.16 |\n| 9 | EVG | 17.23 |\n| 10 | AGG | 18.36 |\n| 11 | FIR | 19.02 |\n| 12 | DC4 | 19.17 |\n| 13 | GEG | 19.42 |\n| 14 | CMG | 19.52 |\n| 15 | CCL | 19.83 |\n| 16 | AGR | 19.85 |\n| 17 | HNG | 19.90 |\n| 18 | TPC | 20.76 |\n| 19 | LPS | 21.67 |\n| 20 | TSA | 21.85 |\n\nTrong nhóm hiển thị, KOS có RSI thấp nhất (1.27) và TSA có RSI cao nhất (21.85).",
+    "final_intent": "screening",
+    "seconds": 10.5
+  },
+  {
+    "id": "screening_fund",
+    "query": "lọc cổ phiếu ngành thép có ROE trên 10",
+    "route_type": "agent",
+    "intent": "screening",
+    "tickers": [],
+    "market_topics": [],
+    "rag_topics": [],
+    "screening": [
+      {
+        "indicator": "roe",
+        "op": ">",
+        "threshold": 10
+      }
+    ],
+    "errors": [],
+    "report": "Kết quả lọc cổ phiếu ngành thép có ROE trên 10: **1 mã thỏa mãn**.\n\n| Mã | ROE (%) |\n|---|---|\n| HPG | 12.69 |\n\nNguồn: dữ liệu sàng lọc ngành thép, phiên/ngày 2026-10-12.",
+    "final_intent": "screening",
+    "seconds": 4.3
+  },
+  {
+    "id": "volume_spike",
+    "query": "Cổ phiếu nào có khối lượng đột biến hôm nay?",
+    "route_type": "agent",
+    "intent": "screening",
+    "tickers": [],
+    "market_topics": [],
+    "rag_topics": [],
+    "screening": [
+      {
+        "indicator": "volume",
+        "op": ">",
+        "threshold": 1.5
+      }
+    ],
+    "errors": [],
+    "report": "## Cổ phiếu có khối lượng đột biến — phiên 2026-10-12\n\nLọc toàn thị trường với điều kiện khối lượng > 1.5 lần trung bình 20 phiên: **46 mã thỏa điều kiện**. Dưới đây là 20 mã đầu theo thứ tự xếp hạng.\n\n| # | Mã | Khối lượng (lần TB20 phiên) |\n|---|-----|------------------------------|\n| 1 | BCE | 15.11 |\n| 2 | VRC | 8.57 |\n| 3 | MCM | 6.21 |\n| 4 | ACV | 3.43 |\n| 5 | HQC | 3.28 |\n| 6 | KSB | 3.22 |\n| 7 | DBD | 3.20 |\n| 8 | SKG | 3.09 |\n| 9 | VPG | 2.95 |\n| 10 | NKG | 2.93 |\n| 11 | CMX | 2.84 |\n| 12 | TCL | 2.82 |\n| 13 | CRE | 2.77 |\n| 14 | SGR | 2.69 |\n| 15 | CSV | 2.67 |\n| 16 | HSG | 2.60 |\n| 17 | TNG | 2.57 |\n| 18 | MZG | 2.45 |\n| 19 | LSS | 2.45 |\n| 20 | ABS | 2.41 |\n\n**Nguồn:** Kết quả lọc toàn thị trường theo khối lượng, dữ liệu kỹ thuật tính đến phiên **2026-10-12**. Ngoài 20 mã hiển thị, còn 26 mã khác thỏa điều kiện khối lượng > 1.5 lần TB20 phiên nhưng không được liệt kê trong bảng xếp hạng trên.",
+    "final_intent": "screening",
+    "seconds": 9.6
+  },
+  {
+    "id": "market_brief",
+    "query": "Bản tin thị trường hôm nay",
+    "route_type": "agent",
+    "intent": "market_brief",
+    "tickers": [],
+    "market_topics": [],
+    "rag_topics": [],
+    "screening": null,
+    "errors": [],
+    "report": "📰 ĐỌC GÌ TRƯỚC GIỜ THỊ TRƯỜNG MỞ CỬA - 12/10/2026\n\n🌍 THỊ TRƯỜNG THẾ GIỚI QUA ĐÊM\n\nPhố Wall tăng với Dow Jones dẫn đầu +0.83% lên 51,654.95, S&P 500 +0.59%, Nasdaq +0.64%. VIX giảm 3.7% về 14.84.\nChâu Á phân hóa: Nikkei 225 -0.02%, KOSPI -2.62%, Shanghai +0.05%, Hang Seng +1.79%.\n\n💛 VÀNG & DẦU\n\nVàng thế giới (XAU): 4,216.30 USD/oz (+1.43%)\nVàng SJC: mua 141.3 – bán 144.3 triệu đồng/lượng (chênh vs thế giới ~12.0 triệu đồng/lượng)\nSo với snapshot 2026-10-11: mua -0.50 (-0.35%), bán -0.50 (-0.35%) triệu đồng/lượng\nWTI: 91.85 USD/thùng (+0.39%) | Brent: 104.72 USD/thùng (+0.42%)\n\n₿ Bitcoin, Ethereum, XRP & SOL\n\nSắc xanh bao trùm thị trường tiền số, ETH dẫn đầu:\n• BTC: 82,871.00 USD (-0.22%)\n• ETH: 2,534.68 USD (+1.28%)\n• XRP: 1.39 USD (-0.20%)\n• SOL: 110.42 USD (+0.92%)\n• Total market cap: ~2.82 nghìn tỷ USD\n\n💵 TỶ GIÁ\n\nTỷ giá trung tâm (NHNN, ngày 12/10/2026): 25,621 VND/USD\nVietcombank (lấy lúc 19:52 12/10/2026) — mua: 25,710 | bán: 26,120 | CK: 25,740 VND\nTỷ giá trung tâm so với phiên 10/10/2026 (25,629): -8 (-0.03%) VND/USD\nVietcombank So với snapshot 2026-10-11: mua +50 (+0.19%), bán +50 (+0.19%) VND/USD\n\n📌 TIN ĐÁNG CHÚ Ý HÔM NAY\n\n• Cựu Phó Thủ tướng Đức được đề cử vào HĐQT một công ty chứng khoán chuẩn bị IPO — tín hiệu hút vốn ngoại và nâng cao quản trị, hỗ trợ nhóm cổ phiếu chứng khoán.\n• Dragon Capital bị giả mạo — rủi ro lừa đảo ảnh hưởng niềm tin nhà đầu tư, cần theo dõi tác động tới dòng tiền vào các quỹ.\n• Công ty chứng khoán \"đua\" tăng vốn — áp lực pha loãng ngắn hạn nhưng củng cố năng lực cho vay margin, tác động nhóm chứng khoán.\n• Cổ phiếu thép nổi sóng, hơn 31 triệu cổ phiếu Hòa Phát được sang tay, Nam Kim tăng sát trần — dòng tiền quay lại nhóm thép, cần theo dõi tính bền vững.\n• Doanh nghiệp đầu tiên trên HOSE công bố BCTC quý 3/2026 lãi hơn 1.200 tỷ, gấp 3 lần cùng kỳ — kết quả tích cực mở màn mùa báo cáo, hỗ trợ tâm lý thị trường.\n• Một cổ phiếu ngân hàng được tự doanh CTCK \"gom\" ròng hơn 200 tỷ đồng phiên đầu tuần — dòng tiền tự doanh vào nhóm ngân hàng, tín hiệu phân hóa ngành.\n• Phó Thủ tướng Hồ Quốc Dũng tiếp lãnh đạo Tập đoàn Pasqal (Pháp), thúc đẩy hợp tác công nghệ lượng tử — mở kỳ vọng cho nhóm cổ phiếu công nghệ, đổi mới sáng tạo.\n\n🗓 Sự kiện:\n• DWC: Trả cổ tức bằng tiền mặt (800đ/cp) (chốt 15/10)\n• NAG: Giao dịch 3.049.523 cp trả cổ tức năm 2025 (chốt 15/10)\n• HEJ: Tổ chức Đại hội đồng cổ đông bất thường năm 2026 (chốt 16/10)\n\n🎯 NHẬN ĐỊNH PHIÊN HÔM NAY\nVN-Index đóng cửa 1.735,09 điểm (-3,88đ, -0,22%), phiên giảm thứ 4 liên tiếp nhưng vẫn giữ vững mốc 1.700, thanh khoản HoSE đạt ~27.543 tỷ đồng. Độ rộng nghiêng nhẹ về bên tăng với 157 mã tăng so với 154 mã giảm, cho thấy dòng tiền không hoàn toàn rút lui mà đang phân hóa rõ nét. Nhóm dẫn dắt gồm Vật liệu +3,1%, Xây dựng +2,1%, Dệt may +1,7% và Ngân hàng +1,3%, trong khi top tăng giá nổi bật là BCE +7,0%, DTT +7,0%, CLW +6,9%, PTC +6,9%, NKG +6,9%; ngược lại KOS -7,0%, PMG -6,9%, PNJ -6,9%, TPC -6,9%, VDP -6,9% chịu áp lực bán mạnh.\n\nVề kỹ thuật, RSI(14) = 34,1 đang tiến sát vùng quá bán, nhưng MACD(12,26,9) = -16,48 với histogram -6,20 vẫn xác nhận xu hướng giảm, giá nằm dưới toàn bộ MA(20) 1.776, MA(50) 1.780, MA(200) 1.798 và EMA(200) 1.776, đồng thời dưới mây Kumo (SpanA 1.787, SpanB 1.773) — cấu trúc bearish chưa bị phá vỡ. ADX(14) = 21,0 cho thấy xu hướng yếu, dễ sideway, trong khi thanh khoản thấp hơn trung bình 100 phiên ~14% và nến Marubozu đỏ phiên cuối phản ánh lực bán áp đảo. Kịch bản ngắn hạn: nếu giữ được hỗ trợ 1.716 và mốc tâm lý 1.700, thị trường có thể tích lũy hồi phục; nếu thủng 1.716, vùng 1.651–1.629 là điểm tựa tiếp theo, còn kháng cự gần là 1.743, xa hơn 1.772 và 1.799.\n\nRủi ro chính đến từ khối ngoại bán ròng 570 tỷ đồng — phiên thứ 10 liên tiếp — với bán ròng tập trung ở TCB 115 tỷ, PNJ 105 tỷ, FPT 91 tỷ, dù HPG được mua ròng 128 tỷ, HDB 31 tỷ và NVL 18 tỷ phần nào cân bằng cục diện. Nhóm đáng quan tâm gồm: (1) chứng khoán, hưởng lợi từ câu chuyện cựu Phó Thủ tướng Đức vào HĐQT một CTCK chuẩn bị IPO và làn sóng tăng vốn; (2) ngân hàng, khi tự doanh gom ròng hơn 200 tỷ và dòng tiền nội quay lại nhóm này; (3) thép/xây dựng/vật liệu, với HPG được mua ròng mạnh, NKG tăng sát trần và nhóm Vật liệu +3,1% dẫn dắt — cần theo dõi tính bền vững của dòng tiền.\n\n⚠️ Thông tin mang tính tham khảo, không phải khuyến nghị đầu tư.",
+    "final_intent": "market_brief",
+    "seconds": 13.0
+  },
+  {
+    "id": "market_index",
+    "query": "VN-Index đóng cửa bao nhiêu điểm?",
+    "route_type": "agent",
+    "intent": "market_data",
+    "tickers": [],
+    "market_topics": [
+      "index"
+    ],
+    "rag_topics": [],
+    "screening": null,
+    "errors": [],
+    "report": "VN-Index đóng cửa **1,720.98 điểm** trong phiên giao dịch gần nhất — Thứ Hai 12/10/2026, giảm 14.11 điểm (-0.81%).",
+    "final_intent": "market_data",
+    "seconds": 6.8
+  },
+  {
+    "id": "market_movers",
+    "query": "Mã nào tăng mạnh nhất hôm nay?",
+    "route_type": "agent",
+    "intent": "market_data",
+    "tickers": [],
+    "market_topics": [
+      "movers"
+    ],
+    "rag_topics": [],
+    "screening": null,
+    "errors": [],
+    "report": "Mã tăng mạnh nhất trong phiên giao dịch gần nhất (Thứ Hai 12/10/2026) là **BCE (HOSE)**, giá 5,350 VND, tăng **+7.00%**, khối lượng 504,900 cổ phiếu.",
+    "final_intent": "market_data",
+    "seconds": 9.5
+  },
+  {
+    "id": "market_foreign",
+    "query": "Khối ngoại mua ròng mã nào nhiều nhất?",
+    "route_type": "agent",
+    "intent": "market_data",
+    "tickers": [],
+    "market_topics": [
+      "foreign"
+    ],
+    "rag_topics": [],
+    "screening": null,
+    "errors": [],
+    "report": "Khối ngoại mua ròng nhiều nhất là **HPG** với **+128.1 tỷ VND** (mua 193.3 tỷ, bán 65.2 tỷ) trong phiên giao dịch gần nhất (Thứ Hai 12/10/2026).",
+    "final_intent": "market_data",
+    "seconds": 8.0
+  },
+  {
+    "id": "breakout",
+    "query": "quét cổ phiếu đang breakout tạo đỉnh mới",
+    "route_type": "agent",
+    "intent": "breakout_scan",
+    "tickers": [],
+    "market_topics": [],
+    "rag_topics": [],
+    "screening": null,
+    "errors": [],
+    "report": "## Cổ phiếu đang breakout (tín hiệu SHORT – nền 20 phiên)\n\n| Mã | Giá | Pivot | SL | TP1 | TP2 | RS | Vol× | Dist ngày | MACD | NNước | Biên nền |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n| ACG | 31,300 | 31,500 | 29,650 | 33,138 | 34,150 | 1.02 | 1.3x | 2 | ✗ | +100.00% | 8.9% |\n| GHC | 24,300 | 24,200 | 23,550 | 25,065 | 25,600 | 0.93 | 0.6x | 3 | ✗ | +100.00% | 5.9% |\n| TV2 | 25,750 | 25,750 | 24,900 | 26,615 | 27,150 | 0.88 | 1.9x | 3 | ✗ | -100.00% | 5.6% |\n\nTổng 3 tín hiệu SHORT được ghi nhận.",
+    "final_intent": "breakout_scan",
+    "seconds": 31.8
+  },
+  {
+    "id": "closing_commentary",
+    "query": "Nhận định cuối phiên hôm nay",
+    "route_type": "agent",
+    "intent": "closing_commentary",
+    "tickers": [],
+    "market_topics": [],
+    "rag_topics": [],
+    "screening": null,
+    "errors": [],
+    "report": "## 1. Diễn biến chỉ số & thanh khoản (phiên Thứ Hai 12/10/2026)\n\nVN-Index đóng cửa 1,720.98 điểm (-14.11 điểm, -0.81%), VN30 đóng cửa 1,869.38 điểm (-4.05 điểm, -0.22%); HNX ngược dòng đóng cửa 264.69 điểm (+3.09 điểm, +1.18%). Thanh khoản VN-Index đạt 12,978 tỷ với 578,727,890 cp khớp lệnh, chỉ bằng 76% trung bình 19 phiên trước (17,073 tỷ); VN30 đạt 8,007 tỷ với 283,570,401 cp, HNX có 43,616,666 cp.\n\n## 2. Độ rộng & nhóm ngành dẫn dắt/kéo lùi\n\nĐộ rộng toàn thị trường khá cân bằng với 92 mã tăng / 19 đứng giá / 89 mã giảm. Dẫn dắt là Vật liệu +3.14%, Xây dựng +2.12%, Dệt may +1.66%, Ngân hàng +1.34% (29 mã Vật liệu, ~807 tỷ; 24 mã Ngân hàng, ~3,447 tỷ). Kéo lùi mạnh nhất là Hàng tiêu dùng -6.92% (chỉ 1 mã, ~346 tỷ), Y tế -2.22%, Dầu khí -1.80%, Công nghiệp -1.43%. Các mã ảnh hưởng nổi bật: tăng BCE +7.00%, NKG +6.89%, TTF +5.60%, CRE +5.00%, CTF +4.89%; giảm PNJ -6.92%, OGC -4.98%, HID -4.14%. Nhóm thanh khoản cao nhất gồm VPB (~751 tỷ, +2.52%), TCB (~694 tỷ, +0.77%), HPG (~644 tỷ, +2.99%), VIC (~571 tỷ, -2.88%), SHB (~419 tỷ, +4.00%).\n\n## 3. Dòng tiền khối ngoại\n\nToàn thị trường khối ngoại mua 1,246 tỷ, bán 1,816 tỷ, ròng -570 tỷ; VN30 ròng -308 tỷ. Mua ròng khớp lệnh (đã loại thỏa thuận) tập trung ở HPG +128.1 tỷ, HDB +31.0 tỷ, NVL +18.0 tỷ, VIB +16.5 tỷ, PVT +12.2 tỷ. Bán ròng mạnh nhất ở TCB -114.9 tỷ, PNJ -104.9 tỷ, FPT -91.2 tỷ, VIX -60.5 tỷ, VIC -46.2 tỷ.\n\n## 4. Kịch bản phiên tới\n\nVN-Index hiện đóng cửa 1,720.98, nằm ngay trên đáy 20 phiên 1,719.86 và dưới MA20 1,775.64. Nếu giữ được đáy 20 phiên 1,719.86, thị trường có thể dao động tích lũy và hướng tới vùng MA20 1,775.64; nếu thủng đáy 1,719.86, áp lực điều chỉnh có thể mở rộng về các vùng thấp hơn. Ở chiều ngược lại, chỉ khi vượt được MA20 1,775.64 mới củng cố khả năng hồi phục rõ nét hơn về vùng đỉnh 20 phiên 1,841.20.",
+    "final_intent": "closing_commentary",
+    "seconds": 15.9
+  }
+]

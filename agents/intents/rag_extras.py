@@ -14,7 +14,6 @@ from __future__ import annotations
 import re
 import sys
 
-from agents.intent_rules import _DIVIDEND_RE, _FIN_ITEM_RE, _QUARTER_RE, _TOPIC_PATTERNS, _YEARLY_METRIC_RE
 
 _PROFIT_CODES = ("lai_lo_thuan_sau_thue", "lailo_thuan_sau_thue", "loi_nhuan_sau_thue")
 _EQUITY_CODE = "von_chu_so_huu"
@@ -239,18 +238,22 @@ def _quarterly(ticker: str) -> str:
             "\nSố liệu quý là số phát sinh trong quý (hợp nhất).")
 
 
-def gather_extras(ticker: str | None, query: str) -> str:
-    """Extra labelled blocks for a rag_qa question; '' when nothing applies."""
-    if not ticker:
+def gather_extras(ticker: str | None, query: str, topics: list[str] | None = None) -> str:
+    """Extra labelled blocks for a rag_qa question; '' when nothing applies.
+
+    `topics` (marketcap, dividend, quarterly, yearly_metric) are chosen by the router LLM;
+    without a topic no extra block is fetched.
+    """
+    if not ticker or not topics:
         return ""
     q = query or ""
     blocks: list[str] = []
-    if _TOPIC_PATTERNS["marketcap"].search(q):
+    if "marketcap" in topics:
         blocks.append(_market_cap(ticker))
-    if _DIVIDEND_RE.search(q):
+    if "dividend" in topics:
         blocks.append(_dividends(ticker))
-    if _QUARTER_RE.search(q) and _FIN_ITEM_RE.search(q):
+    if "quarterly" in topics:
         blocks.append(_quarterly(ticker))
-    if _YEARLY_METRIC_RE.search(q):
+    if "yearly_metric" in topics:
         blocks.append(_yearly(ticker, re.findall(r"\b(20\d{2})\b", q)))
     return "\n\n".join(blocks)

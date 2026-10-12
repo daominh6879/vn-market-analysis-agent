@@ -195,13 +195,7 @@ def test_single_ticker_market_cap_without_shares_does_not_estimate(monkeypatch):
 def test_gather_extras_adds_market_cap_block(monkeypatch):
     from agents.intents import rag_extras
     monkeypatch.setattr(rag_extras, "_market_cap", lambda t: f"[VỐN HÓA — {t}]")
-    assert "[VỐN HÓA — VNM]" in rag_extras.gather_extras("VNM", "Vốn hóa của VNM là bao nhiêu?")
-
-
-def test_marketcap_routing():
-    from agents.intent_rules import override_intent
-    assert override_intent("Vốn hóa của VNM là bao nhiêu?", "valuation", ["VNM"])[0] == "rag_qa"
-    assert override_intent("Top 5 cổ phiếu vốn hóa lớn nhất sàn HOSE", "screening", [])[0] == "market_data"
+    assert "[VỐN HÓA — VNM]" in rag_extras.gather_extras("VNM", "Vốn hóa của VNM là bao nhiêu?", ["marketcap"])
 
 
 def test_screen_market_cap_filters_by_threshold(monkeypatch):

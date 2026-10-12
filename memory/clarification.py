@@ -44,6 +44,7 @@ _INTENT_LABELS: dict[str, str] = {
     "screening":          "lọc cổ phiếu",
     "market_brief":       "tổng quan thị trường",
     "market_data":        "tra cứu dữ liệu thị trường",
+    "closing_commentary": "nhận định cuối phiên",
 }
 
 # Intent choices offered when intent is unclear

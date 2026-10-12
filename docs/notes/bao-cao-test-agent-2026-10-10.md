@@ -1,5 +1,7 @@
 # Xử lý báo cáo test agent (10/10/2026)
 
+> **Cập nhật 2026-10-12:** `agents/intent_rules.py`, `is_off_topic`, `detect_language` được nhắc trong bảng dưới đã bị xóa; định tuyến do router LLM quyết định (xem `docs/notes/llm-routing-no-keyword-rules.md`). Bảng giữ nguyên làm lịch sử.
+
 Nguồn: `vn_stock_agent_test_report.md`. Trạng thái: **code đã sửa, chưa chạy** (theo quy tắc dự án, user tự chạy pytest và agent thật).
 
 ## Ánh xạ lỗi → sửa

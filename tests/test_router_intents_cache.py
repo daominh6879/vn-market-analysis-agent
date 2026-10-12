@@ -195,13 +195,13 @@ CLASSIFY_CASES = [
     ("technical_analysis", "RSI và MACD của FPT đang như thế nào?",       "FPT"),
     ("technical_analysis", "Vùng hỗ trợ kháng cự của VNM ở đâu?",         "VNM"),
     ("technical_analysis", "Xu hướng kỹ thuật HPG tuần này",              _SKIP),
-    ("technical_analysis", "Phân tích HPG",                               "HPG"),
+    ("investment_case"   , "Phân tích HPG",                               "HPG"),
     ("technical_analysis", "Phân tích kỹ thuật HPG hôm nay",              "HPG"),
     ("technical_analysis", "Chỉ số kỹ thuật của FPT tuần này",            "FPT"),
-    ("technical_analysis", "Phân tích VNM hôm nay",                       "VNM"),
+    ("investment_case"   , "Phân tích VNM hôm nay",                       "VNM"),
     ("valuation",          "P/E của HPG hiện tại so với trung bình ngành thế nào?", "HPG"),
     ("valuation",          "P/E của HPG so với trung bình ngành thép là bao nhiêu?", "HPG"),
-    ("valuation",          "ROE của VCB năm ngoái là bao nhiêu?",         _SKIP),
+    ("rag_qa",          "ROE của VCB năm ngoái là bao nhiêu?",         _SKIP),
     ("rag_qa",             "Doanh thu HPG năm 2024 là bao nhiêu?",        "HPG"),
     ("rag_qa",             "Doanh thu và lợi nhuận HPG năm 2024 là bao nhiêu?", "HPG"),
     ("macro_sector",       "Tỷ giá USD/VND hôm nay ảnh hưởng gì đến FPT?", _SKIP),
@@ -224,8 +224,8 @@ CLASSIFY_CASES = [
     ("screening",          "Lọc cổ phiếu có ROE > 20%",                   _SKIP),
     ("breakout_scan",      "Quét cổ phiếu đang breakout tạo đỉnh mới",    None),
     ("market_brief",       "Thị trường chứng khoán hôm nay thế nào?",     None),
-    ("market_brief",       "VNINDEX đang ở đâu?",                         None),
-    ("market_brief",       "VNINDEX đang ở mức nào?",                     None),
+    ("market_data",        "VNINDEX đang ở đâu?",                         None),
+    ("market_data",        "VNINDEX đang ở mức nào?",                     None),
     ("conversation",       "Xin chào bạn tên gì",                         None),
 ]
 
@@ -377,7 +377,7 @@ def test_llm_classify_generate_call_shape():
     client.generate.assert_called_once()
     kwargs = client.generate.call_args.kwargs
     assert kwargs["tools"] == [_TOOL]
-    assert kwargs["max_tokens"] == 256
+    assert kwargs["max_tokens"] == 384
     msgs = kwargs["messages"]
     assert len(msgs) == 1
     assert msgs[0].role == "user"
@@ -449,7 +449,7 @@ def test_llm_route_tools_include_out_of_scope():
         cr.llm_route("xin chào", [], "sys", client=client)
     tools = client.generate.call_args.kwargs["tools"]
     names = {t["name"] for t in tools}
-    assert names == {"needs_agent_run", "direct_reply", "out_of_scope", "decompose"}
+    assert names == {"needs_agent_run", "direct_reply", "out_of_scope", "decompose", "market_rules_answer"}
 
 
 def test_llm_route_injects_last_context(monkeypatch):
@@ -474,7 +474,7 @@ def test_llm_route_injects_last_context(monkeypatch):
 
 
 def test_llm_route_nonbare_followup_suppresses_intent(monkeypatch):
-    """A follow-up naming its own action must NOT inject the prior intent — only the subject."""
+    """A follow-up naming its own action: the LLM is instructed to classify fresh (no keyword guard)."""
     from agents import conversation_router as cr
     monkeypatch.setattr("core.tickers.get_tickers", lambda: ["VCB"])
     tc = MagicMock()
@@ -490,7 +490,7 @@ def test_llm_route_nonbare_followup_suppresses_intent(monkeypatch):
 
     system = client.generate.call_args.kwargs["system"]
     assert "chủ thể 'VCB'" in system
-    assert "intent 'valuation'" not in system, "prior intent must be suppressed for a non-bare follow-up"
+    assert "KHÔNG kế thừa intent lượt trước" in system, "the LLM is told to classify a new action fresh"
     assert route["type"] == "agent"
 
 
@@ -523,7 +523,7 @@ def test_llm_route_continue_carries_all_tickers(monkeypatch):
     monkeypatch.setattr("core.tickers.get_tickers", lambda: ["BID", "CTG"])
     tc = MagicMock()
     tc.name = "needs_agent_run"
-    tc.input = {"intent": "valuation", "ticker": "BID", "query": "phân tích sâu hơn BID", "reason": ""}
+    tc.input = {"intent": "valuation", "ticker": "BID", "query": "phân tích sâu hơn BID và CTG", "reason": ""}
     resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
     client = MagicMock(); client.generate.return_value = resp
 
@@ -536,7 +536,7 @@ def test_llm_route_continue_carries_all_tickers(monkeypatch):
     assert "BID, CTG" in system, "both prior tickers must be injected"
     assert route["type"] == "agent"
     assert route["intent"] == "valuation"
-    assert route["tickers"] == ["BID", "CTG"], "continuation must carry the full ticker list"
+    assert route["tickers"] == ["BID", "CTG"], "the LLM-written self-contained query carries the full ticker list"
 
 
 def test_llm_route_sector_continuation_injects_subject(monkeypatch):
@@ -559,18 +559,6 @@ def test_llm_route_sector_continuation_injects_subject(monkeypatch):
     assert "macro_sector" in system
     assert route["type"] == "agent"
     assert route["sector"] == "ngân hàng"
-
-
-def test_fallback_classify_continue_inherits(monkeypatch):
-    """_fallback_classify on a bare continuation with focus → inherits intent + tickers."""
-    from agents.conversation_router import _fallback_classify
-    focus = Focus(tickers=["BID", "CTG"], intent="valuation", query="so sánh BID và CTG")
-    route = _fallback_classify("phân tích sâu hơn", [], focus=focus)
-    assert route is not None
-    assert route["type"] == "agent"
-    assert route["intent"] == "valuation"
-    assert route["tickers"] == ["BID", "CTG"]
-    assert route["ticker"] == "BID"
 
 
 def test_llm_route_no_last_context_no_injection():
@@ -662,25 +650,6 @@ def test_llm_route_screening_multi_filter_and(monkeypatch):
     ]
 
 
-def test_llm_route_screening_overrides_decompose(monkeypatch):
-    """'lọc RSI < 30' misrouted to decompose → deterministic screening agent route."""
-    from agents import conversation_router as cr
-    monkeypatch.setattr("core.tickers.get_tickers", lambda: ["VCB", "BID", "CTG"])
-    tc = MagicMock()
-    tc.name = "decompose"
-    tc.input = {"segments": [{"kind": "agent", "intent": "technical_analysis",
-                              "ticker": "", "query": "lọc RSI dưới 30 ngành ngân hàng", "reason": ""}]}
-    resp = MagicMock(); resp.tool_calls = [tc]; resp.text = ""
-    client = MagicMock(); client.generate.return_value = resp
-
-    route = cr.llm_route("lọc RSI dưới 30 ngành ngân hàng", [], "sys", client=client)
-
-    assert route["type"] == "agent"
-    assert route["intent"] == "screening"
-    assert route["sector"] == "ngân hàng"
-    assert route["screening"] == [{"indicator": "rsi", "op": "<", "threshold": 30}]
-
-
 def test_llm_route_comparison_does_not_inherit_prior(monkeypatch):
     """REPRO: 'so sánh ACB, VNM, FPT' after 'so sánh VCB, TCB' must NOT inherit VCB/TCB.
 
@@ -707,14 +676,6 @@ def test_llm_route_comparison_does_not_inherit_prior(monkeypatch):
 def test_classifier_screening_schema():
     from agents.classifier import _TOOL
     assert "screening" in _TOOL["input_schema"]["properties"], "classify_intent must expose screening"
-
-
-def test_looks_like_screening_guard():
-    from agents.graph import _looks_like_screening
-    assert _looks_like_screening("lọc RSI < 30")
-    assert _looks_like_screening("lọc cổ phiếu ngành thép có ROE > 20")
-    assert not _looks_like_screening("phân tích kỹ thuật HPG")
-    assert not _looks_like_screening("giá cổ phiếu VCB hôm nay")
 
 
 def test_screening_gather_lambda_not_shadowed():
@@ -1246,7 +1207,7 @@ def test_valuation_gather_explicit_tickers_compare(monkeypatch):
     """Root fix: valuation uses the router's tickers list, not query re-parse → no sector peers."""
     from agents.intents import fundamentals as f
     monkeypatch.setattr(f, "_fetch_valuation", lambda t: {"ticker": t})
-    monkeypatch.setattr(f, "_build_analysis", lambda ticker, rows: f"analysis({len(rows)})")
+    monkeypatch.setattr(f, "_build_analysis", lambda ticker, rows, *_: f"analysis({len(rows)})")
     out = f.gather_data("HPG", "so sánh HPG và VCB", tickers=["HPG", "VCB"])
     assert "[SO SÁNH HPG & VCB]" in out
     assert "analysis(2)" in out, "must compare exactly 2 tickers, not sector peers"

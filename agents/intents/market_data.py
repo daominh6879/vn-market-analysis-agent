@@ -13,8 +13,6 @@ from __future__ import annotations
 import re
 import sys
 
-from agents.intent_rules import detect_market_topics
-
 _DEFAULT_N = 10
 _MIN_VOLUME = 100_000         # drop thin prints (e.g. 10k-share +7% moves) from gainer/loser rankings
 _THOUSAND_VND = 1000.0        # ohlcv_daily stores stock prices in nghìn đồng
@@ -290,13 +288,9 @@ def gather_data(ticker: str | None, query: str, time_context: dict | None = None
                 topics: list[str] | None = None) -> str:
     """Return labelled market-wide data for every topic the question asks about.
 
-    `topics` come from the router/classifier LLM (chosen by meaning). The keyword detector is only a
-    safety net unioned in, so a rewritten query can no longer silently drop a block.
+    `topics` come from the router/classifier LLM (chosen by meaning); with none, fall back to the
+    market snapshot (movers + index).
     """
-    chosen = [t for t in (topics or []) if t in _BUILDERS]
-    topics = chosen + [t for t in detect_market_topics(query, []) if t not in chosen]
-    # A ranking asked together with a sector list ("liệt kê ... tăng mạnh") keeps both.
-    if not topics:
-        topics = ["movers", "index"]
+    topics = [t for t in dict.fromkeys(topics or []) if t in _BUILDERS] or ["movers", "index"]
     blocks = [_BUILDERS[t](query) for t in topics if t in _BUILDERS]
     return "\n\n".join(b for b in blocks if b)

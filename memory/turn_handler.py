@@ -214,6 +214,9 @@ def _build_agent_state(
     state["screening_filter"] = route.get("screening")
     state["market_topics"] = route.get("market_topics") or []
     state["macro_topics"] = route.get("macro_topics") or []
+    state["rag_topics"] = route.get("rag_topics") or []
+    state["risk_flags"] = route.get("risk_flags") or []
+    state["language"] = route.get("language") or "vi"
     state["original_query"] = user_message
     state["time_context"] = route.get("time_context")
     # Reset per-turn critique-loop state — otherwise it leaks from the prior turn's
@@ -733,7 +736,7 @@ async def stream_turn(
                 return
             assistant_reply = "".join(collected)
         else:
-            yield _sse_status("streaming", agent="conversation")
+            yield _sse_status("streaming", agent=route.get("intent") or "conversation")
             for line in text.split("\n"):
                 yield _sse_chunk(line + "\n")
             assistant_reply = text

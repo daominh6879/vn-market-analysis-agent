@@ -16,7 +16,6 @@ load_dotenv(ROOT / ".env")
 
 from agents.focus import (
     AMBIGUOUS,
-    CONTINUE,
     FRESH,
     Focus,
     extract_focus_entities,
@@ -50,6 +49,7 @@ def test_extract_focus_sector(monkeypatch):
     assert extract_focus_sector("dầu thô brent tăng") == "dầu thô"
     assert extract_focus_sector("VNINDEX hôm nay") == "VNINDEX"
     assert extract_focus_sector("VN30 tuần này") == "VN30"
+    assert extract_focus_sector("bank hôm nay") == ""  # slang alias table removed: the LLM writes the exact label
     assert extract_focus_sector("tỷ giá USD/VND") == ""  # FX, not a sector keyword
     assert extract_focus_sector("phân tích HPG") == ""    # ticker, not sector
 
@@ -64,16 +64,8 @@ def test_new_ticker_is_fresh():
     assert entities == ["HPG"]
 
 
-def test_continuation_carries_prior_tickers_unchanged():
-    """No ticker + continuation phrase → carry forward prior tickers unchanged."""
-    prior = _focus(tickers=["BID", "CTG"], intent="valuation")
-    kind, entities = resolve_focus("phân tích sâu hơn", prior)
-    assert kind == CONTINUE
-    assert entities == ["BID", "CTG"]
-
-
 def test_no_signal_is_ambiguous():
-    """No ticker, no continuation phrase → AMBIGUOUS (let LLM/clarify decide)."""
+    """No ticker → AMBIGUOUS (the router LLM decides whether it is a follow-up)."""
     prior = _focus(tickers=["VCB"], intent="valuation")
     kind, entities = resolve_focus("cảm ơn bạn", prior)
     assert kind == AMBIGUOUS
@@ -88,19 +80,11 @@ def test_continuation_phrase_and_new_ticker_is_fresh():
     assert entities == ["HPG"]
 
 
-def test_continuation_without_prior_is_ambiguous():
-    """Continuation phrase with no prior focus (first turn) → AMBIGUOUS."""
-    kind, entities = resolve_focus("phân tích sâu hơn", None)
-    assert kind == AMBIGUOUS
-    assert entities == []
-
-
-def test_continuation_sector_only_focus_is_continue():
-    """Continuation after a sector/market focus (no tickers) still inherits intent."""
-    prior = _focus(tickers=[], intent="macro_sector", sector="ngân hàng")
-    kind, entities = resolve_focus("phân tích sâu hơn", prior)
-    assert kind == CONTINUE
-    assert entities == []
+def test_follow_up_phrase_is_ambiguous_not_keyword_matched():
+    """No phrase list: "phân tích sâu hơn" names no entity → AMBIGUOUS, with or without prior."""
+    prior = _focus(tickers=["BID", "CTG"], intent="valuation")
+    assert resolve_focus("phân tích sâu hơn", prior) == (AMBIGUOUS, [])
+    assert resolve_focus("phân tích sâu hơn", None) == (AMBIGUOUS, [])
 
 
 def test_fresh_with_no_prior():

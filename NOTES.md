@@ -34,3 +34,4 @@
 | Bài 32 | [docs/notes/bai-32-cache.md](docs/notes/bai-32-cache.md) |
 | Eval RAGAS (rag_qa) | [docs/notes/eval-rag-qa-ragas.md](docs/notes/eval-rag-qa-ragas.md) |
 | Eval router + tools (mọi intent) | [docs/notes/eval-router-tools.md](docs/notes/eval-router-tools.md) |
+| Router LLM thay keyword rules | [docs/notes/llm-routing-no-keyword-rules.md](docs/notes/llm-routing-no-keyword-rules.md) |

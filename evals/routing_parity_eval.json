@@ -1,0 +1,882 @@
+[
+  {
+    "id": "movers",
+    "query": "Mã nào tăng mạnh nhất hôm nay?",
+    "expect": {
+      "type": "agent",
+      "intent": "market_data",
+      "market": [
+        "movers"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "market_data",
+      "tickers": [],
+      "market_topics": [
+        "movers"
+      ],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": "Câu hỏi về top mã tăng mạnh nhất toàn thị trường → market_data với market_topics=movers."
+    }
+  },
+  {
+    "id": "index",
+    "query": "VN-Index đóng cửa bao nhiêu điểm?",
+    "expect": {
+      "type": "agent",
+      "intent": "market_data",
+      "market": [
+        "index"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "market_data",
+      "tickers": [],
+      "market_topics": [
+        "index"
+      ],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": "Câu hỏi về mức đóng cửa của chỉ số VN-Index → market_data với block index."
+    }
+  },
+  {
+    "id": "foreign_rank",
+    "query": "Khối ngoại mua ròng mã nào nhiều nhất?",
+    "expect": {
+      "type": "agent",
+      "intent": "market_data",
+      "market": [
+        "foreign"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "market_data",
+      "tickers": [],
+      "market_topics": [
+        "foreign"
+      ],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": "Câu hỏi về xếp hạng mua ròng khối ngoại toàn thị trường, không gắn với một mã cụ thể."
+    }
+  },
+  {
+    "id": "marketcap_rank",
+    "query": "Top 5 vốn hóa lớn nhất HOSE",
+    "expect": {
+      "type": "agent",
+      "intent": "market_data",
+      "market": [
+        "marketcap"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "market_data",
+      "tickers": [],
+      "market_topics": [
+        "marketcap"
+      ],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": "Câu hỏi về xếp hạng vốn hóa toàn thị trường, không gắn với một mã cụ thể."
+    }
+  },
+  {
+    "id": "list_sector",
+    "query": "Liệt kê các mã trong ngành ngân hàng",
+    "expect": {
+      "type": "agent",
+      "intent": "market_data",
+      "market": [
+        "list"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "market_data",
+      "tickers": [],
+      "market_topics": [
+        "list"
+      ],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": "Yêu cầu liệt kê danh sách mã theo ngành → market_data với topic list."
+    }
+  },
+  {
+    "id": "newsletter",
+    "query": "Bản tin thị trường hôm nay",
+    "expect": {
+      "type": "agent",
+      "intent": "market_brief"
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "market_brief",
+      "tickers": [],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "closing",
+    "query": "Nhận định cuối phiên hôm nay",
+    "expect": {
+      "type": "agent",
+      "intent": "closing_commentary"
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "closing_commentary",
+      "tickers": [],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "volume_spike",
+    "query": "Cổ phiếu nào có khối lượng đột biến hôm nay?",
+    "expect": {
+      "type": "agent",
+      "intent": "screening"
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "screening",
+      "tickers": [],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "screen_rsi",
+    "query": "lọc cổ phiếu RSI dưới 30",
+    "expect": {
+      "type": "agent",
+      "intent": "screening"
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "screening",
+      "tickers": [],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "rsi_one_stock",
+    "query": "RSI của VNM là bao nhiêu?",
+    "expect": {
+      "type": "agent",
+      "intent": "technical_analysis",
+      "tickers": [
+        "VNM"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "technical_analysis",
+      "tickers": [
+        "VNM"
+      ],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "dividend",
+    "query": "Cổ tức của HPG năm nay?",
+    "expect": {
+      "type": "agent",
+      "intent": "rag_qa",
+      "rag": [
+        "dividend"
+      ],
+      "tickers": [
+        "HPG"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "rag_qa",
+      "tickers": [
+        "HPG"
+      ],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [
+        "dividend"
+      ],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "quarterly",
+    "query": "Doanh thu quý gần nhất của FPT",
+    "expect": {
+      "type": "agent",
+      "intent": "rag_qa",
+      "rag": [
+        "quarterly"
+      ],
+      "tickers": [
+        "FPT"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "rag_qa",
+      "tickers": [
+        "FPT"
+      ],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [
+        "quarterly"
+      ],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "yearly_metric",
+    "query": "ROE của VNM năm 2023 và 2024 là bao nhiêu?",
+    "expect": {
+      "type": "agent",
+      "intent": "rag_qa",
+      "rag": [
+        "yearly_metric"
+      ],
+      "tickers": [
+        "VNM"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "rag_qa",
+      "tickers": [
+        "VNM"
+      ],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [
+        "yearly_metric"
+      ],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "marketcap_one",
+    "query": "Vốn hóa của VNM là bao nhiêu?",
+    "expect": {
+      "type": "agent",
+      "intent": "rag_qa",
+      "rag": [
+        "marketcap"
+      ],
+      "tickers": [
+        "VNM"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "rag_qa",
+      "tickers": [
+        "VNM"
+      ],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [
+        "marketcap"
+      ],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "history",
+    "query": "5 phiên gần nhất của VIC",
+    "expect": {
+      "type": "agent",
+      "intent": "price_action",
+      "tickers": [
+        "VIC"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "price_action",
+      "tickers": [
+        "VIC"
+      ],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "foreign_one",
+    "query": "Khối ngoại mua bán ròng HPG hôm nay thế nào?",
+    "expect": {
+      "type": "agent",
+      "intent": "price_action",
+      "tickers": [
+        "HPG"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "price_action",
+      "tickers": [
+        "HPG"
+      ],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": "Câu hỏi về giao dịch khối ngoại của một mã cụ thể (HPG) → price_action."
+    }
+  },
+  {
+    "id": "gold",
+    "query": "Giá vàng SJC hôm nay",
+    "expect": {
+      "type": "agent",
+      "intent": "macro_sector",
+      "macro": [
+        "gold"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "macro_sector",
+      "tickers": [],
+      "market_topics": [],
+      "macro_topics": [
+        "gold"
+      ],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": "Hỏi giá vàng SJC trong nước — macro_sector với block gold."
+    }
+  },
+  {
+    "id": "crypto_and_gold",
+    "query": "Giá bitcoin và vàng",
+    "expect": {
+      "type": [
+        "text",
+        "mixed"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "mixed",
+      "intent": null,
+      "tickers": null,
+      "market_topics": null,
+      "macro_topics": null,
+      "rag_topics": null,
+      "risk_flags": null,
+      "language": null,
+      "reason": "decompose"
+    }
+  },
+  {
+    "id": "rules_limit",
+    "query": "Biên độ giá của sàn HOSE là bao nhiêu?",
+    "expect": {
+      "type": "text",
+      "reason_prefix": "market_rules"
+    },
+    "errors": [],
+    "got": {
+      "type": "text",
+      "intent": null,
+      "tickers": null,
+      "market_topics": null,
+      "macro_topics": null,
+      "rag_topics": null,
+      "risk_flags": null,
+      "language": null,
+      "reason": "market_rules:Hỏi về biên độ giá (giá trần/sàn) của sàn HOSE"
+    }
+  },
+  {
+    "id": "rules_settle",
+    "query": "T+2 nghĩa là gì?",
+    "expect": {
+      "type": "text",
+      "reason_prefix": "market_rules"
+    },
+    "errors": [],
+    "got": {
+      "type": "text",
+      "intent": null,
+      "tickers": null,
+      "market_topics": null,
+      "macro_topics": null,
+      "rag_topics": null,
+      "risk_flags": null,
+      "language": null,
+      "reason": "market_rules:Hỏi về chu kỳ thanh toán T+2 trong giao dịch chứng khoán Việt Nam."
+    }
+  },
+  {
+    "id": "poem",
+    "query": "Hãy viết cho tôi một bài thơ về mùa thu",
+    "expect": {
+      "type": "text",
+      "not_reason_prefix": "market_rules"
+    },
+    "errors": [],
+    "got": {
+      "type": "text",
+      "intent": "out_of_scope",
+      "tickers": null,
+      "market_topics": null,
+      "macro_topics": null,
+      "rag_topics": null,
+      "risk_flags": null,
+      "language": null,
+      "reason": "Yêu cầu sáng tác thơ — tác vụ phi tài chính, ngoài phạm vi."
+    }
+  },
+  {
+    "id": "weather",
+    "query": "thời tiết hôm nay thế nào",
+    "expect": {
+      "type": "text",
+      "not_reason_prefix": "market_rules"
+    },
+    "errors": [],
+    "got": {
+      "type": "text",
+      "intent": "out_of_scope",
+      "tickers": null,
+      "market_topics": null,
+      "macro_topics": null,
+      "rag_topics": null,
+      "risk_flags": null,
+      "language": null,
+      "reason": "Câu hỏi về thời tiết, không thuộc phạm vi chứng khoán Việt Nam."
+    }
+  },
+  {
+    "id": "greeting",
+    "query": "xin chào",
+    "expect": {
+      "type": "text"
+    },
+    "errors": [],
+    "got": {
+      "type": "text",
+      "intent": null,
+      "tickers": null,
+      "market_topics": null,
+      "macro_topics": null,
+      "rag_topics": null,
+      "risk_flags": null,
+      "language": null,
+      "reason": "fallback_free_text"
+    }
+  },
+  {
+    "id": "risk_personal",
+    "query": "Tôi nên bỏ toàn bộ tiền tiết kiệm vào HPG không?",
+    "expect": {
+      "type": "agent",
+      "flags": [
+        "personal",
+        "advice"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "investment_case",
+      "tickers": [
+        "HPG"
+      ],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [
+        "advice",
+        "personal"
+      ],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "risk_prediction",
+    "query": "Dự đoán giá HPG tuần sau",
+    "expect": {
+      "type": "agent",
+      "flags": [
+        "prediction"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "price_action",
+      "tickers": [
+        "HPG"
+      ],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [
+        "prediction"
+      ],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "risk_advice",
+    "query": "Nên mua HPG hay bán?",
+    "expect": {
+      "type": "agent",
+      "flags": [
+        "advice"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "investment_case",
+      "tickers": [
+        "HPG"
+      ],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [
+        "advice"
+      ],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "risk_none",
+    "query": "Giá HPG hôm nay",
+    "expect": {
+      "type": "agent",
+      "no_flags": true
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "price_action",
+      "tickers": [
+        "HPG"
+      ],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": "Câu hỏi về giá hiện tại của một mã cổ phiếu cụ thể (HPG) → price_action."
+    }
+  },
+  {
+    "id": "lang_en",
+    "query": "What is the price of VCB?",
+    "expect": {
+      "type": "agent",
+      "language": "en"
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "price_action",
+      "tickers": [
+        "VCB"
+      ],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "en",
+      "reason": ""
+    }
+  },
+  {
+    "id": "lang_vi",
+    "query": "Giá VCB là bao nhiêu?",
+    "expect": {
+      "type": "agent",
+      "language": "vi"
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "price_action",
+      "tickers": [
+        "VCB"
+      ],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "roe_no_period",
+    "query": "ROE của HPG",
+    "expect": {
+      "type": "agent",
+      "intent": "valuation",
+      "tickers": [
+        "HPG"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "valuation",
+      "tickers": [
+        "HPG"
+      ],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "roe_with_year",
+    "query": "ROE của HPG năm 2024",
+    "expect": {
+      "type": "agent",
+      "intent": "rag_qa",
+      "tickers": [
+        "HPG"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "rag_qa",
+      "tickers": [
+        "HPG"
+      ],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [
+        "yearly_metric"
+      ],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": "Câu hỏi chỉ số ROE của một mã cụ thể cho năm 2024 → rag_qa với yearly_metric."
+    }
+  },
+  {
+    "id": "analyze_ticker",
+    "query": "Phân tích HPG",
+    "expect": {
+      "type": "agent",
+      "intent": "investment_case",
+      "tickers": [
+        "HPG"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "investment_case",
+      "tickers": [
+        "HPG"
+      ],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "buy_en",
+    "query": "Should I buy HPG tomorrow?",
+    "expect": {
+      "type": "agent",
+      "intent": "investment_case",
+      "language": "en",
+      "flags": [
+        "advice"
+      ]
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "investment_case",
+      "tickers": [
+        "HPG"
+      ],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [
+        "advice",
+        "prediction"
+      ],
+      "language": "en",
+      "reason": ""
+    }
+  },
+  {
+    "id": "index_buy",
+    "query": "VN30 có nên mua không",
+    "expect": {
+      "type": "agent",
+      "intent": "market_brief"
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "market_brief",
+      "tickers": [],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [
+        "advice"
+      ],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "recap",
+    "query": "Tổng kết phiên hôm nay",
+    "expect": {
+      "type": "agent",
+      "intent": "closing_commentary"
+    },
+    "errors": [],
+    "got": {
+      "type": "agent",
+      "intent": "closing_commentary",
+      "tickers": [],
+      "market_topics": [],
+      "macro_topics": [],
+      "rag_topics": [],
+      "risk_flags": [],
+      "language": "vi",
+      "reason": ""
+    }
+  },
+  {
+    "id": "bitcoin_label",
+    "query": "Bitcoin giá hôm nay",
+    "expect": {
+      "type": "text",
+      "intent": "out_of_scope"
+    },
+    "errors": [],
+    "got": {
+      "type": "text",
+      "intent": "out_of_scope",
+      "tickers": null,
+      "market_topics": null,
+      "macro_topics": null,
+      "rag_topics": null,
+      "risk_flags": null,
+      "language": null,
+      "reason": "Câu hỏi về giá Bitcoin — tiền mã hóa nằm ngoài phạm vi chứng khoán Việt Nam."
+    }
+  },
+  {
+    "id": "poem_label",
+    "query": "Viết thơ về chứng khoán",
+    "expect": {
+      "type": "text",
+      "intent": "out_of_scope"
+    },
+    "errors": [],
+    "got": {
+      "type": "text",
+      "intent": "out_of_scope",
+      "tickers": null,
+      "market_topics": null,
+      "macro_topics": null,
+      "rag_topics": null,
+      "risk_flags": null,
+      "language": null,
+      "reason": "Yêu cầu viết thơ — tác vụ phi tài chính, ngoài phạm vi."
+    }
+  }
+]

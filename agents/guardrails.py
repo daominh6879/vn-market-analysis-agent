@@ -1,13 +1,13 @@
 """
-agents/guardrails.py — deterministic input/output guards (no LLM, no DB).
+agents/guardrails.py — fixed output texts and the output scrubber (no LLM, no DB).
 
-  is_off_topic(query)        creative writing / coding / weather ... → decline before any LLM call
-  is_social_turn(query)      greeting / thanks / capability question → direct_reply is allowed
-  has_finance_terms(query)   query touches finance vocabulary (lets a conceptual question through)
-  risk_flags(query)          {"advice", "personal", "prediction"} → disclaimer + prompt rules
-  detect_language(query)     "vi" | "en" — reply language follows the question
+Deciding WHAT a question is (off-topic, social, risky, which language) belongs to the router LLM
+(agents/conversation_router.py, agents/classifier.py) — there is no keyword/regex detector here.
+
+  off_topic_reply(lang)       fixed decline text
   disclaimer_for(flags, lang) fixed risk text appended in Python (never left to the LLM)
-  scrub_internal(text)       drop internal table/marker names that must not reach the user
+  prompt_rules_for(flags, lang) extra synthesis rules for the router-chosen risk flags
+  scrub_internal(text)        drop internal table/marker names that must not reach the user
 """
 
 from __future__ import annotations
@@ -25,106 +25,12 @@ OFF_TOPIC_REPLY_EN = (
     "You can ask about prices, technical analysis, valuation, news, stock screening or the market overview."
 )
 
-# ── off-topic / social ────────────────────────────────────────────────────────
 
-_OFF_TOPIC_RE = re.compile(
-    r"(viết|làm|sáng tác|soạn)\s+(cho tôi\s+)?(một\s+)?(bài\s+)?(thơ|văn|bài hát|ca khúc|truyện|email|thư)"
-    r"|\b(thơ|bài thơ|truyện cười|truyện ngắn|bài hát)\b"
-    r"|kể\s+(cho tôi\s+)?(một\s+)?(câu\s+)?(chuyện|truyện)"
-    r"|viết\s+(code|mã nguồn|chương trình|hàm|script)|lập trình|\bpython\b|\bjavascript\b"
-    r"|dịch\s+(giúp|sang|câu|đoạn|bài)|\btranslate\b"
-    r"|công thức nấu|nấu ăn|món ăn"
-    r"|thời tiết|dự báo thời tiết|\bweather\b"
-    r"|bóng đá|world cup|\bwrite (me )?a (poem|story|song|joke)\b|\btell me a joke\b",
-    re.IGNORECASE,
-)
-
-_SOCIAL_RE = re.compile(
-    r"^\W*(xin\s+)?(chào|hello|hi|hey|alo)\b"
-    r"|\b(cảm ơn|cám ơn|thanks|thank you|tks)\b"
-    r"|^\W*(ok|oke|okay|vâng|dạ|ừ|ừm|được rồi|hiểu rồi|rõ rồi|cũng hợp lý|hợp lý|tuyệt|tốt)\W*$"
-    r"|\b(tạm biệt|bye|hẹn gặp lại)\b"
-    r"|bạn\s+(là ai|làm được gì|giúp được gì|có thể làm gì|khỏe không|thế nào)"
-    r"|\b(what can you do|who are you|how are you)\b",
-    re.IGNORECASE,
-)
-
-_FINANCE_TERMS = (
-    "cổ phiếu", "chứng khoán", "thị trường", "vn-index", "vnindex", "p/e", "p/b", "roe", "eps",
-    "rsi", "macd", "cổ tức", "lãi suất", "tỷ giá", "ngân hàng", "đầu tư", "lợi nhuận", "doanh thu",
-    "vốn hóa", "khối ngoại", "stock", "market", "invest", "dividend", "earnings",
-)
+def off_topic_reply(lang: str = "vi") -> str:
+    return OFF_TOPIC_REPLY_EN if lang == "en" else OFF_TOPIC_REPLY
 
 
-def is_off_topic(query: str) -> bool:
-    return bool(_OFF_TOPIC_RE.search(query or ""))
-
-
-def is_social_turn(query: str) -> bool:
-    q = (query or "").strip()
-    return len(q) <= 80 and bool(_SOCIAL_RE.search(q))
-
-
-def has_finance_terms(query: str) -> bool:
-    q = (query or "").lower()
-    return any(t in q for t in _FINANCE_TERMS)
-
-
-def off_topic_reply(query: str) -> str:
-    return OFF_TOPIC_REPLY_EN if detect_language(query) == "en" else OFF_TOPIC_REPLY
-
-
-# ── language ──────────────────────────────────────────────────────────────────
-
-_VI_DIACRITICS_RE = re.compile(
-    r"[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]", re.IGNORECASE
-)
-_EN_WORDS_RE = re.compile(
-    r"\b(what|which|how|why|is|are|the|of|price|stock|share|buy|sell|should|compare|vs|"
-    r"today|latest|about|tell|show|me|please|and)\b",
-    re.IGNORECASE,
-)
-
-
-def detect_language(query: str) -> str:
-    """'en' when the question has no Vietnamese diacritics and ≥2 common English words."""
-    q = query or ""
-    if _VI_DIACRITICS_RE.search(q):
-        return "vi"
-    return "en" if len(_EN_WORDS_RE.findall(q)) >= 2 else "vi"
-
-
-# ── risk flags + disclaimers ──────────────────────────────────────────────────
-
-_ADVICE_RE = re.compile(
-    r"nên\s+(mua|bán|giữ|cắt lỗ|chốt lời|đầu tư)|có nên|mua hay bán|bán hay giữ|nên hay không"
-    r"|khuyến nghị|cắt lỗ|chốt lời|\bshould i\b|\bbuy or sell\b|\bbuy, sell\b",
-    re.IGNORECASE,
-)
-_PERSONAL_RE = re.compile(
-    r"toàn bộ (tiền|số tiền|vốn|tài sản)|bỏ (hết|toàn bộ)|dồn (hết|toàn bộ)|all[- ]?in"
-    r"|tiền tiết kiệm|tiền (hưu|học|cưới)|vay (tiền|ngân hàng|margin)|margin|đòn bẩy"
-    r"|\b(my|all my) (savings|money)\b",
-    re.IGNORECASE,
-)
-_PREDICTION_RE = re.compile(
-    r"dự đoán|dự báo|giá mục tiêu|sẽ (tăng|giảm|lên|xuống|về)|(tuần|tháng|quý|năm)\s+(sau|tới|tiếp theo)"
-    r"|ngày mai|\bpredict|\bforecast|\bwill .* (rise|fall|go up|go down)\b|next (week|month)",
-    re.IGNORECASE,
-)
-
-
-def risk_flags(query: str) -> set[str]:
-    q = query or ""
-    flags: set[str] = set()
-    if _PERSONAL_RE.search(q):
-        flags |= {"personal", "advice"}
-    if _ADVICE_RE.search(q):
-        flags.add("advice")
-    if _PREDICTION_RE.search(q):
-        flags.add("prediction")
-    return flags
-
+# ── risk disclaimers (flags come from the router LLM) ─────────────────────────
 
 _DISCLAIMERS_VI = {
     "personal": (

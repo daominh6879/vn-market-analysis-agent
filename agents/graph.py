@@ -83,13 +83,7 @@ _COMPLEX_INTENTS = frozenset({"market_brief", "investment_case", "macro_sector"}
 # they also can't take the ticker-gated "simple" branch above. Route them to the fast
 # path with an empty ticker — their gather_data resolves the subject from the query
 # itself (screening resolves its sector; breakout_scan scans sector or full market).
-_SECTOR_LEAF_INTENTS = frozenset({"screening", "breakout_scan", "market_data"})
-
-def _looks_like_screening(query: str) -> bool:
-    """Alias of agents.classifier.is_screening_query (graph guard + tests)."""
-    from agents.classifier import is_screening_query
-    return is_screening_query(query)
-
+_SECTOR_LEAF_INTENTS = frozenset({"screening", "breakout_scan", "market_data", "closing_commentary"})
 
 # ── Node −1: classify_node ────────────────────────────────────────────────────
 
@@ -121,6 +115,9 @@ def classify_node(state: AgentState) -> dict:
     screening_filter = state.get("screening_filter")
     market_topics = state.get("market_topics") or []
     macro_topics = state.get("macro_topics") or []
+    rag_topics = state.get("rag_topics") or []
+    risk_flags = state.get("risk_flags") or []
+    language = state.get("language") or "vi"
     if pre_intent and pre_intent != "conversation":
         from dataclasses import dataclass
         @dataclass
@@ -138,26 +135,9 @@ def classify_node(state: AgentState) -> dict:
         screening_filter = result.screening or screening_filter
         market_topics = getattr(result, "market_topics", None) or market_topics
         macro_topics = getattr(result, "macro_topics", None) or macro_topics
-
-    # Deterministic guard: "lọc RSI < 30" is screening even when the LLM leans
-    # technical_analysis (RSI keyword) or macro_sector — force it so it routes to the
-    # fast path instead of decompose. Never override a decline. Check both the router's
-    # rewritten query and the verbatim original (a rewrite can drop the "lọc" keyword).
-    q = state.get("query", "") or state.get("original_query", "")
-    if _looks_like_screening(q) and result.intent not in ("out_of_scope", "conversation"):
-        result.intent = "screening"
-        result.reason = f"{result.reason} [screening:lọc]"
-
-    # Deterministic rule layer (market-wide asks, indicator asks, dividends ...) — same
-    # overrides the conversation router applies, so direct graph invocations agree.
-    from agents.intent_rules import override_intent
-    q_tickers = state.get("tickers") or extract_tickers(q)
-    new_intent, new_screening, rule_reason = override_intent(q, result.intent, q_tickers, screening_filter)
-    if rule_reason and new_intent != result.intent:
-        result.intent = new_intent
-        result.reason = f"{result.reason} [{rule_reason}]"
-    if new_screening:
-        screening_filter = new_screening
+        rag_topics = getattr(result, "rag_topics", None) or rag_topics
+        risk_flags = getattr(result, "risk_flags", None) or risk_flags
+        language = getattr(result, "language", None) or language
 
     try:
         from langfuse import get_client, observe  # noqa: F401
@@ -180,6 +160,9 @@ def classify_node(state: AgentState) -> dict:
         "screening_filter": screening_filter,
         "market_topics": market_topics,
         "macro_topics": macro_topics,
+        "rag_topics": rag_topics,
+        "risk_flags": risk_flags,
+        "language": language,
         "classify_reason": result.reason,
         "time_context": time_context,
     }
@@ -202,10 +185,7 @@ def node_out_of_scope(state: AgentState) -> dict:
         get_tracer().event("gate", {"node": "out_of_scope"})
     except Exception:
         pass
-    from agents.guardrails import is_off_topic, off_topic_reply
-    q = state.get("original_query") or state.get("query", "")
-    reply = off_topic_reply(q) if is_off_topic(q) else OUT_OF_SCOPE_REPLY
-    return {"report": reply, "intent": "out_of_scope"}
+    return {"report": OUT_OF_SCOPE_REPLY, "intent": "out_of_scope"}
 
 
 # ── Node 0a: clarify_node ─────────────────────────────────────────────────────
@@ -341,7 +321,7 @@ def decompose_node(state: AgentState) -> dict:
         sub_tickers = task_tickers[:MAX_FANOUT_TICKERS]
         # Snapshot gathers ignore the question text: a second sub-task with the same
         # intent+tickers would only re-fetch identical data.
-        if sub_intent in ("macro_sector", "market_data") and any(
+        if sub_intent in ("macro_sector", "market_data", "closing_commentary") and any(
             x["intent"] == sub_intent and x["tickers"] == sub_tickers for x in sub_tasks
         ):
             continue
@@ -350,6 +330,7 @@ def decompose_node(state: AgentState) -> dict:
             "tickers": sub_tickers,
             "question": t.get("question", ""),
             "macro_topics": state.get("macro_topics") or [],
+            "rag_topics": state.get("rag_topics") or [],
         })
     try:
         print(f"[decompose] {len(sub_tasks)} sub-tasks:")
@@ -385,6 +366,7 @@ def _get_gather_map() -> dict:
         from agents.intents import (
             price_action, technical, news_sentiment, fundamentals,
             macro_sector, investment_case, screening, breakout, market_data, rag_extras,
+            closing_commentary,
         )
         from rag import qa as _qa
 
@@ -395,12 +377,13 @@ def _get_gather_map() -> dict:
             "macro_sector":       lambda t, q, tc=None, topics=None: macro_sector.gather_data(t, q, tc, topics=topics),
             "investment_case":    lambda t, q, tc=None: investment_case.gather_data(t, q, tc),
             "screening":          lambda t, q, tc=None, sf=None: screening.gather_data(t, q, tc, screening=sf),
-            "rag_qa":             lambda t, q, tc=None: "\n\n".join(
-                p for p in (rag_extras.gather_extras(t, q), _qa.retrieve_only(q, ticker=t)) if p
+            "rag_qa":             lambda t, q, tc=None, topics=None: "\n\n".join(
+                p for p in (rag_extras.gather_extras(t, q, topics), _qa.retrieve_only(q, ticker=t)) if p
             ),
             "valuation":          lambda t, q, tc=None, tickers=None: fundamentals.gather_data(t, q, tc, tickers=tickers),
             "breakout_scan":      lambda t, q, tc=None: breakout.gather_data(t, q, tc),
             "market_data":        lambda t, q, tc=None, topics=None: market_data.gather_data(t, q, tc, topics=topics),
+            "closing_commentary": lambda t, q, tc=None: closing_commentary.gather_data(t, q, tc),
             "market_brief":       lambda t, q, tc=None: "[market_brief: xem riêng]",
         })
     return _GATHER_MAP
@@ -527,6 +510,8 @@ def run_subqueries_node(state: AgentState) -> dict:
                 data = _safe_gather(fn, primary, question, tc, topics=task.get("market_topics"))
             elif intent == "macro_sector":
                 data = _safe_gather(fn, primary, question, tc, topics=task.get("macro_topics"))
+            elif intent == "rag_qa":
+                data = _safe_gather(fn, primary, question, tc, topics=task.get("rag_topics"))
             elif intent == "valuation":
                 data = _safe_gather(fn, primary, question, tc, tickers=tickers)
             else:
@@ -609,13 +594,12 @@ def synthesize_final(state: AgentState) -> dict:
     # Answer the user's verbatim question, not the router's rewritten "self-contained"
     # query — otherwise a simple "giá cổ phiếu X?" echoes as "cho tôi phân tích tổng hợp...".
     query = state.get("original_query") or state.get("query", "")
-    from agents.guardrails import (
-        detect_language, disclaimer_for, prompt_rules_for, risk_flags, scrub_internal,
-    )
+    from agents.guardrails import disclaimer_for, prompt_rules_for, scrub_internal
     # Internal table names / SQL markers in the gathered data must never be echoed to the user.
     context = scrub_internal(_strip_subresult_labels(sub_results))
-    lang = detect_language(query)
-    flags = risk_flags(query)
+    # Language and risk flags are decided by the router LLM (no keyword detectors).
+    lang = state.get("language") or "vi"
+    flags = set(state.get("risk_flags") or [])
 
     # Date-aware synthesis: anchor the report to the resolved time window.
     tc = state.get("time_context") or {}
@@ -642,6 +626,9 @@ def synthesize_final(state: AgentState) -> dict:
         )
 
     strict_note = " TUYỆT ĐỐI không đưa khuyến nghị mua/bán/nắm giữ." if strict else ""
+    if state.get("intent") == "closing_commentary":
+        from agents.intents.closing_commentary import CLOSING_RULE
+        strict_note = " " + CLOSING_RULE + strict_note
     risk_rules = prompt_rules_for(flags - {"advice"} if strict else flags, lang)
     if risk_rules:
         strict_note += " " + risk_rules
@@ -945,6 +932,7 @@ def build_single_subtask_node(state: AgentState) -> dict:
             "screening": state.get("screening_filter"),
             "market_topics": state.get("market_topics") or [],
             "macro_topics": state.get("macro_topics") or [],
+            "rag_topics": state.get("rag_topics") or [],
         }],
     }
 

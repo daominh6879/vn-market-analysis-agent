@@ -617,3 +617,22 @@ Hai chi tiết làm nó khó tìm:
 Cách phòng: fixture và code phải cùng hệ quy chiếu. Hoặc fixture sinh theo `today` (`base = today - timedelta(days=5)`), hoặc test truyền range tường minh để không phụ thuộc `today`. Trộn hai hệ là bom hẹn giờ.
 
 Cùng họ với lỗi ở `tests/test_foreign_flow_sector.py`: fixture `date(2026, 8, 25)` + `_is_db_fresh()` so với `date.today()` → sau vài ngày data mock bị coi là stale, tool rơi xuống live path và gọi network thật trong unit test.
+
+---
+
+## Vì sao để router LLM quyết định thay vì regex/keyword
+
+Lớp luật cũ (`intent_rules.py`, các hàm nhận diện trong `guardrails.py`) ghi đè kết quả LLM bằng từ khóa. Mỗi lần router route sai, người ta thêm một regex; sau vài vòng, hai bộ quyết định (LLM và regex) cùng tồn tại và có thể mâu thuẫn, câu hỏi diễn đạt khác đi là regex trượt.
+
+Thiết kế hiện tại: một nơi quyết định duy nhất. Router/classifier trả về qua tool schema: `intent`, `market_topics`/`macro_topics`/`rag_topics` (khối dữ liệu cần lấy), `risk_flags`, `language`. Các bước sau chỉ đọc, không đoán lại:
+
+```
+llm_route / classify_hybrid  ──(tool schema)──►  RouteResult
+   intent, *_topics, risk_flags, language            │
+                                                     ▼
+                              AgentState ──► gather_data(topics) ──► synthesize_final
+                                                             (disclaimer cố định nối bằng Python)
+```
+
+Phần vẫn là code cố định (không phải bộ nhận diện): văn bản disclaimer, rule sheet luật giao dịch, `scrub_internal` lọc tên bảng nội bộ khỏi đầu ra. Khi thiếu quyết định (topic rỗng) thì dùng mặc định an toàn (`market_data` → movers + index), không đoán bằng từ khóa.
+
