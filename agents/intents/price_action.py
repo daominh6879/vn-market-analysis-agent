@@ -111,9 +111,16 @@ def _price_change_summary(df: pd.DataFrame, ticker: str = "") -> str:
     change_pct = (last - prev) / prev * 100 if prev > 0 else 0
     direction = "tăng" if change_pct > 0 else ("giảm" if change_pct < 0 else "không đổi")
     alert = " ⚠️ Biến động mạnh" if abs(change_pct) > 3 else ""
+    # Today's bar before the 15:00 close is still moving - don't call it a closing price.
+    from datetime import datetime
+    in_session = ("time" in df.columns
+                  and str(df["time"].iloc[-1])[:10] == datetime.now().date().isoformat()
+                  and datetime.now().hour < 15)
     if ticker.strip().upper() in _INDEX_CODES:
-        return f"Điểm đóng cửa: {last:,.2f} điểm ({direction} {abs(change_pct):.2f}%){alert}"
-    return f"Giá đóng cửa: {last:,.0f} VND ({direction} {abs(change_pct):.2f}%){alert}"
+        label = "Điểm hiện tại (đang giao dịch)" if in_session else "Điểm đóng cửa"
+        return f"{label}: {last:,.2f} điểm ({direction} {abs(change_pct):.2f}%){alert}"
+    label = "Giá hiện tại (đang giao dịch)" if in_session else "Giá đóng cửa"
+    return f"{label}: {last:,.0f} VND ({direction} {abs(change_pct):.2f}%){alert}"
 
 
 _INDEX_CODES = frozenset({"VNINDEX", "VN30", "HNX", "HNX30", "UPCOM"})
@@ -189,8 +196,12 @@ def gather_data(ticker: str, query: str, time_context: dict | None = None) -> st
     # ~1.6 calendar days per session (weekends/holidays) + a buffer for the previous-close row.
     days = max(25, int((n_sessions or 0) * 1.6) + 5)
     df = _load_ohlcv(ticker, start_date=start, end_date=end, default_days=days)
-    price_line  = (price_r.message + "\n") if price_r else ""
     change_line = _price_change_summary(df, ticker) if df is not None else "Không có dữ liệu OHLCV."
+    # One price per answer: when the OHLCV frame is available it already carries the latest
+    # bar (incl. today's), so the separate live-price line would only risk a second, different
+    # number from another cache. Keep it as the fallback when there is no frame.
+    has_bars = df is not None and not df.empty and "close" in df.columns
+    price_line  = (price_r.message + "\n") if price_r and not has_bars else ""
     if historical and df is not None and not df.empty and "time" in df.columns:
         change_line = f"Phiên {str(df['time'].iloc[-1])[:10]}: {change_line}"
     vol_line    = _volume_vs_ma(df)         if df is not None else "Không có dữ liệu khối lượng."
@@ -280,7 +291,7 @@ def _market_cap_line(ticker: str, close_vnd: float | None) -> str:
         return ""
     shares = float(row[0])
     return (f"Vốn hóa ước tính: {shares * close_vnd / 1e9:,.0f} tỷ VND "
-            f"({shares:,.0f} cp niêm yết × {close_vnd:,.0f} VND, giá đóng cửa gần nhất)")
+            f"({shares:,.0f} cp niêm yết × {close_vnd:,.0f} VND, giá mới nhất)")
 
 
 @observe(name="intent.price_action")

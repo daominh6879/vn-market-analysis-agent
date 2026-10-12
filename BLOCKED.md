@@ -60,3 +60,8 @@ Các mục dưới đây là điểm nghi vấn nêu trong `vn_stock_agent_test_
 
 - [ ] **Ollama phải chạy** (`localhost:11434`, model `bge-m3`): thiếu thì truy xuất RAG và episodic memory không embed được. Đã che lỗi kỹ thuật khỏi người dùng (`rag/qa.py::_service_error`); `tests/test_episodic_memory.py` tự skip khi Ollama/Qdrant không chạy.
 - [ ] **EPS của BCG/HID/TCO**: KBS chỉ có năm tài chính 2024 nên P/E chỉ là giá hiện tại ÷ EPS 2024, P/B để trống.
+
+## Giá hôm nay (12/10/2026)
+
+- [x] **TCBS `bars-long-term` trả 404**: `TcbsDirectProvider._fetch_ohlcv` (tools/providers.py) lỗi `404 Not Found` cho HPG (probe 12/10 12:04). Chỉ là fallback cuối sau Fireant → VCI nên chưa ảnh hưởng kết quả; cần endpoint TCBS mới hoặc bỏ khỏi chain. Giải quyết: chain fallback giá đổi từ Fireant → VCI → TCBS thành Fireant → VCI → KBS (`KbsProvider`, đã kiểm tra trả nến 12/10, đơn vị VND đúng).
+- [x] **Giá HPG trả phiên 09/10 thay vì hôm nay**: `_is_db_fresh` coi DB phiên thứ Sáu là fresh cả ngày thứ Hai (DB nạp 18:00). Đã sửa: trong ngày giao dịch sau 09:00 DB phải có nến hôm nay, nếu không thì gọi API live (Fireant/VCI đều trả nến hôm nay).

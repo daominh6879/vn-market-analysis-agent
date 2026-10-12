@@ -58,16 +58,33 @@ def _to_date(v) -> _date | None:
         return None
 
 
+_MARKET_OPEN_HOUR = 9  # HoSE opens 09:00; from then on today's bar exists upstream
+
+
 def _is_db_fresh(db_latest, as_of_date: str | None = None) -> bool:
-    """True if db_latest >= previous trading day of as_of_date (or today)."""
+    """True if db_latest covers the latest session that should exist.
+
+    Historical query (as_of_date): db_latest >= previous trading day of as_of_date.
+    "Now" query: once today's session has opened, the DB must hold today's bar
+    (the daily ingest runs 18:00, so intraday it is stale -> caller falls back to
+    live); before the open / on non-trading days the previous trading day is enough.
+    """
+    from datetime import datetime
+    from tools.vn_holidays import is_vn_holiday
+
     latest = _to_date(db_latest)
     if latest is None:
         return False
     if as_of_date:
         ref = _to_date(as_of_date) or _date.today()
-    else:
-        ref = _date.today()
-    return latest >= _previous_trading_day(ref)
+        return latest >= _previous_trading_day(ref)
+
+    now = datetime.now()
+    today = now.date()
+    is_trading_day = today.weekday() < 5 and not is_vn_holiday(today.isoformat())
+    if is_trading_day and now.hour >= _MARKET_OPEN_HOUR:
+        return latest >= today
+    return latest >= _previous_trading_day(today)
 
 
 def _latest_ohlcv_date() -> _date | None:
@@ -141,14 +158,16 @@ def get_realtime_price(ticker: str, provider: PriceProvider | None = None) -> To
     t = ticker.strip().upper()
     resolved = resolve_ticker(t)  # VNINDEX → ^VNINDEX, stock → unchanged
     p = provider or _detect_provider(t)
+    from tools.providers import _in_trading_hours
+    when = "đang giao dịch" if _in_trading_hours() else "phiên gần nhất"
     try:
         price = p.get_price(resolved)
         if t in _MARKET_INDEX_CODES:
-            message = f"Chỉ số {t}: {price:,.2f} điểm (phiên gần nhất)."
+            message = f"Chỉ số {t}: {price:,.2f} điểm ({when})."
         elif isinstance(p, YFinanceProvider):  # non-VN symbol routed to yfinance → USD
-            message = f"Giá {t}: {price:,.2f} USD (phiên gần nhất)."
+            message = f"Giá {t}: {price:,.2f} USD ({when})."
         else:
-            message = f"Giá {t}: {price:,.0f} VND (phiên gần nhất)."
+            message = f"Giá {t}: {price:,.0f} VND ({when})."
         return ToolResult(status="ok", data=price, message=message)
     except ValueError as e:
         return ToolResult(

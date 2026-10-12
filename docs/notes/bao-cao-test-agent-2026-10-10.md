@@ -62,3 +62,16 @@ Số liệu DB đã đo: `securities` 430/430 mã active có `listed_shares` (tr
 Thay đổi: `rag/sql_agent.py` (bảng `dividends`, mã quý), `ingest/fetch_ratios.py` (`_reprice` dự phòng), `ingest/fetch_shares.py` (cột trùng của VCI), `data/fx_scraper.py` + `tools/global_market.py` (SBV + so với phiên trước), `rag/qa.py` + `agents/graph.py` (không lộ lỗi kỹ thuật), `agents/intents/fundamentals.py` (fallback re-price + ngày cập nhật), `agents/intents/market_data.py` (đơn vị thanh khoản), `agents/run.py`.
 
 Tái hiện: `python -m ingest.fetch_ratios` (làm mới tỷ số), `python ingest/fetch_shares.py` (số CP).
+
+## Giá hôm nay trả phiên cũ (12/10/2026)
+
+**Triệu chứng:** hỏi "giá của HPG bây giờ" lúc 12:04 thứ Hai được `20,100` (đóng cửa 09/10, "dữ liệu tính đến phiên 2026-10-09") kèm dòng `20,450` — hai nguồn lệch nhau.
+
+**Đã xác minh (probe lúc 12:04):** Fireant và VCI đều trả nến 12/10 (close 20,450); KBS trả nến 12/10 (close 20,700, trễ nhẹ); TCBS `bars-long-term` 404. Nguyên nhân: `get_historical_ohlcv` đọc DB trước, `_is_db_fresh` coi DB phiên thứ Sáu là fresh cả ngày thứ Hai (DB nạp 18:00) nên không bao giờ gọi API live.
+
+**Thay đổi:** `tools/price.py` (`_is_db_fresh`: sau 09:00 ngày giao dịch, DB phải có nến hôm nay; nhãn `get_realtime_price` theo giờ), `tools/providers.py` (TTL cache 60s trong 09:00–15:30, fallback TCBS → KBS), `tools/cache.py` (TTL OHLCV theo giờ), `agents/intents/price_action.py` (một nguồn giá + nhãn "đang giao dịch"), `agents/intents/fundamentals.py` (ghi rõ P/E, P/B theo giá tại ngày cập nhật), `agents/conversation_router.py` (khối ngoại một mã → `price_action`).
+
+**Kết quả thật (DeepSeek):** "giá của HPG bây giờ" → `price_action`/HPG → "Giá HPG đang giao dịch: 20,450 VND (tăng 1.74%), dữ liệu tính đến phiên 2026-10-12" (lần sau trong ngày: 20,750, +3.23%, giá live thay đổi đúng).
+
+Tái hiện: `python -c "from agents.intents.price_action import gather_data; print(gather_data('HPG','giá'))"`.
+

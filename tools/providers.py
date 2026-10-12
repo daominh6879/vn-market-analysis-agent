@@ -26,6 +26,16 @@ import pandas as pd
 
 _TTL_PRICE = 5 * 60     # 5 min
 _TTL_HISTORY = 60 * 60  # 1 hr
+_TTL_LIVE = 60          # in-session: today's bar still moves, keep the cache short
+
+
+def _in_trading_hours() -> bool:
+    """Trading day 09:00-15:30 local (VN) - window where today's daily bar is still changing."""
+    now = datetime.now()
+    if now.weekday() >= 5 or not ((9, 0) <= (now.hour, now.minute) < (15, 30)):
+        return False
+    from tools.vn_holidays import is_vn_holiday
+    return not is_vn_holiday(now.date().isoformat())
 
 
 class _Miss:
@@ -82,7 +92,7 @@ class PriceProvider(ABC):
         if not isinstance(cached, _Miss):
             return cached
         value = self.fetch_price(ticker)
-        _price_cache.set(key, value, _TTL_PRICE)
+        _price_cache.set(key, value, _TTL_LIVE if _in_trading_hours() else _TTL_PRICE)
         return value
 
     def get_history(self, ticker: str, days: int) -> pd.DataFrame:
@@ -91,7 +101,7 @@ class PriceProvider(ABC):
         if not isinstance(cached, _Miss):
             return cached
         value = self.fetch_history(ticker, days)
-        _history_cache.set(key, value, _TTL_HISTORY)
+        _history_cache.set(key, value, _TTL_LIVE if _in_trading_hours() else _TTL_HISTORY)
         return value
 
 
@@ -709,6 +719,6 @@ def _detect_provider(ticker: str) -> PriceProvider:
         if resolved in vn_tickers or not vn_tickers:
             return FallbackProvider(
                 FireantProvider(),
-                FallbackProvider(VciDirectProvider(), TcbsDirectProvider()),
+                FallbackProvider(VciDirectProvider(), KbsProvider()),  # TCBS endpoint 404s (dead)
             )
     return YFinanceProvider()

@@ -256,8 +256,10 @@ def _build_analysis(ticker: str, rows: list[dict], avg_label: str = "TB ngành")
     as_of = next((r["as_of"] for r in rows if r.get("as_of")), None)
     if as_of:
         lines.append(f"Số liệu định giá cập nhật ngày {as_of} (nguồn: vnstock/KBS, báo cáo năm gần nhất).")
-    lines.append("Lưu ý: P/E, P/B quy về giá đóng cửa gần nhất; EPS là EPS năm tài chính gần nhất "
-                 "đã điều chỉnh theo cổ tức cổ phiếu/tách cổ phiếu (P/E × EPS = giá hiện tại). "
+    lines.append("Lưu ý: P/E, P/B quy về giá đóng cửa tại thời điểm cập nhật số liệu"
+                 + (f" ({as_of})" if as_of else "")
+                 + ", không theo giá đang giao dịch trong phiên; EPS là EPS năm tài chính gần nhất "
+                 "đã điều chỉnh theo cổ tức cổ phiếu/tách cổ phiếu (P/E × EPS = giá tại thời điểm đó). "
                  "EV/EBITDA giữ nguyên theo báo cáo năm.")
 
     suspects = [f"{r['ticker']} {r['pe']:.1f}" for r in rows

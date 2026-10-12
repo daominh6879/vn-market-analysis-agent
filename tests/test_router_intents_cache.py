@@ -1160,7 +1160,7 @@ class TestUnitGatherAndApproval:
         from agents import graph as G
         calls = {"n": 0}
 
-        def macro_fn(t, q):
+        def macro_fn(t, q, **kw):  # run_subqueries_node forwards topics= to macro_sector
             calls["n"] += 1
             return "[VĨ MÔ data]"
 
@@ -1175,7 +1175,7 @@ class TestUnitGatherAndApproval:
 
     def test_run_subqueries_empty_sets_replan_note(self, monkeypatch):
         from agents import graph as G
-        monkeypatch.setattr(G, "_get_gather_map", lambda: {"macro_sector": lambda t, q: ""})
+        monkeypatch.setattr(G, "_get_gather_map", lambda: {"macro_sector": lambda t, q, **kw: ""})
         out = G.run_subqueries_node({
             "sub_tasks": [{"intent": "macro_sector", "tickers": [], "question": "x"}],
             "query": "x", "ticker": "",
@@ -1185,7 +1185,7 @@ class TestUnitGatherAndApproval:
 
     def test_run_subqueries_replanned_does_not_set_note_again(self, monkeypatch):
         from agents import graph as G
-        monkeypatch.setattr(G, "_get_gather_map", lambda: {"macro_sector": lambda t, q: ""})
+        monkeypatch.setattr(G, "_get_gather_map", lambda: {"macro_sector": lambda t, q, **kw: ""})
         out = G.run_subqueries_node({
             "sub_tasks": [{"intent": "macro_sector", "tickers": [], "question": "x"}],
             "query": "x", "ticker": "",
@@ -1399,7 +1399,9 @@ def test_llm_route_golden(query, expected_intent, expected_ticker):
     assert route["type"] == "agent", f"expected agent, got {route}"
     assert route["intent"] == expected_intent, f"got {route['intent']!r}, expected {expected_intent!r}"
     if expected_ticker is not None:
-        assert route["ticker"] == expected_ticker, f"got {route['ticker']!r}, expected {expected_ticker!r}"
+        # "" and None both mean "no ticker" (turn_handler treats them the same).
+        assert (route["ticker"] or "") == (expected_ticker or ""), \
+            f"got {route['ticker']!r}, expected {expected_ticker!r}"
     print(f"\n  [{expected_intent}] route ticker={route.get('ticker')!r}")
 
 

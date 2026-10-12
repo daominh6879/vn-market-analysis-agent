@@ -81,9 +81,16 @@ def test_kbs_returns_vnd(monkeypatch):
 
 # ── get_realtime_price message carries the right unit ─────────────────────────
 
-def test_realtime_price_stock_is_vnd():
+def test_realtime_price_stock_is_vnd(monkeypatch):
+    monkeypatch.setattr(P, "_in_trading_hours", lambda: False)
     r = get_realtime_price("VCB", provider=_FixedProvider(56_700))
     assert r.message == "Giá VCB: 56,700 VND (phiên gần nhất)."
+
+
+def test_realtime_price_in_session_label(monkeypatch):
+    monkeypatch.setattr(P, "_in_trading_hours", lambda: True)
+    r = get_realtime_price("VCB", provider=_FixedProvider(56_700))
+    assert r.message == "Giá VCB: 56,700 VND (đang giao dịch)."
 
 
 def test_realtime_price_index_is_points():

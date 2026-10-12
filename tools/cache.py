@@ -39,7 +39,7 @@ _DEFAULT_TTL = 30
 _TTL_OVERRIDES: dict[str, int] = {
     "get_realtime_price":      15,   # price ticks fast
     "get_realtime_price_intl": 15,
-    "get_historical_ohlcv":    300,  # daily bars — stable intraday
+    "get_historical_ohlcv":    300,  # daily bars — stable intraday (60s in-session, see _ttl_for)
     "get_historical_ohlcv_intl": 300,
     "search_financial_news":   120,  # news refreshes slower than price
     "analyze_market_sentiment": 600, # LLM call — most expensive, cache longest
@@ -52,6 +52,11 @@ _TTL_OVERRIDES: dict[str, int] = {
 
 
 def _ttl_for(tool_name: str, cost_hint: str) -> int:
+    if tool_name == "get_historical_ohlcv":
+        # In-session the last bar is today's moving bar; outside it the bars are final.
+        from tools.providers import _TTL_LIVE, _in_trading_hours
+        if _in_trading_hours():
+            return _TTL_LIVE
     return _TTL_OVERRIDES.get(tool_name, _TTL_BY_COST.get(cost_hint, _DEFAULT_TTL))
 
 # Only cache these terminal statuses — never transient errors.
