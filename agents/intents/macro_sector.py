@@ -30,17 +30,10 @@ _SYSTEM = (
 
 def _sector_performance_text() -> str:
     try:
-        from tools.providers import get_sector_performance
+        from tools.price import get_sector_performance
         r = get_sector_performance()
-        return r.message if r.status == "ok" else "Không có dữ liệu ngành."
-    except Exception:
-        pass
-    try:
-        from tools.index_db import query_sector_performance
-        rows = query_sector_performance()
-        if rows:
-            lines = [f"  {r['sector']}: {r['change_pct']:+.2f}%" for r in rows[:8]]
-            return "Hiệu suất ngành:\n" + "\n".join(lines)
+        if r.status == "ok":
+            return r.message
     except Exception:
         pass
     return "Không có dữ liệu ngành."
@@ -72,28 +65,41 @@ def _assemble_report(
     )
 
 
-def gather_data(ticker: str | None, query: str, time_context: dict | None = None) -> str:
+def gather_data(ticker: str | None, query: str, time_context: dict | None = None,
+                topics: list[str] | None = None) -> str:
     """Fetch FX, commodities, VN gold, sector performance — no LLM call.
 
     time_context accepted for a uniform gather signature; FX/commodities/sector are
     current-snapshot (no historical axis) — pass-through.
+
+    topics (router-chosen subset of fx, commodities, gold, sector) limits which blocks are
+    fetched; empty/None fetches all (broad macro/industry questions).
     """
     from tools.global_market import get_vn_gold
-    fx_r        = get_fx_rates()
-    comm_r      = get_commodities()
-    vn_gold_r   = get_vn_gold()
-    sector_text = _sector_performance_text()
-    fx_text      = fx_r.message      if fx_r.status      == "ok" else "Không có dữ liệu tỷ giá."
-    comm_text    = comm_r.message    if comm_r.status     == "ok" else "Không có dữ liệu hàng hóa."
-    vn_gold_text = vn_gold_r.message if vn_gold_r.status  == "ok" else ""
-    parts = [
-        "[VĨ MÔ & NGÀNH]",
-        f"Tỷ giá: {fx_text}",
-        f"Hàng hóa (thế giới): {comm_text}",
-    ]
-    if vn_gold_text:
-        parts.append(f"Vàng SJC (trong nước): {vn_gold_text}")
-    parts.append(f"Ngành: {sector_text}")
+    from concurrent.futures import ThreadPoolExecutor
+    all_topics = {"fx", "commodities", "gold", "sector"}
+    want = (set(topics or ()) & all_topics) or all_topics
+    fetchers = {
+        "fx": get_fx_rates, "commodities": get_commodities,
+        "gold": get_vn_gold, "sector": _sector_performance_text,
+    }
+    with ThreadPoolExecutor(max_workers=4) as pool:  # independent network/DB reads
+        futs = {k: pool.submit(fn) for k, fn in fetchers.items() if k in want}
+        res = {k: f.result() for k, f in futs.items()}
+
+    def _msg(key: str, empty: str) -> str:
+        r = res[key]
+        return r.message if r.status == "ok" else empty
+
+    parts = ["[VĨ MÔ & NGÀNH]"]
+    if "fx" in want:
+        parts.append(f"Tỷ giá: {_msg('fx', 'Không có dữ liệu tỷ giá.')}")
+    if "commodities" in want:
+        parts.append(f"Hàng hóa (thế giới): {_msg('commodities', 'Không có dữ liệu hàng hóa.')}")
+    if "gold" in want and (gold := _msg("gold", "")):
+        parts.append(f"Vàng SJC (trong nước): {gold}")
+    if "sector" in want:
+        parts.append(f"Ngành: {res['sector']}")
     return "\n\n".join(parts)
 
 

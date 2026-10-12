@@ -336,6 +336,14 @@ def _collect_vn(target_date: Optional[str]) -> dict:
         movers_text = ""
         missing.append("top_movers")
 
+    # Top gainers / losers by % change (liquid names only)
+    for by, label in (("pct_gain", "Top tăng giá"), ("pct_loss", "Top giảm giá")):
+        r = _safe(get_top_movers, by, 5, target_date)
+        if _ok(r) and r.data:
+            movers_text += f" {label}: " + ", ".join(
+                f"{x['ticker']} {x['pct_change']:+.1f}%" for x in r.data[:5]
+            ) + "."
+
     # Foreign flows — pass target_date so we don't pull future-date data if ingest ran ahead
     ff_r = _safe(get_foreign_flows, 1, as_of_date=target_date or None)
     if _ok(ff_r):
@@ -743,6 +751,7 @@ def compose_outlook(state: MarketBriefState) -> dict:
     breadth = state.get("breadth_text", _MISSING)
     foreign = state.get("foreign_text", _MISSING)
     sector = state.get("sector_text", "")
+    movers = state.get("movers_text", "") or _MISSING
     report_date = state.get("date", "")
 
     # Holiday context — inject if a VN holiday is within 4 days
@@ -768,6 +777,7 @@ VN-Index: {vn_idx}
 Độ rộng: {breadth}
 Khối ngoại: {foreign}
 Nhóm ngành: {sector}
+Cổ phiếu nổi bật: {movers}
 
 Chỉ báo kỹ thuật:
 {tech}
@@ -781,7 +791,7 @@ Nhận định CTCK:
 Tin tức nổi bật:
 {news}
 
-Yêu cầu: Viết đúng 3 đoạn nhận định (kỹ thuật + độ rộng → kịch bản + điểm tựa → rủi ro + nhóm đáng quan tâm). Mỗi đoạn tối đa 3-4 câu. Không dùng tiêu đề đoạn. Viết liền mạch như bài đăng mạng xã hội chuyên nghiệp.
+Yêu cầu: Viết đúng 3 đoạn nhận định (kỹ thuật + độ rộng → kịch bản + điểm tựa → rủi ro + nhóm đáng quan tâm). Đoạn 1 phải nêu tên các mã tăng/giảm mạnh nhất trong "Cổ phiếu nổi bật" (nếu có dữ liệu). Khối ngoại: chỉ nêu giá trị MUA/BÁN RÒNG đã cho, không gọi giá trị bán gộp là bán ròng. Mỗi đoạn tối đa 3-4 câu. Không dùng tiêu đề đoạn. Viết liền mạch như bài đăng mạng xã hội chuyên nghiệp.
 Đoạn 3 bắt buộc đề xuất 2-3 nhóm cổ phiếu đáng quan tâm dựa trên tin tức nổi bật (ví dụ: nếu có tin về cổ đông ngoại ngân hàng → nhắc ngân hàng; nếu có tin xăng dầu → nhắc dầu khí/vận tải).
 Viết thẳng 3 đoạn nhận định, không cần tiêu đề hay ký hiệu đặc biệt."""
 

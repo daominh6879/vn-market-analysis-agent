@@ -38,20 +38,25 @@
 
 Các mục dưới đây là điểm nghi vấn nêu trong `vn_stock_agent_test_report.md` mục B/C. Code đã thêm cảnh báo/ghi chú, nhưng nguyên nhân gốc ở dữ liệu **chưa được kiểm tra** (cần user chạy query/đối chiếu nguồn).
 
-- [ ] **P/E cực thấp/cao (PNJ 3.53, SHB 3.47, CTG 4.65, VIC 153.65)**: nghi EPS TTM chưa điều chỉnh. Agent hiện gắn cảnh báo khi P/E < 5 hoặc > 100 (`agents/intents/fundamentals.py`) nhưng chưa sửa dữ liệu `stock_ratios`. Cần đối chiếu `ingest/fetch_ratios.py` với nguồn thị trường.
+- [x] **P/E không khớp EPS × giá (PNJ, SHB, CTG, VIC, HPG, FPT…)**: root cause đã xác minh — `stock_ratios` còn số thô của KBS (ghi trước khi có `_reprice` trong `ingest/fetch_ratios.py`): 348/409 mã có P/E×EPS lệch giá đóng cửa >5%. Fix: làm mới 430/431 mã bằng `python -m ingest.fetch_ratios`; sau đó chỉ còn 3 mã lệch (BCG, HID, TCO) do `ohlcv_daily` không có giá ≤ 31/12/2024 → `_reprice` thêm nhánh dự phòng (P/E = giá hiện tại ÷ EPS, P/B = NULL). Fallback live trong `fundamentals.py` cũng dùng `_reprice` nên số live và số DB khớp. Bảng định giá ghi ngày cập nhật.
 - [ ] **Giá HPG/VCB/FPT/VIC/VNM/MWG/ACB** (mục C): cần đối chiếu với nguồn thật (đơn vị nghìn đồng vs đồng, giá chưa điều chỉnh).
 - [ ] **CMG P/B 1.04 vs P/E 10.2, ROE 13.4%**: lệch, cần kiểm tra `stock_ratios`.
 - [ ] **HDG xếp ngành bất động sản**: cần xem `securities.sector`/`tags` của HDG (Hà Đô thiên về điện).
-- [ ] **Báo cáo tài chính theo quý**: `financial_facts` chỉ có kỳ năm. Agent nói rõ giới hạn thay vì suy đoán; cần pipeline ingest quý nếu muốn trả lời "doanh thu quý gần nhất".
-- [ ] **Tỷ giá trung tâm SBV**: chưa có nguồn dữ liệu, agent chỉ có tỷ giá ngân hàng.
-- [ ] **Cổ tức**: `corporate_events` có thể chưa đầy đủ lịch sử; agent nói rõ "chưa ghi nhận" thay vì kết luận công ty không chi trả.
+- [x] **Báo cáo tài chính theo quý**: asset `financials_quarterly` đã nạp kỳ `Qn/YYYY` (FPT có Q3/2025–Q2/2026, doanh thu Q2/2026 17.225 tỷ, LNST 2.901 tỷ). Schema prompt của `rag/sql_agent.py` đã thêm mã `loi_nhuan_sau_thue` của dữ liệu quý và ví dụ truy vấn quý mới nhất.
+- [x] **Tỷ giá trung tâm SBV**: lấy từ biểu đồ trên trang chủ `www.sbv.gov.vn` (`tyGiaLabels`/`tyGiaValues` có ngày) — `_fetch_sbv_homepage_chart` trong `data/fx_scraper.py`; 25.629 đ ngày 10/10/2026; có điểm trước đó nên trả lời được "so với phiên trước".
+- [x] **Cổ tức**: bảng `dividends` có 2.773 dòng (VNM: 1.850/350/2.000/500 đ/cp; HPG: cổ phiếu 10–30% + tiền mặt 500 đ). Text-to-SQL trước đó không biết bảng này và `rag_readonly` thiếu quyền SELECT → đã thêm vào `ALLOWED_TABLES`/schema prompt và GRANT trong `004_readonly_role.sql`.
 - [ ] **EPS/ROE theo năm**: tính xấp xỉ từ `financial_facts` (EPS = LNST / số CP niêm yết hiện tại, ROE = LNST / VCSH cuối kỳ), không phải số công bố.
 
 ## Khoảng trống dữ liệu (10/10/2026) — code đã có, cần user nạp dữ liệu / còn chặn
 
 - [x] **Nạp dữ liệu cho 8 câu chưa trả lời** — không còn bước thủ công. Migration 038 đã chạy (25 OK, 0 lỗi, 10/10/2026) và 431 securities đã seed lại. Dữ liệu mới do Dagster nạp: asset trong `pipeline/assets_market_data.py` có schedule, và `data_bootstrap_sensor` tự chạy job cho bảng còn rỗng (lúc kiểm tra cả 5 bảng đều rỗng). Cần `dagster dev -f pipeline/assets.py` (hoặc daemon) đang chạy.
-- [ ] **Định dạng sự kiện cổ tức của vnstock chưa được kiểm chứng**: `ingest/fetch_dividends.py` đọc số tiền/tỷ lệ bằng regex trên tiêu đề sự kiện (vnstock VCI `Company.events()`), chưa chạy với dữ liệu thật. Asset `stock_dividends` ghi log số sự kiện bị bỏ qua vì không tách được số liệu — xem log lần chạy đầu để kiểm tra; có thể dùng `ingest/fetch_dividends.py --show-schema` để soi cột thô.
-- [ ] **Tỷ giá trung tâm NHNN**: `sbv.gov.vn` trả "Request Rejected" (WAF) với request tự động (curl, 10/10/2026). Mirror `tygiausd.org` truy cập được nhưng trang hiển thị ngày 24/04/2025 → bị loại vì quá cũ (`_fetch_central_rate_mirror` kiểm tra ngày ≤ 4 ngày). Agent hiện nói rõ "chưa lấy được". Cần nguồn khác (API chính thức, hoặc tải trình duyệt thật).
+- [x] **Định dạng sự kiện cổ tức của vnstock** — đã kiểm chứng bằng dữ liệu thật (VNM, HPG đọc đúng tiền/tỷ lệ). Mục cũ:: `ingest/fetch_dividends.py` đọc số tiền/tỷ lệ bằng regex trên tiêu đề sự kiện (vnstock VCI `Company.events()`), chưa chạy với dữ liệu thật. Asset `stock_dividends` ghi log số sự kiện bị bỏ qua vì không tách được số liệu — xem log lần chạy đầu để kiểm tra; có thể dùng `ingest/fetch_dividends.py --show-schema` để soi cột thô.
+- [x] **Tỷ giá trung tâm NHNN** — `sbv.gov.vn` chặn `curl` nhưng trang chủ truy cập được bằng User-Agent trình duyệt và có biểu đồ tỷ giá; xem mục SBV ở trên. Nguồn dự phòng `tygiausd.org` vẫn bị loại vì ngày 24/04/2025.
 - [ ] **Phân ngành PNJ/HDG là phán đoán**: `SECTOR_OVERRIDES` (PNJ→Hàng tiêu dùng, HDG→Tiện ích) chưa đối chiếu nguồn phân ngành chính thức; sửa trong `data/hose_universe.py` nếu muốn khác.
 - [ ] **Giá HPG 20.1 / PNJ 19.5 / P/E 3.5**: DB nhất quán nội bộ (P/E = giá ÷ EPS) nên không phải lỗi đơn vị; chưa đối chiếu được với nguồn ngoài.
 
+
+## Còn lại sau đợt sửa 11/10/2026
+
+- [ ] **Ollama phải chạy** (`localhost:11434`, model `bge-m3`): thiếu thì truy xuất RAG và episodic memory không embed được. Đã che lỗi kỹ thuật khỏi người dùng (`rag/qa.py::_service_error`); `tests/test_episodic_memory.py` tự skip khi Ollama/Qdrant không chạy.
+- [ ] **EPS của BCG/HID/TCO**: KBS chỉ có năm tài chính 2024 nên P/E chỉ là giá hiện tại ÷ EPS 2024, P/B để trống.

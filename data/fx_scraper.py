@@ -111,6 +111,7 @@ def fetch_sbv_central_rate() -> Optional[float]:
 
 
 LAST_CENTRAL_RATE_DATE: Optional["date"] = None   # date of the rate last returned by fetch_sbv_central_rate
+LAST_CENTRAL_RATE_PREV: Optional[tuple] = None    # (date, rate) of the previous point of the SBV chart, when known
 
 
 def _fetch_sbv_homepage_chart(max_age_days: int = 4) -> Optional[float]:
@@ -137,6 +138,10 @@ def _fetch_sbv_homepage_chart(max_age_days: int = 4) -> Optional[float]:
             sys.stderr.write(f"[fx_scraper] SBV homepage rate is stale ({published}); ignored\n")
             return None
         LAST_CENTRAL_RATE_DATE = published
+        global LAST_CENTRAL_RATE_PREV
+        LAST_CENTRAL_RATE_PREV = (
+            (datetime.strptime(labels[-2], "%d-%m-%Y").date(), float(values[-2])) if len(values) > 1 else None
+        )
         return float(values[-1])
     except Exception as e:
         sys.stderr.write(f"[fx_scraper] SBV homepage chart failed: {e}\n")

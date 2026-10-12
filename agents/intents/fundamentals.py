@@ -79,7 +79,9 @@ def _fetch_from_db(ticker: str) -> dict | None:
         age = (_time.time() - fetched_at.timestamp()) if fetched_at else _STALE_THRESHOLD + 1
         if age > _STALE_THRESHOLD:
             return None
-        return _row_to_dict(ticker, row[:-1])
+        result = _row_to_dict(ticker, row[:-1])
+        result["as_of"] = fetched_at.astimezone().strftime("%d/%m/%Y") if fetched_at else None
+        return result
     except Exception:
         return None
 
@@ -113,14 +115,22 @@ def _fetch_from_vnstock(ticker: str) -> dict | None:
 
         roe_pct = _get('roe')
         de_pct  = _get('debt_to_equity')
+        # Same re-pricing as the stored snapshot (ingest.fetch_ratios), so live and DB values agree.
+        from ingest.fetch_ratios import _reprice
+        try:
+            fiscal_year = int(str(latest.name)[:4])
+        except (TypeError, ValueError):
+            fiscal_year = None
+        pe, pb, eps = _reprice(ticker, fiscal_year, _get('pe_ratio'), _get('pb_ratio'), _get('trailing_eps'))
         return {
             "ticker":             ticker,
-            "pe":                 _get('pe_ratio'),
-            "pb":                 _get('pb_ratio'),
+            "as_of":              _time.strftime("%d/%m/%Y"),
+            "pe":                 pe,
+            "pb":                 pb,
             "roe":                roe_pct / 100 if roe_pct is not None else None,
             "roe_pct":            roe_pct,
             "roa_pct":            _get('roa'),
-            "eps":                _get('trailing_eps'),
+            "eps":                eps,
             "price":              None,
             "gross_margin_pct":   _get('gross_margin'),
             "net_margin_pct":     _get('net_margin'),
@@ -243,6 +253,9 @@ def _build_analysis(ticker: str, rows: list[dict], avg_label: str = "TB ngành")
         )
     if avg_pe:
         lines.append(f"| **{avg_label}** | **{avg_pe:.1f}** | - | {_fmt(avg_roe, '.1f', '%') if avg_roe else '-'} | - |")
+    as_of = next((r["as_of"] for r in rows if r.get("as_of")), None)
+    if as_of:
+        lines.append(f"Số liệu định giá cập nhật ngày {as_of} (nguồn: vnstock/KBS, báo cáo năm gần nhất).")
     lines.append("Lưu ý: P/E, P/B quy về giá đóng cửa gần nhất; EPS là EPS năm tài chính gần nhất "
                  "đã điều chỉnh theo cổ tức cổ phiếu/tách cổ phiếu (P/E × EPS = giá hiện tại). "
                  "EV/EBITDA giữ nguyên theo báo cáo năm.")

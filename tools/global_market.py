@@ -347,9 +347,23 @@ def get_fx_rates() -> ToolResult:
         central = fetch_sbv_central_rate()
         data["central_rate"] = central
 
+        # All live sources are flaky (sbv.gov.vn blocks bots): fall back to our last saved snapshot
+        # (≤ 7 days old) so the answer is consistent between calls, clearly dated.
+        from data import fx_scraper
+        cached_note = ""
+        if not central:
+            from datetime import date, timedelta
+            from data.snapshots import previous_snapshot
+            snap = previous_snapshot("sbv_central_rate", before=date.today() + timedelta(days=1))
+            if snap and snap.get("value") and (date.today() - snap["date"]).days <= 7:
+                central = snap["value"]
+                data["central_rate"] = central
+                cached_note = f" — snapshot đã lưu ngày {snap['date']:%d/%m/%Y} (nguồn trực tiếp tạm thời không truy cập được)"
+
         lines = []
-        if central:
-            from data import fx_scraper
+        if central and cached_note:
+            lines.append(f"Tỷ giá trung tâm (NHNN{cached_note}): {central:,.0f} VND/USD")
+        elif central:
             d = fx_scraper.LAST_CENTRAL_RATE_DATE
             lines.append(f"Tỷ giá trung tâm (NHNN{f', ngày {d:%d/%m/%Y}' if d else ''}): {central:,.0f} VND/USD")
         lines.append(
@@ -358,8 +372,16 @@ def get_fx_rates() -> ToolResult:
         )
         # Day-over-day from our own daily snapshots (written through here so history builds up).
         from data.snapshots import change_note, save_snapshot
-        if central:
-            lines.append("Tỷ giá trung tâm " + change_note("sbv_central_rate", value=central, unit="VND/USD", decimals=0))
+        if central and cached_note:
+            pass  # cached value: no day-over-day claim, and never re-saved as today's snapshot
+        elif central:
+            prev = fx_scraper.LAST_CENTRAL_RATE_PREV
+            if prev and prev[1]:
+                diff = central - prev[1]
+                lines.append(f"Tỷ giá trung tâm so với phiên {prev[0]:%d/%m/%Y} ({prev[1]:,.0f}): "
+                             f"{diff:+,.0f} ({diff / prev[1] * 100:+.2f}%) VND/USD")
+            else:
+                lines.append("Tỷ giá trung tâm " + change_note("sbv_central_rate", value=central, unit="VND/USD", decimals=0))
             save_snapshot("sbv_central_rate", value=central, unit="VND/USD", source="sbv")
         else:
             lines.append("Tỷ giá trung tâm NHNN: chưa lấy được từ nguồn nào (sbv.gov.vn chặn truy cập tự động).")

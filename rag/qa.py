@@ -14,6 +14,7 @@ Falls back gracefully when Qdrant/Ollama unavailable.
 from __future__ import annotations
 
 import os
+import sys
 from typing import Optional
 
 from core.config import settings
@@ -139,6 +140,18 @@ def _rag_answer(question: str, ticker: Optional[str], client) -> str:
             return resp.text.strip()
 
 
+def _service_error(block: str, what: str, exc: Exception) -> str:
+    """Context block for a failed retrieval source.
+
+    The raw exception (e.g. "[Errno 111] Connection refused") goes to stderr only; the LLM
+    copies anything in the context into the answer, so the block carries a user-safe note.
+    Keeps the "Lỗi:" prefix so the graph still counts it as an empty result.
+    """
+    sys.stderr.write(f"[qa] {what} failed: {exc!r}\n")
+    return (f"[{block}]\nLỗi: {what} tạm thời không khả dụng nên bỏ qua nguồn này. "
+            "Chỉ dùng các khối dữ liệu khác trong ngữ cảnh; không hiển thị chi tiết lỗi kỹ thuật cho người dùng.")
+
+
 def _fetch_sql_rows_text(question: str, client) -> str:
     """Run text-to-SQL once and format the rows. Single source of truth for the SQL
     path — retrieve_only() and answer() both call this so the context shown to the
@@ -153,7 +166,7 @@ def _fetch_sql_rows_text(question: str, client) -> str:
             return f"[DỮ LIỆU SQL]\n{result.format_answer()}"
         return ""
     except Exception as exc:
-        return f"[DỮ LIỆU SQL]\nLỗi: {exc}"
+        return _service_error("DỮ LIỆU SQL", "truy vấn cơ sở dữ liệu", exc)
 
 
 def retrieve_only(question: str, ticker: Optional[str] = None, client=None) -> str:
@@ -188,7 +201,7 @@ def retrieve_only(question: str, ticker: Optional[str] = None, client=None) -> s
             if chunks:
                 parts.append("[TÀI LIỆU RAG]\n" + "\n\n---\n\n".join(chunks[:5]))
         except Exception as exc:
-            parts.append(f"[TÀI LIỆU RAG]\nLỗi: {exc}")
+            parts.append(_service_error("TÀI LIỆU RAG", "dịch vụ tìm kiếm tài liệu (RAG)", exc))
 
     return "\n\n".join(parts) if parts else "Không tìm thấy dữ liệu liên quan."
 

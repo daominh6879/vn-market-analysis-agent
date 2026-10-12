@@ -34,6 +34,22 @@ except ImportError:
 from memory.episodic import store_episode, retrieve_similar, COLLECTION, _qdrant, _ensure_collection
 from memory.procedural import generate_rules
 
+import pytest
+
+
+def _services_up() -> bool:
+    """Embedding model (Ollama) and Qdrant are both required; skip instead of failing when either is down."""
+    try:
+        from memory.episodic import _embed
+        _embed("ping")
+        _qdrant().get_collections()
+        return True
+    except Exception:
+        return False
+
+
+pytestmark = pytest.mark.skipif(not _services_up(), reason="Ollama (bge-m3) or Qdrant not reachable")
+
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 

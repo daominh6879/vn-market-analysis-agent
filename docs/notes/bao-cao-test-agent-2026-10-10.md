@@ -45,3 +45,20 @@ Trạng thái trước khi sửa (đã query DB): `securities.listed_shares` = 0
 Lỗi khác: `SECTOR_OVERRIDES` trong `data/hose_universe.py` (VRE→Bất động sản, EVF bỏ nhãn "ngân hàng", PNJ→Hàng tiêu dùng, HDG→Tiện ích); khối ngoại tách giao dịch thỏa thuận khỏi xếp hạng; nhãn ngày thống nhất `phiên giao dịch gần nhất (Thứ … dd/mm/yyyy)`. Ngưỡng thanh khoản cho top tăng/giảm (KLGD ≥ 100,000) đã có sẵn từ trước.
 
 Nạp dữ liệu: không có bước thủ công. `pipeline/assets_market_data.py` định nghĩa 5 asset (`securities_shares` CN 02:00, `stock_dividends` T2–T6 19:00 + CN 03:00 toàn bộ mã, `ratio_history` CN 04:00, `financials_quarterly` CN 05:00, `daily_snapshots` 09:00 và 18:00 hằng ngày), và `data_bootstrap_sensor` (mỗi 10 phút) tự khởi chạy job cho bảng còn rỗng, mỗi bảng tối đa một lần/ngày. Migration 038 đã chạy ngày 10/10/2026. Kiểm tra: `pytest tests/test_data_gaps.py` (33 test, không cần mạng/DB).
+
+## Chạy thật và sửa vòng 2 (11/10/2026)
+
+Chạy thật qua graph (LLM + tool, không mock) 4 câu của báo cáo vòng 2; kết quả đọc từ output:
+
+| Câu hỏi | Kết quả |
+|---|---|
+| Vốn hóa VNM / HPG / BCG | 120.590 / 169.704 / 2.227 tỷ (số CP niêm yết × giá đóng cửa 09/10/2026) |
+| Cổ tức HPG, tỷ suất cổ tức VNM | HPG: 6 đợt (cổ phiếu 10–30%, tiền mặt 500 đ), tỷ suất 2,49%; VNM: 3,81% (2.200 đ/cp ÷ 57.700 đ) |
+| Tỷ giá trung tâm | 25.629 đ, ngày 10/10/2026 (trang chủ SBV); so với phiên 09/10 +0 |
+| Vàng SJC so với hôm qua | có bảng 11/10 vs 10/10, chênh +0,00% (giá hai ngày giống nhau) |
+
+Số liệu DB đã đo: `securities` 430/430 mã active có `listed_shares` (trước: 428/431); `stock_ratios` 430/431 mã làm mới (`FC1` không có dữ liệu → bỏ khỏi `HOSE_SEED`, `is_active=false`); P/E×EPS lệch giá >5%: 348/409 → 0 sau khi xử lý BCG/HID/TCO.
+
+Thay đổi: `rag/sql_agent.py` (bảng `dividends`, mã quý), `ingest/fetch_ratios.py` (`_reprice` dự phòng), `ingest/fetch_shares.py` (cột trùng của VCI), `data/fx_scraper.py` + `tools/global_market.py` (SBV + so với phiên trước), `rag/qa.py` + `agents/graph.py` (không lộ lỗi kỹ thuật), `agents/intents/fundamentals.py` (fallback re-price + ngày cập nhật), `agents/intents/market_data.py` (đơn vị thanh khoản), `agents/run.py`.
+
+Tái hiện: `python -m ingest.fetch_ratios` (làm mới tỷ số), `python ingest/fetch_shares.py` (số CP).

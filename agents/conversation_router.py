@@ -98,6 +98,20 @@ AGENT_RUN_TOOL: dict = {
                 "type": "string",
                 "description": "One short sentence explaining this routing decision (for debugging misroutes).",
             },
+            "market_topics": {
+                "type": "array",
+                "description": (
+                    "Only when intent='market_data': EVERY data block the question needs, chosen by meaning (not by keywords). index = an index's close/level (VN-Index, VN30, HNX, UPCOM); movers = top gainers/losers; foreign = foreign net buy/sell; liquidity = top traded value; marketcap = top market cap; list = tickers of a sector. A question about 'VN-Index hôm nay thế nào' needs index; add foreign/movers only if also asked."
+                ),
+                "items": {"type": "string", "enum": ["index", "movers", "foreign", "liquidity", "marketcap", "list"]},
+            },
+            "macro_topics": {
+                "type": "array",
+                "description": (
+                    "Only when intent='macro_sector': EVERY data block the question needs, chosen by meaning. fx = USD/VND central/bank exchange rate; commodities = oil, metals, world commodity prices; gold = domestic SJC gold price; sector = industry-group performance. 'Tỷ giá trung tâm hôm nay' needs only fx. Leave empty when the question is a broad macro/industry analysis (all blocks are fetched)."
+                ),
+                "items": {"type": "string", "enum": ["fx", "commodities", "gold", "sector"]},
+            },
             "screening": {
                 "type": "array",
                 "description": (
@@ -281,6 +295,8 @@ class RouteResult(TypedDict, total=False):
     sector: str     # present when type == "agent" — sector/index subject (no ticker)
     query: str      # present when type == "agent"
     screening: list  # present when type == "agent" — [{indicator, op, threshold}, ...] for screening
+    market_topics: list  # present when intent == "market_data" — data blocks the question needs
+    macro_topics: list  # present when intent == "macro_sector" — data blocks the question needs
     time_context: dict  # present when type == "agent" — {anchor, start_date, end_date, explicit}
     text: str       # present when type == "text"
     segments: list[dict]  # present when type == "mixed" — list[Segment]
@@ -449,6 +465,8 @@ def _parse_agent_fields(
         "sector": sector,
         "query": q,
         "screening": screening,
+        "market_topics": [t for t in (inp.get("market_topics") or []) if isinstance(t, str)],
+        "macro_topics": [t for t in (inp.get("macro_topics") or []) if isinstance(t, str)],
         "time_context": time_context,
         "reason": reason,
     }
@@ -511,6 +529,8 @@ def _fallback_classify(query: str, history: list[dict], focus: Focus | None = No
             sector="" if tickers else extract_focus_sector(query),
             query=query,
             screening=screening,
+            market_topics=list(getattr(r, "market_topics", None) or []),
+            macro_topics=list(getattr(r, "macro_topics", None) or []),
             time_context=_parse_time_context(None),
             reason=reason,
         )
@@ -551,6 +571,37 @@ def _screening_route(query: str) -> RouteResult:
         time_context=_parse_time_context(None),
         reason="screening:deterministic",
     )
+
+
+_MARKET_RULES_SHEET = """\
+Quy định giao dịch chứng khoán Việt Nam (dùng ĐÚNG các số này, không bịa thêm):
+- Biên độ dao động giá trong ngày so với giá tham chiếu: HOSE ±7%, HNX ±10%, UPCOM ±15%.
+  Ngày đầu niêm yết/giao dịch lại sau thời gian dài: HOSE ±20%, HNX ±30%, UPCOM ±40%.
+- Chu kỳ thanh toán T+2 (cổ phiếu về tài khoản sau 2 ngày làm việc kể từ ngày khớp lệnh; có thể bán từ chiều T+2).
+- Đơn vị giao dịch: HOSE lô chẵn 100 cp (lô lẻ 1-99 cp); HNX/UPCOM khớp lệnh từ 100 cp, lô lẻ giao dịch riêng.
+- Bước giá HOSE: <10.000đ là 10đ; 10.000-49.950đ là 50đ; ≥50.000đ là 100đ. HNX/UPCOM: 100đ.
+- Phiên HOSE: ATO 9h00-9h15, liên tục 9h15-11h30 và 13h00-14h30, ATC 14h30-14h45, thỏa thuận đến 15h00.
+Nếu câu hỏi nằm ngoài tờ quy định này, nói rõ bạn không chắc và khuyên kiểm tra thông báo của sở GDCK/UBCKNN."""
+
+
+def _market_rules_reply(query: str, client=None) -> str:
+    """Short knowledge answer for trading-rule questions; "" on any failure (caller falls through)."""
+    try:
+        if client is None:
+            from llm.factory import create_client
+            client = create_client()
+        from llm.types import Message
+        resp = client.generate(
+            messages=[Message(role="user", content=query)],
+            system="Bạn là trợ lý chứng khoán Việt Nam. Trả lời ngắn gọn, đúng trọng tâm bằng tiếng Việt. "
+                   "Mở đầu bằng đáp án chính in đậm (**...**) — output thô sẽ bị lọc nếu dòng đầu là văn xuôi.\n\n"
+                   + _MARKET_RULES_SHEET,
+            max_tokens=600,
+            temperature=0,
+        )
+        return (resp.text or "").strip()
+    except Exception:
+        return ""
 
 
 def llm_route(
@@ -596,6 +647,15 @@ def llm_route(
             query=query, screening=None, time_context=_parse_time_context(None),
             reason="rule:commodity→macro_sector",
         )
+
+    # Trading-rule knowledge (price limits, T+2, sessions ...): the report RAG has no such content,
+    # so it would answer "out of scope". Answer from the fixed rule sheet instead.
+    from agents.intent_rules import MARKET_RULES_RE
+    if MARKET_RULES_RE.search(query) and not extract_focus_entities(query):
+        reply = _market_rules_reply(query, client)
+        if reply:
+            _trace("text", intent="market_rules", deterministic=True)
+            return RouteResult(type="text", text=reply, reason="rule:market_rules_knowledge")
 
     kind = "fresh"
     entities: list[str] = []

@@ -56,8 +56,7 @@ def main() -> None:
     from agents.state import make_initial_state
     initial = make_initial_state(query)
 
-    print(f"[agents.run] Phân tích: {initial['ticker']} "
-          f"({'market query' if initial.get('is_market_query') else 'stock query'})")
+    print(f"[agents.run] Phân tích: {initial['query']}")
     print("Running graph: classify → clarify → decompose → synthesize\n")
 
     from tracing import graph_callbacks

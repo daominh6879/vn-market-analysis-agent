@@ -239,6 +239,14 @@ def get_historical_ohlcv(
         from core.time_context import to_days
         range_days = to_days(start_date, end_date, default=days)
         days = max(days, range_days + 10)
+        if start_date:
+            # query_ohlcv returns the LAST `days` rows, so a past window (e.g. 15/01 asked in
+            # October) must reach back from today to start_date, not just span the range itself.
+            try:
+                from datetime import date as _d
+                days = max(days, (_d.today() - _d.fromisoformat(str(start_date)[:10])).days + 10)
+            except ValueError:
+                pass
 
     # DB-first: read from ohlcv_daily (Postgres). Falls back to live VCI/yfinance if
     # the DB is empty or unavailable. query_ohlcv returns None on error — never raises.
@@ -249,6 +257,13 @@ def get_historical_ohlcv(
         if db_df is not None and not db_df.empty and len(db_df) >= 2:
             if _is_db_fresh(db_df["time"].iloc[-1]):
                 db_df = _clip_range(db_df, start_date, end_date) if has_range else db_df
+                if has_range and db_df.empty:
+                    return ToolResult(
+                        status="no_data",
+                        data=None,
+                        message=f"Không có phiên giao dịch nào của {t} trong khoảng {start_date}..{end_date} "
+                                "(ngày nghỉ/lễ hoặc ngoài phạm vi dữ liệu).",
+                    )
                 return ToolResult(
                     status="ok",
                     data=db_df,
@@ -686,6 +701,17 @@ def _filter_news_range(items: list[dict], start_date: str | None, end_date: str 
             continue
         out.append(item)
     return out
+
+
+def _cafef_headlines(ticker: str, market_query: bool) -> list[dict]:
+    """Live CafeF RSS articles ({title, url, published_at}); [] on any failure."""
+    try:
+        from data.cafef_rss import fetch_ticker_news, fetch_vn_market_news
+        if market_query:
+            return fetch_vn_market_news(max_total=6) or []
+        return fetch_ticker_news(ticker, max_articles=10) or []
+    except Exception:
+        return []
 
 
 def _dedup_news(raw: list[dict], limit: int = 5) -> list[dict]:
@@ -1203,6 +1229,12 @@ def get_top_movers(by: str = "value", limit: int = 5, as_of_date: Optional[str] 
                 return ToolResult(status="no_data", data=None,
                                   message="Không có dữ liệu từ DB.")
 
+            # Drop thin prints (e.g. a +7% move on a few thousand shares) from the rankings.
+            if "volume" in db_df.columns:
+                liquid = db_df[db_df["volume"] >= 100_000]
+                if not liquid.empty:
+                    db_df = liquid
+
             if by == "pct_gain":
                 top = db_df.nlargest(limit, "pct_change")
                 label = "Top tăng"
@@ -1264,8 +1296,8 @@ def get_foreign_flows(days: int = 1, as_of_date: Optional[str] = None) -> ToolRe
     if market is None:
         return _get_foreign_flows_live()
 
-    top_buyers = query_top_foreign(target_date, n=5, direction="buy") or []
-    top_sellers = query_top_foreign(target_date, n=5, direction="sell") or []
+    top_buyers = query_top_foreign(target_date, n=5, direction="net_buy") or []
+    top_sellers = query_top_foreign(target_date, n=5, direction="net_sell") or []
     result = _build_foreign_result(str(target_date), market["net_value"],
                                    market["total_buy"], market["total_sell"],
                                    top_buyers, top_sellers)
@@ -1340,8 +1372,8 @@ def _get_foreign_flows_live() -> ToolResult:
     total_buy = sum(r["buy_value"] for r in all_rows)
     total_sell = sum(r["sell_value"] for r in all_rows)
     net = total_buy - total_sell
-    top_buyers = sorted(all_rows, key=lambda x: x["buy_value"], reverse=True)[:5]
-    top_sellers = sorted(all_rows, key=lambda x: x["sell_value"], reverse=True)[:5]
+    top_buyers = sorted(all_rows, key=lambda x: x["net_value"], reverse=True)[:5]
+    top_sellers = sorted(all_rows, key=lambda x: x["net_value"])[:5]
     return _build_foreign_result(str(date_type.today()), net, total_buy, total_sell,
                                  top_buyers, top_sellers, source="live")
 
@@ -1360,12 +1392,12 @@ def _build_foreign_result(
     direction = "Mua ròng" if net_bn >= 0 else "Bán ròng"
     source_tag = " (live)" if source == "live" else ""
 
-    # Merge gross buy/sell into net per ticker to avoid same stock appearing in both lists
+    # Use each row's own net_value (buy - sell). Mixing gross buy/sell from two lists reports a
+    # stock's gross sell (e.g. 174 tỷ) as its net when only the sell-side list contains it.
     net_by_ticker: dict[str, float] = {}
-    for r in top_buyers:
-        net_by_ticker[r["ticker"]] = net_by_ticker.get(r["ticker"], 0) + r["buy_value"]
-    for r in top_sellers:
-        net_by_ticker[r["ticker"]] = net_by_ticker.get(r["ticker"], 0) - r["sell_value"]
+    for r in (*top_buyers, *top_sellers):
+        net_by_ticker[r["ticker"]] = float(r["net_value"]) if r.get("net_value") is not None \
+            else float(r["buy_value"]) - float(r["sell_value"])
 
     net_items = sorted(net_by_ticker.items(), key=lambda x: x[1], reverse=True)
     net_buyers = [(t, v) for t, v in net_items if v > 0][:3]
@@ -1629,7 +1661,9 @@ def analyze_market_sentiment(
     try:
         raw = search_news_by_text(t, days=days, limit=5, ticker=search_ticker, start_date=start_date, end_date=end_date)
     except Exception as e:
-        return _map_upstream_error(t, e)
+        raw = _cafef_headlines(t, market_query)
+        if not raw:
+            return _map_upstream_error(t, e)
 
     unique = _dedup_news(raw, limit=5)
 
@@ -1644,6 +1678,10 @@ def analyze_market_sentiment(
 
     if start_date or end_date:
         unique = _filter_news_range(unique, start_date, end_date)
+
+    # Qdrant index empty/stale: same CafeF RSS headlines the news section falls back to.
+    if not unique and not (start_date or end_date):
+        unique = _dedup_news(_cafef_headlines(t, market_query), limit=5)
 
     if not unique:
         label = "thị trường" if market_query else t

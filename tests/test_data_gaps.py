@@ -158,7 +158,7 @@ def test_dividend_block_reports_ttm_yield(monkeypatch):
 
     def fake_rows(sql, params=()):
         if "SUM(cash_per_share)" in sql:
-            return [(2000,)]
+            return [(2000, "2026-03-12")]
         return [(date(2026, 3, 12), "cash", 2000, None, date(2026, 4, 1)),
                 (date(2026, 3, 12), "stock", None, 20, None)]
 

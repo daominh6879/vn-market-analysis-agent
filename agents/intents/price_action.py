@@ -43,7 +43,7 @@ def _bn(value: float, signed: bool = False) -> str:
     return f"{value:{sign}.2f}"
 
 
-def _get_foreign_flow_summary(ticker: str, as_of: str | None = None) -> str:
+def _get_foreign_flow_summary(ticker: str, as_of: str | None = None, live_fallback: bool = True) -> str:
     """Market-level flow for indices; per-ticker flow for stocks."""
     t = ticker.strip().upper()
     # Market indices → use market-level foreign flows
@@ -62,15 +62,18 @@ def _get_foreign_flow_summary(ticker: str, as_of: str | None = None) -> str:
         from tools.price import _is_db_fresh
         today = as_of or date.today().isoformat()
         row = query_ticker_foreign_net(ticker, today)
-        if row and _is_db_fresh(row["date"]):
+        if row and (not live_fallback or _is_db_fresh(row["date"])):
             # foreign_flows stores values in tỷ đồng (ingest divides raw VND by 1e9)
+            session = "" if live_fallback else " (phiên " + str(row["date"])[:10] + ")"
             return (
-                f"Khối ngoại: mua {_bn(row['buy_value'])} tỷ, "
+                f"Khối ngoại{session}: mua {_bn(row['buy_value'])} tỷ, "
                 f"bán {_bn(row['sell_value'])} tỷ, "
                 f"ròng {_bn(row['net_value'], signed=True)} tỷ"
             )
     except Exception:
         pass
+    if not live_fallback:  # historical date: live data would be today's, not the asked day's
+        return "Không có dữ liệu khối ngoại cho ngày này."
     # Live fallback: VCI price board per-ticker foreign data (DB empty/stale)
     try:
         from tools.providers import VciDirectProvider
@@ -172,15 +175,26 @@ def gather_data(ticker: str, query: str, time_context: dict | None = None) -> st
     explicit = bool(tc.get("explicit"))
     start = tc.get("start_date") if explicit else None
     end = tc.get("end_date") if explicit else None
-    price_r = get_realtime_price(ticker)
+    if start:
+        # Pull a week of lead-in so the asked day has a previous close (change %, session table).
+        from datetime import date as _d, timedelta as _td
+        try:
+            start = (_d.fromisoformat(str(start)[:10]) - _td(days=7)).isoformat()
+        except ValueError:
+            pass
+    from datetime import date as _today_d
+    historical = bool(end) and str(end)[:10] < _today_d.today().isoformat()
+    price_r = None if historical else get_realtime_price(ticker)
     n_sessions = _session_count(query)
     # ~1.6 calendar days per session (weekends/holidays) + a buffer for the previous-close row.
     days = max(25, int((n_sessions or 0) * 1.6) + 5)
     df = _load_ohlcv(ticker, start_date=start, end_date=end, default_days=days)
-    price_line  = price_r.message
+    price_line  = (price_r.message + "\n") if price_r else ""
     change_line = _price_change_summary(df, ticker) if df is not None else "Không có dữ liệu OHLCV."
+    if historical and df is not None and not df.empty and "time" in df.columns:
+        change_line = f"Phiên {str(df['time'].iloc[-1])[:10]}: {change_line}"
     vol_line    = _volume_vs_ma(df)         if df is not None else "Không có dữ liệu khối lượng."
-    flow_line   = _get_foreign_flow_summary(ticker, as_of=end)
+    flow_line   = _get_foreign_flow_summary(ticker, as_of=end, live_fallback=not historical)
     is_index = ticker.strip().upper() in _INDEX_CODES
     extras: list[str] = []
     if n_sessions and df is not None:
@@ -188,7 +202,7 @@ def gather_data(ticker: str, query: str, time_context: dict | None = None) -> st
         if table:
             extras.append(table)
     if df is not None and not df.empty and "close" in df.columns:
-        if not is_index:
+        if not is_index and not historical:
             cap = _market_cap_line(ticker.strip().upper(), float(df["close"].iloc[-1]))
             if cap:
                 extras.append(cap)
@@ -197,7 +211,7 @@ def gather_data(ticker: str, query: str, time_context: dict | None = None) -> st
     tail = ("\n" + "\n".join(extras)) if extras else ""
     return (
         f"[GIÁ & DÒNG TIỀN {ticker}]\n"
-        f"{price_line}\n"
+        f"{price_line}"
         f"{change_line}\n"
         f"{vol_line}\n"
         f"{flow_line}"

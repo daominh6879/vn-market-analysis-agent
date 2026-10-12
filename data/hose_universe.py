@@ -163,7 +163,6 @@ HOSE_SEED: list[tuple[str, str, str]] = [
     ("BCM", "Xây dựng", "VN30"),
     ("CTD", "Xây dựng", "VN100"),
     ("HBC", "Xây dựng", "HOSE"),
-    ("FC1", "Xây dựng", "HOSE"),
     ("LCG", "Xây dựng", "HOSE"),
     ("VCG", "Xây dựng", "HOSE"),
     ("TV4", "Xây dựng", "HOSE"),

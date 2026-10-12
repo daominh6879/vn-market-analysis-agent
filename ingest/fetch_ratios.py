@@ -87,7 +87,13 @@ def _reprice(ticker: str, fiscal_year: int | None, pe, pb, eps):
                 cur.execute("SELECT close FROM ohlcv_daily WHERE ticker=%s ORDER BY date DESC LIMIT 1",
                             (ticker,))
                 now = cur.fetchone()
-        if not ref or not now or not ref[0] or float(ref[0]) <= 0:
+        if not now or not now[0] or float(now[0]) <= 0:
+            return pe, pb, eps
+        if not ref or not ref[0] or float(ref[0]) <= 0:
+            # No price history back to the fiscal year-end: P/B cannot be re-priced, but P/E can be
+            # made consistent with the latest close (P/E x EPS = price) instead of keeping a stale raw pair.
+            if eps and eps > 0:
+                return round(float(now[0]) * 1000.0 / eps, 2), None, eps
             return pe, pb, eps
         ref_p, now_p = float(ref[0]) * 1000.0, float(now[0]) * 1000.0  # nghìn đồng → VND
         scale = now_p / ref_p

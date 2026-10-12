@@ -804,3 +804,13 @@ Hai hạn chế còn lại: (1) incremental `MAX(date)+1` không lấp được 
 
 **Q:** Vì sao "Mã nào tăng mạnh nhất hôm nay?" từng trả về bản tin market_brief?
 **A:** Router LLM gom mọi câu hỏi toàn thị trường vào `market_brief`. Đã thêm intent `market_data` (đọc trực tiếp `ohlcv_daily`/`market_index_daily`/`foreign_flows`/`securities`) và luật xác định `agents/intent_rules.py` ghi đè kết quả LLM; bản tin chỉ dành cho câu hỏi "bản tin/tổng quan/đọc gì".
+
+---
+
+**Q:** Vì sao cùng một mã (HPG) lại ra P/E 10.2 / EPS 1,967 ở câu này nhưng P/E 12.0 / EPS 2,204 ở câu khác?
+**A:** Hai bộ số đến từ hai trạng thái của `stock_ratios`: số thô của KBS (P/E tại giá cuối năm, EPS chưa điều chỉnh cổ phiếu thưởng) và số đã `_reprice` về giá đóng cửa hiện tại (P/E × EPS = giá). Bảng chứa số thô vì lần nạp trước chạy khi chưa có `_reprice` (348/409 mã lệch >5%). Đã nạp lại toàn bộ bằng một đường duy nhất (`ingest/fetch_ratios.py`), fallback live cũng gọi `_reprice`. Kiểm tra nhanh: `P/E × EPS ≈ giá đóng cửa`.
+
+---
+
+**Q:** Hỏi "cổ tức HPG" ra chữ `[Errno 111] Connection refused` — lỗi ở đâu?
+**A:** Ollama không chạy nên không embed được bge-m3 cho truy xuất RAG; lỗi gốc bị đưa nguyên vào ngữ cảnh rồi LLM chép lại. Dữ liệu cổ tức đến từ bảng `dividends` nên không phụ thuộc Ollama. Giờ lỗi chỉ vào log; người dùng thấy "tạm thời không khả dụng".

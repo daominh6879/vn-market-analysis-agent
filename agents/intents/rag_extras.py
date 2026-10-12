@@ -77,13 +77,19 @@ def _dividends_from_table(ticker: str) -> str | None:
     if by_year:
         out.append("Tổng cổ tức tiền mặt theo năm GDKHQ: " +
                    "; ".join(f"{y}: {v:,.0f} đ/cp" for y, v in sorted(by_year.items(), reverse=True)))
+        from datetime import date as _date
+        none_years = [y for y in range(_date.today().year, min(by_year) - 1, -1) if y not in by_year]
+        if none_years:
+            out.append("Năm GDKHQ KHÔNG có cổ tức tiền mặt: " + ", ".join(str(y) for y in none_years)
+                       + " (cổ tức tiền mặt của năm tài chính trước có thể được chi trả ở năm sau - xem ngày GDKHQ).")
     px = _latest_close_vnd(ticker)
-    ttm = _rows("SELECT COALESCE(SUM(cash_per_share), 0) FROM dividends WHERE ticker = %s AND kind = 'cash' "
+    ttm = _rows("SELECT COALESCE(SUM(cash_per_share), 0), STRING_AGG(ex_date::text, ', ' ORDER BY ex_date) "
+                "FROM dividends WHERE ticker = %s AND kind = 'cash' "
                 "AND ex_date > CURRENT_DATE - INTERVAL '365 days'", (ticker,))
     if px and ttm and float(ttm[0][0]) > 0:
         cash_ttm = float(ttm[0][0])
-        out.append(f"Tỷ suất cổ tức 12 tháng gần nhất = {cash_ttm:,.0f} đ/cp ÷ giá {px[0]:,.0f} đ (đóng cửa {px[1]}) "
-                   f"= {cash_ttm / px[0] * 100:.2f}%.")
+        out.append(f"Tỷ suất cổ tức 12 tháng gần nhất = {cash_ttm:,.0f} đ/cp (GDKHQ {ttm[0][1]}) "
+                   f"÷ giá {px[0]:,.0f} đ (đóng cửa {px[1]}) = {cash_ttm / px[0] * 100:.2f}%.")
     elif px:
         out.append("Không có đợt cổ tức tiền mặt nào trong 12 tháng gần nhất trong dữ liệu "
                    "→ tỷ suất cổ tức 12 tháng = 0%.")

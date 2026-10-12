@@ -298,6 +298,9 @@ def _matches_all(values: dict, filters: list[dict]) -> bool:
         v = _to_float(values.get(f["indicator"]))
         if v is None or not _cmp(v, f["op"], f["threshold"]):
             return False
+        # Non-positive P/E or P/B = loss-making / missing EPS-BVPS, not "cheap".
+        if f["indicator"] in ("pe", "pb") and v <= 0:
+            return False
     return True
 
 
@@ -552,6 +555,9 @@ def _format_value(indicator: str, v: float) -> str:
         return f"khối lượng = {v:.2f} lần TB20 phiên"
     if indicator == _MARKET_CAP_INDICATOR:
         return f"vốn hóa = {v:,.0f} tỷ VND"
+    if indicator == "pe" and 0 < v < 5:
+        # P/E = price / EPS with EPS from a third-party source; flag outliers instead of presenting them as bargains.
+        return f"pe={v:.2f} (⚠ rất thấp - chưa kiểm chứng, nên đối chiếu EPS với BCTC)"
     return f"{indicator}={v:.2f}"
 
 

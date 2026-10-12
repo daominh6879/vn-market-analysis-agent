@@ -614,6 +614,7 @@ class TestAnalyzeMarketSentiment:
     def test_no_news_returns_no_data(self, monkeypatch):
         monkeypatch.setattr("rag.news_index.search_news_by_text", lambda *a, **kw: [])
         monkeypatch.setattr("tools.price._auto_fetch_ticker_news", lambda *a, **kw: None)
+        monkeypatch.setattr("tools.price._cafef_headlines", lambda *a, **kw: [])
         from tools.price import analyze_market_sentiment
         result = analyze_market_sentiment("HPG", 7)
         assert result.status == "no_data"

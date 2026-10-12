@@ -82,9 +82,13 @@ def generate_sub_tasks(query: str, n: int = 4) -> list[dict]:
 
     client = create_client()
     prompt = (
-        f"Phân rã câu hỏi sau thành {n} truy vấn con, mỗi truy vấn một góc nhìn khác nhau.\n"
+        f"Phân rã câu hỏi sau thành TỐI ĐA {n} truy vấn con, mỗi truy vấn một góc nhìn khác nhau. "
+        f"Câu hỏi đơn giản chỉ hỏi một dữ kiện (một giá, một tỷ giá, một chỉ số) thì trả đúng 1 dòng, KHÔNG chẻ nhỏ.\n"
         f"Mỗi truy vấn con gán đúng 1 intent trong danh sách: {', '.join(_SUB_INTENTS)}.\n"
-        f"Trả về đúng {n} dòng, mỗi dòng theo định dạng: `intent | câu hỏi con`. "
+        f"Ý nghĩa: market_data = chỉ số (VN-Index), top tăng/giảm, khối ngoại, thanh khoản toàn thị trường; "
+        f"macro_sector = tỷ giá, hàng hóa, vàng, hiệu suất ngành; price_action = giá/khối lượng một mã; "
+        f"news_sentiment = tin tức, tâm lý; rag_qa = báo cáo tài chính, cổ tức.\n"
+        f"Trả về từ 1 đến {n} dòng, mỗi dòng theo định dạng: `intent | câu hỏi con`. "
         f"Không đánh số, không giải thích.\n"
         f"Trong câu hỏi con, chỉ nêu TỐI ĐA 5 mã cổ phiếu tiêu biểu nhất "
         f"(vốn hóa / thanh khoản lớn) của ngành/nhóm được hỏi — KHÔNG liệt kê toàn bộ.\n\n"
@@ -98,7 +102,7 @@ def generate_sub_tasks(query: str, n: int = 4) -> list[dict]:
             temperature=0,
             system=(
                 "Bạn là chuyên gia phân tích tài chính. "
-                "Trả về đúng số dòng yêu cầu, mỗi dòng `intent | câu hỏi`. "
+                "Trả về không quá số dòng cho phép, mỗi dòng `intent | câu hỏi`. "
                 "Intent phải nằm trong danh sách cho trước. "
                 "Chỉ đề cập đúng các mã cổ phiếu/ngành/chỉ số có trong câu hỏi gốc. "
                 "Mỗi câu hỏi con nêu tối đa 5 mã tiêu biểu nhất của ngành, không liệt kê toàn bộ."

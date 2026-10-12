@@ -82,7 +82,24 @@ def _fibonacci_levels(df: pd.DataFrame) -> str:
         "61.8% (vàng)": high - 0.618 * diff,
         "100% (đáy)":   low,
     }
-    return "Fibonacci 60 phiên:\n" + "\n".join(f"  {k}: {v:,.0f}" for k, v in lvls.items())
+    text = "Fibonacci 60 phiên:\n" + "\n".join(f"  {k}: {v:,.0f}" for k, v in lvls.items())
+    # State where price sits so prose never has to infer it (a close just above the "đáy" level
+    # was once described as having broken through it).
+    last = float(df["close"].iloc[-1])
+    if last < low:
+        pos = f"giá {last:,.0f} đã THỦNG đáy {low:,.0f}"
+    elif last > high:
+        pos = f"giá {last:,.0f} đã VƯỢT đỉnh {high:,.0f}"
+    else:
+        ordered = list(lvls.items())
+        for (hi_name, hi_v), (lo_name, lo_v) in zip(ordered, ordered[1:]):
+            if lo_v <= last <= hi_v:
+                pos = (f"giá {last:,.0f} nằm giữa mốc {hi_name} ({hi_v:,.0f}) và {lo_name} ({lo_v:,.0f}); "
+                       f"CHƯA thủng đáy {low:,.0f}")
+                break
+        else:
+            pos = f"giá {last:,.0f}"
+    return text + f"\n  Vị trí hiện tại: {pos}."
 
 
 def _extract_slot(text: str, label: str, next_label: str | None) -> str:

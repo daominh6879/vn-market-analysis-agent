@@ -119,6 +119,8 @@ def classify_node(state: AgentState) -> dict:
     # Pre-classified by conversation_router reroute — skip LLM classification.
     pre_intent = state.get("intent", "")
     screening_filter = state.get("screening_filter")
+    market_topics = state.get("market_topics") or []
+    macro_topics = state.get("macro_topics") or []
     if pre_intent and pre_intent != "conversation":
         from dataclasses import dataclass
         @dataclass
@@ -134,6 +136,8 @@ def classify_node(state: AgentState) -> dict:
             messages=state.get("messages"),
         )
         screening_filter = result.screening or screening_filter
+        market_topics = getattr(result, "market_topics", None) or market_topics
+        macro_topics = getattr(result, "macro_topics", None) or macro_topics
 
     # Deterministic guard: "lọc RSI < 30" is screening even when the LLM leans
     # technical_analysis (RSI keyword) or macro_sector — force it so it routes to the
@@ -174,6 +178,8 @@ def classify_node(state: AgentState) -> dict:
         "intent": result.intent,
         "ticker": result.ticker or "",
         "screening_filter": screening_filter,
+        "market_topics": market_topics,
+        "macro_topics": macro_topics,
         "classify_reason": result.reason,
         "time_context": time_context,
     }
@@ -331,10 +337,19 @@ def decompose_node(state: AgentState) -> dict:
         # The LLM already names the notable tickers inside each sub-task question
         # (prompt caps it at ≤5). Prefer those; fall back to query-level extraction.
         task_tickers = (extract_tickers(t.get("question", "")) or fallback_tickers)
+        sub_intent = t.get("intent") or parent_intent
+        sub_tickers = task_tickers[:MAX_FANOUT_TICKERS]
+        # Snapshot gathers ignore the question text: a second sub-task with the same
+        # intent+tickers would only re-fetch identical data.
+        if sub_intent in ("macro_sector", "market_data") and any(
+            x["intent"] == sub_intent and x["tickers"] == sub_tickers for x in sub_tasks
+        ):
+            continue
         sub_tasks.append({
-            "intent": t.get("intent") or parent_intent,
-            "tickers": task_tickers[:MAX_FANOUT_TICKERS],
+            "intent": sub_intent,
+            "tickers": sub_tickers,
             "question": t.get("question", ""),
+            "macro_topics": state.get("macro_topics") or [],
         })
     try:
         print(f"[decompose] {len(sub_tasks)} sub-tasks:")
@@ -377,7 +392,7 @@ def _get_gather_map() -> dict:
             "price_action":       lambda t, q, tc=None: price_action.gather_data(t, q, tc),
             "technical_analysis": lambda t, q, tc=None: technical.gather_data(t, q, tc),
             "news_sentiment":     lambda t, q, tc=None: news_sentiment.gather_data(t, q, tc),
-            "macro_sector":       lambda t, q, tc=None: macro_sector.gather_data(t, q, tc),
+            "macro_sector":       lambda t, q, tc=None, topics=None: macro_sector.gather_data(t, q, tc, topics=topics),
             "investment_case":    lambda t, q, tc=None: investment_case.gather_data(t, q, tc),
             "screening":          lambda t, q, tc=None, sf=None: screening.gather_data(t, q, tc, screening=sf),
             "rag_qa":             lambda t, q, tc=None: "\n\n".join(
@@ -385,7 +400,7 @@ def _get_gather_map() -> dict:
             ),
             "valuation":          lambda t, q, tc=None, tickers=None: fundamentals.gather_data(t, q, tc, tickers=tickers),
             "breakout_scan":      lambda t, q, tc=None: breakout.gather_data(t, q, tc),
-            "market_data":        lambda t, q, tc=None: market_data.gather_data(t, q, tc),
+            "market_data":        lambda t, q, tc=None, topics=None: market_data.gather_data(t, q, tc, topics=topics),
             "market_brief":       lambda t, q, tc=None: "[market_brief: xem riêng]",
         })
     return _GATHER_MAP
@@ -421,7 +436,8 @@ def _safe_gather(fn, ticker: str, question: str, tc: dict | None = None, **kw) -
             return fn(ticker, question, **kw) or ""
         return fn(ticker, question, tc, **kw) or ""
     except Exception as exc:
-        return f"[{ticker} — lỗi: {exc}]"
+        log.warning("gather failed for %s: %r", ticker, exc)
+        return f"[{ticker} — lỗi: nguồn dữ liệu tạm thời không khả dụng]"
 
 
 def _gather_tickers(fn, tickers: list[str], question: str, tc: dict | None = None) -> str:
@@ -447,7 +463,8 @@ def _gather_tickers(fn, tickers: list[str], question: str, tc: dict | None = Non
                 remaining = max(0.0, deadline - time.monotonic())
                 results[t] = fut.result(timeout=remaining) or ""
             except Exception as exc:
-                results[t] = f"[{t} — lỗi: {exc}]"
+                log.warning("gather timed out/failed for %s: %r", t, exc)
+                results[t] = f"[{t} — lỗi: nguồn dữ liệu tạm thời không khả dụng]"
     finally:
         # wait=False: a hung gather thread must not stall the turn at executor exit.
         # The tool layer (VCI/yfinance) carries its own HTTP timeout as the real bound.
@@ -506,6 +523,10 @@ def run_subqueries_node(state: AgentState) -> dict:
             primary = tickers[0] if tickers else fallback_ticker
             if intent == "screening":
                 data = _safe_gather(fn, primary, question, tc, sf=task.get("screening"))
+            elif intent == "market_data":
+                data = _safe_gather(fn, primary, question, tc, topics=task.get("market_topics"))
+            elif intent == "macro_sector":
+                data = _safe_gather(fn, primary, question, tc, topics=task.get("macro_topics"))
             elif intent == "valuation":
                 data = _safe_gather(fn, primary, question, tc, tickers=tickers)
             else:
@@ -922,6 +943,8 @@ def build_single_subtask_node(state: AgentState) -> dict:
             "tickers": tickers,
             "question": query,
             "screening": state.get("screening_filter"),
+            "market_topics": state.get("market_topics") or [],
+            "macro_topics": state.get("macro_topics") or [],
         }],
     }
 

@@ -24,7 +24,7 @@ _TOPIC_PATTERNS: dict[str, re.Pattern] = {
         re.IGNORECASE,
     ),
     "index": re.compile(
-        r"(vn-?index|vn30|hnx-?index|hnx30|upcom).*(đóng cửa|bao nhiêu|mấy điểm|điểm|hôm nay|phiên)"
+        r"(vn-?index|vn30|hnx-?index|hnx30|upcom).*(đóng cửa|bao nhiêu|mấy điểm|điểm|hôm nay|phiên|thế nào|ra sao|diễn biến|hiện tại)"
         r"|(đóng cửa|bao nhiêu điểm).*(vn-?index|vn30|hnx|upcom)",
         re.IGNORECASE,
     ),
@@ -65,6 +65,15 @@ _QUARTER_RE = re.compile(r"\bquý\b|\bq[1-4]\b", re.IGNORECASE)
 _FIN_ITEM_RE = re.compile(r"doanh thu|lợi nhuận|lnst|lãi ròng|tổng tài sản|nợ phải trả|dòng tiền", re.IGNORECASE)
 _YEAR_RE = re.compile(r"\b(20\d{2})\b")
 _YEARLY_METRIC_RE = re.compile(r"\b(roe|roa|eps|biên lợi nhuận)\b", re.IGNORECASE)
+
+# Trading-rule knowledge (price limits, settlement cycle, sessions ...): answered from general
+# market knowledge, never from the financial-report RAG (which has no such content).
+MARKET_RULES_RE = re.compile(
+    r"biên độ|giá trần|giá sàn|giá tham chiếu|\bt\s?\+\s?(?:\d|mấy)|thanh toán bù trừ|chu kỳ thanh toán"
+    r"|lô chẵn|lô lẻ|đơn vị giao dịch|bước giá|phiên (?:ato|atc|liên tục|thỏa thuận)|\b(?:ato|atc)\b"
+    r"|giờ giao dịch|thời gian giao dịch|phí giao dịch|thuế (?:thu nhập|bán)",
+    re.IGNORECASE,
+)
 
 _COMMODITY_RE = re.compile(r"giá vàng|vàng sjc|\bsjc\b|giá dầu|dầu brent|dầu wti|\bgold price\b", re.IGNORECASE)
 _CRYPTO_RE = re.compile(r"bitcoin|\bbtc\b|ethereum|\beth\b|crypto|tiền mã hoá|tiền mã hóa", re.IGNORECASE)

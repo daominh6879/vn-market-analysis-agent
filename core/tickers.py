@@ -242,6 +242,12 @@ _TICKER_STOPWORDS = frozenset({
 })
 
 
+_COMMODITY_CODE_RE = re.compile(
+    r"(?:\bthép\s+|\bsteel\s+)(?:HRC|CRC)\b|\b(?:HRC|CRC)\b(?=\s+(?:thế giới|toàn cầu|quốc tế|futures))",
+    re.IGNORECASE,
+)
+
+
 def raw_tickers(query: str) -> list[str]:
     """Return [A-Z]{2,5} tokens from `query`, stopword-filtered.
 
@@ -253,6 +259,9 @@ def raw_tickers(query: str) -> list[str]:
     """
     if not query:
         return []
+    # Steel grade names that double as real tickers (HRC = a listed stock): in a commodity
+    # context ("giá thép HRC", "HRC thế giới") they are the commodity, not the stock.
+    query = _COMMODITY_CODE_RE.sub(" ", query)
     hits = _TICKER_RE.findall(query)
     if not hits:
         hits = _TICKER_RE.findall(query.upper())

@@ -286,9 +286,15 @@ _BUILDERS = {
 }
 
 
-def gather_data(ticker: str | None, query: str, time_context: dict | None = None) -> str:
-    """Return labelled market-wide data for every topic the question asks about."""
-    topics = detect_market_topics(query, [])
+def gather_data(ticker: str | None, query: str, time_context: dict | None = None,
+                topics: list[str] | None = None) -> str:
+    """Return labelled market-wide data for every topic the question asks about.
+
+    `topics` come from the router/classifier LLM (chosen by meaning). The keyword detector is only a
+    safety net unioned in, so a rewritten query can no longer silently drop a block.
+    """
+    chosen = [t for t in (topics or []) if t in _BUILDERS]
+    topics = chosen + [t for t in detect_market_topics(query, []) if t not in chosen]
     # A ranking asked together with a sector list ("liệt kê ... tăng mạnh") keeps both.
     if not topics:
         topics = ["movers", "index"]

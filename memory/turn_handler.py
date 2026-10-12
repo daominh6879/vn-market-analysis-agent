@@ -212,6 +212,8 @@ def _build_agent_state(
     state["tickers"] = route.get("tickers") or ([state["ticker"]] if state["ticker"] else [])
     state["sector"] = route.get("sector", "")
     state["screening_filter"] = route.get("screening")
+    state["market_topics"] = route.get("market_topics") or []
+    state["macro_topics"] = route.get("macro_topics") or []
     state["original_query"] = user_message
     state["time_context"] = route.get("time_context")
     # Reset per-turn critique-loop state — otherwise it leaks from the prior turn's

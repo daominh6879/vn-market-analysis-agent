@@ -20,6 +20,8 @@ class RouterResult:
     ticker: str | None
     reason: str
     screening: list | None = None  # [{indicator, op, threshold}, ...] for screening intents
+    market_topics: list | None = None  # data blocks a market_data question needs (index, movers, ...)
+    macro_topics: list | None = None  # data blocks a macro_sector question needs (fx, commodities, gold, sector)
 
 
 # ── intents ───────────────────────────────────────────────────────────────────
@@ -144,6 +146,20 @@ _TOOL = {
                 "type": "string",
                 "description": "One sentence explaining the classification.",
             },
+            "market_topics": {
+                "type": "array",
+                "description": (
+                    "Only when intent='market_data': EVERY data block the question needs, chosen by meaning (not by keywords). index = an index's close/level (VN-Index, VN30, HNX, UPCOM); movers = top gainers/losers; foreign = foreign net buy/sell; liquidity = top traded value; marketcap = top market cap; list = tickers of a sector. A question about 'VN-Index hôm nay thế nào' needs index; add foreign/movers only if also asked."
+                ),
+                "items": {"type": "string", "enum": ["index", "movers", "foreign", "liquidity", "marketcap", "list"]},
+            },
+            "macro_topics": {
+                "type": "array",
+                "description": (
+                    "Only when intent='macro_sector': EVERY data block the question needs, chosen by meaning. fx = USD/VND central/bank exchange rate; commodities = oil, metals, world commodity prices; gold = domestic SJC gold price; sector = industry-group performance. 'Tỷ giá trung tâm hôm nay' needs only fx. Leave empty when the question is a broad macro/industry analysis (all blocks are fetched)."
+                ),
+                "items": {"type": "string", "enum": ["fx", "commodities", "gold", "sector"]},
+            },
             "screening": {
                 "type": "array",
                 "description": (
@@ -214,11 +230,14 @@ def llm_classify(query: str, client=None, messages: list | None = None) -> Route
             ticker = tc.input.get("ticker") or None
             reason = tc.input.get("reason", "llm classification")
             screening = tc.input.get("screening") or None
+            market_topics = [t for t in (tc.input.get("market_topics") or []) if isinstance(t, str)] or None
+            macro_topics = [t for t in (tc.input.get("macro_topics") or []) if isinstance(t, str)] or None
             if intent not in INTENTS:
                 intent = "conversation"
             if ticker and not ticker.strip():
                 ticker = None
-            return RouterResult(intent=intent, ticker=ticker, reason=f"llm:{reason}", screening=screening)
+            return RouterResult(intent=intent, ticker=ticker, reason=f"llm:{reason}", screening=screening,
+                                market_topics=market_topics, macro_topics=macro_topics)
 
         # Text-scan fallback when LLM skips tool call
         text_lower = resp.text.strip().lower()

@@ -42,8 +42,11 @@ def _shares_from_overview(ticker: str, source: str, column: str) -> int | None:
     df = Company(symbol=ticker, source=source).overview()
     if df is None or df.empty or column not in df.columns:
         return None
+    col = df[column]
+    if hasattr(col, "columns"):   # VCI returns duplicated column labels for some tickers (e.g. BCG, SVI)
+        col = col.iloc[:, 0]
     try:
-        v = float(df[column].iloc[0])
+        v = float(col.iloc[0])
     except (TypeError, ValueError):
         return None
     return int(v) if not math.isnan(v) and v > 0 else None
