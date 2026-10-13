@@ -539,7 +539,7 @@ TICKER_ENRICHMENT: dict[str, dict] = {
     "BMP": {"name_aliases": ["nhựa bình minh"]},
     "VGC": {"name_aliases": ["viglacera", "tổng công ty viglacera"]},
     # ── Food & beverage ──
-    "VNM": {"name_aliases": ["vinamilk", "công ty sữa việt nam", "sữa việt nam"], "tags": ["sữa"]},
+    "VNM": {"name_aliases": ["vinamilk", "vn milk", "công ty sữa việt nam", "sữa việt nam"], "tags": ["sữa"]},
     "MSN": {"name_aliases": ["masan", "tập đoàn masan"]},
     "SAB": {"name_aliases": ["sabeco", "bia sài gòn", "tổng công ty bia rượu nước giải khát sài gòn"]},
     "MCH": {"name_aliases": ["masan consumer", "masan tiêu dùng"]},

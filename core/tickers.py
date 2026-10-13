@@ -235,17 +235,44 @@ def _load_sectors() -> list[str]:
 # ── Ticker extraction (shared by graph fan-out + cache key) ──────────────────
 
 _TICKER_RE = re.compile(r'\b([A-Z]{2,5})\b')
+_WORD_RE = re.compile(r'\b[A-Za-z]{2,5}\b')
 _TICKER_STOPWORDS = frozenset({
     "VE", "VA", "LA", "CO", "DE", "VS", "ROE", "ROA", "EPS", "PE", "PB",
-    # Currency codes — never VN stock tickers. "USD/VND" is an FX query, not a stock pair.
-    "USD", "VND", "EUR", "JPY", "GBP", "CNY", "KRW", "CHF", "AUD", "CAD", "SGD",
+    # Currency codes — never VN stock tickers. VND is handled by _FX_CONTEXT_RE instead: it is the
+    # dong in an FX/amount context but also VNDirect's ticker ("so sánh SSI và VND").
+    "USD", "EUR", "JPY", "GBP", "CNY", "KRW", "CHF", "AUD", "CAD", "SGD",
 })
+# Universe tickers that are also ordinary words ("has", "oil and gas", "tra"/"dat" = Vietnamese
+# without diacritics, "trc" = trước). Matched only when the user wrote them in upper case.
+_LOWERCASE_COLLISIONS = frozenset({"TRA", "HAS", "DAT", "TRC", "OIL", "GAS", "NHA"})
 
 
 _COMMODITY_CODE_RE = re.compile(
     r"(?:\bthép\s+|\bsteel\s+)(?:HRC|CRC)\b|\b(?:HRC|CRC)\b(?=\s+(?:thế giới|toàn cầu|quốc tế|futures))",
     re.IGNORECASE,
 )
+
+# VND as a currency, not a stock: an FX pair ("USD/VND", "VND/USD", "usd vnd") or an amount
+# ("20.000 VND", "5 tỷ VND"). Anywhere else VND is VNDirect.
+_CCY = "USD|EUR|JPY|GBP|CNY|KRW|CHF|AUD|CAD|SGD|VND"
+_FX_CONTEXT_RE = re.compile(
+    rf"\b(?:{_CCY})\s*/\s*(?:{_CCY})\b|\b(?:{_CCY})\s+(?:{_CCY})\b"
+    r"|(?:\d|\btỷ|\btriệu|\bnghìn|\bngàn|\bđồng|\btiền)\s*VND\b"
+    r"|\bVND\s+(?:devaluation|depreciat\w*|appreciat\w*|weaken\w*|exchange|rate|mất giá)",
+    re.IGNORECASE,
+)
+
+
+def _strip_non_stock_codes(query: str) -> str:
+    """Drop commodity grades (HRC) and currency usages (USD/VND, 5 tỷ VND) before scanning for codes."""
+    return _FX_CONTEXT_RE.sub(" ", _COMMODITY_CODE_RE.sub(" ", query))
+
+
+def _loose_tokens(query: str) -> list[str]:
+    """Case-insensitive code candidates: every 2-5 letter word upper-cased, minus stopwords and
+    words that collide with ordinary vocabulary (those count only when written in upper case)."""
+    return [t for t in (w.upper() for w in _WORD_RE.findall(query))
+            if t not in _TICKER_STOPWORDS and t not in _LOWERCASE_COLLISIONS]
 
 
 def raw_tickers(query: str) -> list[str]:
@@ -259,12 +286,12 @@ def raw_tickers(query: str) -> list[str]:
     """
     if not query:
         return []
-    # Steel grade names that double as real tickers (HRC = a listed stock): in a commodity
-    # context ("giá thép HRC", "HRC thế giới") they are the commodity, not the stock.
-    query = _COMMODITY_CODE_RE.sub(" ", query)
+    # Steel grade names that double as real tickers (HRC = a listed stock) and the dong in an FX
+    # pair ("USD/VND") are not stocks in those contexts.
+    query = _strip_non_stock_codes(query)
     hits = _TICKER_RE.findall(query)
     if not hits:
-        hits = _TICKER_RE.findall(query.upper())
+        return _loose_tokens(query)
     return [t for t in hits if t not in _TICKER_STOPWORDS]
 
 
@@ -283,6 +310,10 @@ def extract_tickers(query: str) -> list[str]:
         known = set()
     if known:
         code_hits = [t for t in hits if t in known]
+        if not code_hits and query:
+            # An upper-case non-ticker word ("MACD ssi tuần trước") suppressed the case-insensitive
+            # scan in raw_tickers; retry it against the universe before falling back to names.
+            code_hits = [t for t in _loose_tokens(_strip_non_stock_codes(query)) if t in known]
         return list(dict.fromkeys(code_hits)) if code_hits else resolve_name_tickers(query)
     return list(dict.fromkeys(hits)) if hits else resolve_name_tickers(query)
 
@@ -294,7 +325,8 @@ _MIN_ALIAS_LEN = 4
 
 def _normalize(s: str) -> str:
     """Lowercase + strip diacritics, so "Hòa Phát" and "hoa phat" match."""
-    return "".join(c for c in unicodedata.normalize("NFKD", (s or "").lower())
+    # "đ" has no NFKD decomposition, so it is mapped by hand ("đông" must match typed "dong").
+    return "".join(c for c in unicodedata.normalize("NFKD", (s or "").lower().replace("đ", "d"))
                    if not unicodedata.combining(c))
 
 
@@ -332,10 +364,14 @@ def resolve_name_tickers(query: str) -> list[str]:
     if not index:
         return []
     matched: list[tuple[int, str]] = []
+    taken: list[tuple[int, int]] = []  # spans already claimed by a longer alias ("sacombank" blocks "sacom")
     for alias in sorted(index, key=len, reverse=True):  # longest phrase wins
-        pos = q.find(alias)
-        if pos >= 0:
-            matched.append((pos, index[alias]))
+        for m in re.finditer(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", q):
+            if any(m.start() < e and m.end() > b for b, e in taken):
+                continue
+            taken.append((m.start(), m.end()))
+            matched.append((m.start(), index[alias]))
+            break
     out: list[str] = []
     seen: set[str] = set()
     for _, t in sorted(matched):
