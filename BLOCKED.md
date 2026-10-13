@@ -69,3 +69,11 @@ Các mục dưới đây là điểm nghi vấn nêu trong `vn_stock_agent_test_
 ## Tỷ giá trung tâm (quan sát 12/10/2026)
 
 - [ ] **`fx_scraper` không lấy được tỷ giá trung tâm SBV**: log khi chạy eval: `SBV homepage chart failed: Client error '403 No server' for url 'https://www.sbv.gov.vn/'` và `central-rate mirror is stale (2025-04-24); ignored`. Câu hỏi tỷ giá trung tâm hiện dựa vào nguồn còn lại; cần nguồn/endpoint mới hoặc header/proxy cho SBV.
+
+## Intent model (12/10/2026) — chi tiết ở `docs/notes/intent-model.md`
+
+- [ ] **Chưa có kết quả fine-tune**: `intent_model/finetune.py` (multilingual-e5-small) đang chạy trên dữ liệu đã lọc; chưa có số để quyết định có nối cascade vào `llm_route` hay không. Baseline đông cứng chỉ đạt 78,7% intent trên tập gold (50% câu được phục vụ ở ngưỡng 0,8 với độ chính xác 97,4%).
+- [ ] **`SBV` mơ hồ**: "Fed và SBV" là Ngân hàng Nhà nước nhưng `extract_focus_entities` trả `['SBV']` (mã Siam Brothers có thật trong universe). Không phân biệt được bằng từ vựng; cần ngữ cảnh (ví dụ "lãi suất", "NHNN") hoặc bỏ khỏi nhóm mã khi đi cùng "Fed".
+- [ ] **Thiếu alias tên công ty**: đã thêm "vn milk" vào `TICKER_ENRICHMENT["VNM"]` (`data/hose_universe.py`, có test `test_vn_milk_alias_is_curated_for_vnm`); **DB chưa được seed lại** nên `securities.name_aliases` chưa có alias này cho tới khi chạy `python ingest/seed_securities.py` (hoặc asset Dagster seed). "nhà bán lẻ này", "vp b" mơ hồ, không thêm được.
+- [ ] **Bộ lọc `screening` chưa mô hình hoá**: ghép đúng chỉ báo–toán tử–ngưỡng cho nhiều bộ lọc cần token tagging; cascade phải rơi về LLM với `screening` cho đến khi có.
+- [ ] **Nhãn synthetic chưa đối chiếu với router thật**: quy tắc lọc nhiễu (`common.load_synthetic`) là cách đọc `ROUTING_RULES`; chưa chạy `llm_route` trên 155 câu seed để xác nhận các nhãn viết tay còn tranh cãi.

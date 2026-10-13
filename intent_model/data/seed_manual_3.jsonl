@@ -1,0 +1,73 @@
+{"query": "VIC hôm nay tăng hay giảm", "label": "price_action", "tickers": ["VIC"]}
+{"query": "giá FPT 10 phiên gần nhất", "label": "price_action", "tickers": ["FPT"], "time": {"kind": "relative", "n": 10, "unit": "session"}}
+{"query": "khối ngoại mua bán ròng MWG hôm qua", "label": "price_action", "tickers": ["MWG"], "time": {"kind": "relative", "n": 1, "unit": "day"}}
+{"query": "VNM tuần qua diễn biến thế nào", "label": "price_action", "tickers": ["VNM"], "time": {"kind": "relative", "n": 1, "unit": "week"}}
+{"query": "how is HPG trading today", "label": "price_action", "tickers": ["HPG"], "language": "en"}
+{"query": "giá VCB 3 tháng qua", "label": "price_action", "tickers": ["VCB"], "time": {"kind": "relative", "n": 3, "unit": "month"}}
+{"query": "ngày mai VNM tăng hay giảm", "label": "price_action", "tickers": ["VNM"], "risk_flags": ["prediction"]}
+{"query": "thanh khoản SSI hôm nay so với hôm qua", "label": "price_action", "tickers": ["SSI"]}
+{"query": "MACD của HPG đang thế nào", "label": "technical_analysis", "tickers": ["HPG"]}
+{"query": "FPT có đang quá mua không", "label": "technical_analysis", "tickers": ["FPT"]}
+{"query": "vùng hỗ trợ kháng cự của VNM", "label": "technical_analysis", "tickers": ["VNM"]}
+{"query": "Bollinger bands MWG 20 ngày gần đây", "label": "technical_analysis", "tickers": ["MWG"], "time": {"kind": "relative", "n": 20, "unit": "day"}}
+{"query": "RSI của SSI", "label": "technical_analysis", "tickers": ["SSI"]}
+{"query": "đường MA50 của VCB đang ở đâu", "label": "technical_analysis", "tickers": ["VCB"]}
+{"query": "is TCB oversold on RSI", "label": "technical_analysis", "tickers": ["TCB"], "language": "en"}
+{"query": "top 10 mã tăng mạnh nhất hôm nay", "label": "market_data", "market_topics": ["movers"]}
+{"query": "VN30 đóng cửa bao nhiêu điểm", "label": "market_data", "market_topics": ["index"]}
+{"query": "khối ngoại bán ròng nhiều nhất sàn HOSE hôm qua", "label": "market_data", "market_topics": ["foreign"], "time": {"kind": "relative", "n": 1, "unit": "day"}}
+{"query": "top 10 mã thanh khoản cao nhất hôm nay", "label": "market_data", "market_topics": ["liquidity"]}
+{"query": "5 mã vốn hóa lớn nhất HNX", "label": "market_data", "market_topics": ["marketcap"]}
+{"query": "liệt kê các mã ngành bất động sản", "label": "market_data", "market_topics": ["list"]}
+{"query": "which stocks fell the most today", "label": "market_data", "market_topics": ["movers"], "language": "en"}
+{"query": "chỉ số HNX hôm nay bao nhiêu", "label": "market_data", "market_topics": ["index"]}
+{"query": "bản tin thị trường sáng nay", "label": "market_brief"}
+{"query": "nhận định VN-Index tuần này", "label": "market_brief"}
+{"query": "VN30 có nên mua lúc này không", "label": "market_brief", "risk_flags": ["advice"]}
+{"query": "market overview today", "label": "market_brief", "language": "en"}
+{"query": "tổng quan thị trường tuần qua", "label": "market_brief", "time": {"kind": "relative", "n": 1, "unit": "week"}}
+{"query": "dự đoán VN-Index tuần sau", "label": "market_brief", "risk_flags": ["prediction"]}
+{"query": "nhận định cuối phiên", "label": "closing_commentary"}
+{"query": "chốt phiên hôm nay thị trường thế nào", "label": "closing_commentary"}
+{"query": "tổng kết phiên chiều nay", "label": "closing_commentary"}
+{"query": "closing recap for today", "label": "closing_commentary", "language": "en"}
+{"query": "phân tích FPT", "label": "investment_case", "tickers": ["FPT"]}
+{"query": "có nên mua MWG không", "label": "investment_case", "tickers": ["MWG"], "risk_flags": ["advice"]}
+{"query": "VPB có đáng đầu tư không", "label": "investment_case", "tickers": ["VPB"], "risk_flags": ["advice"]}
+{"query": "should I hold VCB", "label": "investment_case", "tickers": ["VCB"], "risk_flags": ["advice"], "language": "en"}
+{"query": "tôi nên mua SSI bằng margin không", "label": "investment_case", "tickers": ["SSI"], "risk_flags": ["advice", "personal"]}
+{"query": "P/E của VCB", "label": "valuation", "tickers": ["VCB"]}
+{"query": "ROE của FPT", "label": "valuation", "tickers": ["FPT"]}
+{"query": "MWG đắt hay rẻ", "label": "valuation", "tickers": ["MWG"]}
+{"query": "so sánh P/B của ACB và MBB", "label": "valuation", "tickers": ["ACB", "MBB"]}
+{"query": "định giá VNM", "label": "valuation", "tickers": ["VNM"]}
+{"query": "lợi nhuận sau thuế quý 2 2025 của FPT", "label": "rag_qa", "tickers": ["FPT"], "time": {"kind": "absolute", "year": 2025, "quarter": 2}, "rag_topics": ["quarterly"]}
+{"query": "cổ tức VNM năm 2024", "label": "rag_qa", "tickers": ["VNM"], "time": {"kind": "absolute", "year": 2024, "quarter": null}, "rag_topics": ["dividend"]}
+{"query": "ROE HPG năm 2023", "label": "rag_qa", "tickers": ["HPG"], "time": {"kind": "absolute", "year": 2023, "quarter": null}, "rag_topics": ["yearly_metric"]}
+{"query": "vốn hóa của VCB", "label": "rag_qa", "tickers": ["VCB"], "rag_topics": ["marketcap"]}
+{"query": "doanh thu quý trước của MWG", "label": "rag_qa", "tickers": ["MWG"], "time": {"kind": "relative", "n": 1, "unit": "quarter"}, "rag_topics": ["quarterly"]}
+{"query": "tin tức về VIC", "label": "news_sentiment", "tickers": ["VIC"]}
+{"query": "tâm lý nhà đầu tư với HPG tuần qua", "label": "news_sentiment", "tickers": ["HPG"], "time": {"kind": "relative", "n": 1, "unit": "week"}}
+{"query": "có tin gì mới về Vinamilk", "label": "news_sentiment", "tickers": ["VNM"]}
+{"query": "news on SSI today", "label": "news_sentiment", "tickers": ["SSI"], "language": "en"}
+{"query": "lọc cổ phiếu P/E dưới 10", "label": "screening", "filters": [{"indicator": "pe", "op": "<", "threshold": 10, "text": "P/E dưới 10"}]}
+{"query": "tìm cổ phiếu ROE trên 20% và nợ trên vốn chủ dưới 1", "label": "screening", "filters": [{"indicator": "roe", "op": ">", "threshold": 20, "text": "ROE trên 20%"}, {"indicator": "de", "op": "<", "threshold": 1, "text": "nợ trên vốn chủ dưới 1"}]}
+{"query": "cổ phiếu nào có RSI trên 70", "label": "screening", "filters": [{"indicator": "rsi", "op": ">", "threshold": 70, "text": "RSI trên 70"}]}
+{"query": "quét cổ phiếu vượt đỉnh 52 tuần", "label": "breakout_scan"}
+{"query": "mã nào breakout hôm nay", "label": "breakout_scan"}
+{"query": "tìm cổ phiếu phá nền giá với volume tăng", "label": "breakout_scan"}
+{"query": "giá vàng SJC hôm nay", "label": "macro_sector", "macro_topics": ["gold"]}
+{"query": "giá dầu Brent tuần này", "label": "macro_sector", "macro_topics": ["commodities"]}
+{"query": "tỷ giá USD/VND hôm nay", "label": "macro_sector", "macro_topics": ["fx"]}
+{"query": "triển vọng ngành thép", "label": "macro_sector", "macro_topics": ["sector"], "risk_flags": ["prediction"]}
+{"query": "ngành ngân hàng quý này thế nào", "label": "macro_sector", "macro_topics": ["sector"]}
+{"query": "cảm ơn bạn", "label": "conversation"}
+{"query": "bạn là ai", "label": "conversation"}
+{"query": "T+3 là gì", "label": "conversation"}
+{"query": "giờ giao dịch sàn HOSE", "label": "conversation"}
+{"query": "hello", "label": "conversation", "language": "en"}
+{"query": "giá bitcoin hôm nay", "label": "out_of_scope"}
+{"query": "viết cho tôi bài thơ về mùa xuân", "label": "out_of_scope"}
+{"query": "cổ phiếu Apple có nên mua không", "label": "out_of_scope", "risk_flags": ["advice"]}
+{"query": "thời tiết Hà Nội ngày mai", "label": "out_of_scope"}
+{"query": "write a Python function to sort a list", "label": "out_of_scope", "language": "en"}

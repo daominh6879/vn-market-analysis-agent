@@ -636,3 +636,24 @@ llm_route / classify_hybrid  ──(tool schema)──►  RouteResult
 
 Phần vẫn là code cố định (không phải bộ nhận diện): văn bản disclaimer, rule sheet luật giao dịch, `scrub_internal` lọc tên bảng nội bộ khỏi đầu ra. Khi thiếu quyết định (topic rỗng) thì dùng mặc định an toàn (`market_data` → movers + index), không đoán bằng từ khóa.
 
+## Router huấn luyện: cascade thay vì thay thế hẳn
+
+Router LLM tốn một lượt gọi LLM (nhiều lượt khi `direct_reply` rơi về `_fallback_classify`) cho mỗi câu. Một mô hình nhỏ huấn luyện từ chính đầu ra của router có thể trả lời thay LLM khi nó chắc chắn, và nhường LLM khi không chắc. Thiết kế (prototype ở `intent_model/`, chưa nối vào agent):
+
+```
+câu hỏi ──► mô hình nhỏ ──► softmax intent
+                │  độ tin cậy ≥ ngưỡng ──► dùng luôn (intent, route type, topics, flags, time)
+                │  độ tin cậy < ngưỡng ──► llm_route (như hiện nay)
+                └─ ticker/sector luôn lấy từ extract_focus_entities, không qua mô hình
+```
+
+Vì sao không thay hẳn: đầu ra của router không chỉ là nhãn mà còn có `screening` filters (ghép chỉ báo–toán tử–ngưỡng), `decompose` nhiều đoạn, và follow-up dựa trên `Focus` — những phần đó cần LLM hoặc mô hình gắn nhãn token. Ngưỡng được chọn từ bảng độ phủ/độ chính xác trên tập gold, không đoán.
+
+**Mỗi trường dùng công cụ hợp với nó.** Ticker là tra bảng `securities` (cộng alias tên công ty) → hàm xác định, không học. Số trong "5 phiên", "quý 3/2024" là chuỗi ký tự → regex; mô hình chỉ đoán *loại* thời gian (không có / tương đối / tuyệt đối) và *đơn vị*. Học máy chỉ dùng nơi cần hiểu nghĩa: intent, topics, cờ rủi ro, ngôn ngữ.
+
+**Nhãn huấn luyện do LLM sinh phải được kiểm tra bằng thứ độc lập.** Mô hình học đúng cái nó được cho; nhãn sai thì mô hình sai một cách tự tin. Hai ví dụ gặp thật: (1) LLM để trống `ticker` ở câu nhiều mã vì prompt định nghĩa trường là một chuỗi — kiểm tra bằng `extract_focus_entities` lộ ra 473/6.022 dòng; (2) câu như "nhận định cuối phiên HPG" gắn `closing_commentary` trong khi quy tắc routing nói đó là bình luận cả thị trường — làm mô hình nhầm `market_data` ↔ `price_action`. Cách phòng: so sánh nhãn với một nguồn xác định (hàm trích xuất, quy tắc trong `ROUTING_RULES`), lọc hoặc gắn cờ chỗ bất đồng, và đánh giá trên tập gold viết tay thay vì tập sinh.
+
+**Bẫy chuẩn hoá tiếng Việt: "đ" không phải dấu.** `unicodedata.normalize("NFKD")` + bỏ ký tự kết hợp xoá được dấu của "ế, ộ, ư…" nhưng **không** đổi "đ" thành "d" vì "đ" là một chữ cái riêng, không có dạng tách. Nếu không `replace("đ", "d")`, alias lưu "the gioi di đong" sẽ không khớp câu gõ "the gioi di dong". Mọi so khớp không dấu trong hệ thống cần cùng một hàm chuẩn hoá cho cả hai phía (`core/tickers._normalize`, `agents/focus._strip_accents` đã làm đúng).
+
+**Mã cổ phiếu trùng từ thường.** Khi câu không có chữ hoa nào, hệ thống chuyển cả câu thành chữ hoa để bắt mã gõ thường ("hpg vcb"), kéo theo các từ trùng mã (OIL, GAS, TRA, HAS, DAT). Giải pháp: nhóm từ trùng này chỉ tính là mã khi người dùng tự viết hoa. Tương tự, `VND` vừa là đồng tiền vừa là mã VNDirect: chỉ coi là tiền khi nằm trong cặp tỷ giá hoặc đi sau số tiền.
+

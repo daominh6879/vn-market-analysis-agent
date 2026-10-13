@@ -1,0 +1,82 @@
+{"query": "phân tích kỹ thuật", "label": "technical_analysis"}
+{"query": "phân tích HPG", "label": "investment_case", "tickers": ["HPG"]}
+{"query": "phân tích Vingroup", "label": "investment_case", "tickers": ["VIC"]}
+{"query": "ROE của HPG", "label": "valuation", "tickers": ["HPG"]}
+{"query": "ROE của HPG năm 2024", "label": "rag_qa", "tickers": ["HPG"], "time": {"kind": "absolute", "year": 2024, "quarter": null}, "rag_topics": ["yearly_metric"]}
+{"query": "EPS của VNM hiện tại", "label": "valuation", "tickers": ["VNM"]}
+{"query": "EPS VNM năm 2023", "label": "rag_qa", "tickers": ["VNM"], "time": {"kind": "absolute", "year": 2023, "quarter": null}, "rag_topics": ["yearly_metric"]}
+{"query": "doanh thu quý trước của HPG", "label": "rag_qa", "tickers": ["HPG"], "time": {"kind": "relative", "n": 1, "unit": "quarter"}, "rag_topics": ["quarterly"]}
+{"query": "lợi nhuận Q2/2025 của MWG", "label": "rag_qa", "tickers": ["MWG"], "time": {"kind": "absolute", "year": 2025, "quarter": 2}, "rag_topics": ["quarterly"]}
+{"query": "VCB chia cổ tức bao nhiêu", "label": "rag_qa", "tickers": ["VCB"], "rag_topics": ["dividend"]}
+{"query": "tổng nợ vay của HPG trong báo cáo tài chính", "label": "rag_qa", "tickers": ["HPG"]}
+{"query": "gia hpg hom nay", "label": "price_action", "tickers": ["HPG"]}
+{"query": "co nen mua vnm khong", "label": "investment_case", "tickers": ["VNM"], "risk_flags": ["advice"]}
+{"query": "giá cổ phiếu Techcombank", "label": "price_action", "tickers": ["TCB"]}
+{"query": "Vietcombank hôm nay thế nào", "label": "price_action", "tickers": ["VCB"]}
+{"query": "thế giới di động có tăng không", "label": "price_action", "tickers": ["MWG"]}
+{"query": "giá HPG năm ngoái", "label": "price_action", "tickers": ["HPG"], "time": {"kind": "relative", "n": 1, "unit": "year"}}
+{"query": "SSI 3 ngày qua", "label": "price_action", "tickers": ["SSI"], "time": {"kind": "relative", "n": 3, "unit": "day"}}
+{"query": "khối lượng giao dịch VPB 10 phiên gần nhất", "label": "price_action", "tickers": ["VPB"], "time": {"kind": "relative", "n": 10, "unit": "session"}}
+{"query": "giá HPG tháng trước", "label": "price_action", "tickers": ["HPG"], "time": {"kind": "relative", "n": 1, "unit": "month"}}
+{"query": "RSI for FPT over the last 14 days", "label": "technical_analysis", "tickers": ["FPT"], "time": {"kind": "relative", "n": 14, "unit": "day"}, "language": "en"}
+{"query": "hỗ trợ kháng cự của STB", "label": "technical_analysis", "tickers": ["STB"]}
+{"query": "is HPG overvalued", "label": "valuation", "tickers": ["HPG"], "language": "en"}
+{"query": "P/E ngành ngân hàng so với VCB", "label": "valuation", "tickers": ["VCB"]}
+{"query": "so sánh HPG, HSG và NKG", "label": "valuation", "tickers": ["HPG", "HSG", "NKG"]}
+{"query": "VCB hay BID tốt hơn", "label": "valuation", "tickers": ["VCB", "BID"]}
+{"query": "P/B của MBB là bao nhiêu", "label": "valuation", "tickers": ["MBB"]}
+{"query": "bán HPG hay giữ", "label": "investment_case", "tickers": ["HPG"], "risk_flags": ["advice"]}
+{"query": "cắt lỗ VNM chưa", "label": "investment_case", "tickers": ["VNM"], "risk_flags": ["advice"]}
+{"query": "all-in HPG bằng tiền vay được không", "label": "investment_case", "tickers": ["HPG"], "risk_flags": ["advice", "personal"]}
+{"query": "giá mục tiêu của FPT cuối năm", "label": "investment_case", "tickers": ["FPT"], "risk_flags": ["prediction"]}
+{"query": "dự báo giá HPG ngày mai", "label": "price_action", "tickers": ["HPG"], "risk_flags": ["prediction"]}
+{"query": "is VNM a good buy", "label": "investment_case", "tickers": ["VNM"], "risk_flags": ["advice"], "language": "en"}
+{"query": "tin tức về Vingroup tuần qua", "label": "news_sentiment", "tickers": ["VIC"], "time": {"kind": "relative", "n": 1, "unit": "week"}}
+{"query": "dư luận về HPG gần đây", "label": "news_sentiment", "tickers": ["HPG"]}
+{"query": "lọc cổ phiếu P/E dưới 10 ngành ngân hàng", "label": "screening", "filters": [{"indicator": "pe", "op": "<", "threshold": 10}]}
+{"query": "tìm mã có ROE trên 15", "label": "screening", "filters": [{"indicator": "roe", "op": ">", "threshold": 15}]}
+{"query": "vốn hóa lớn hơn 5000 tỷ và RSI dưới 35", "label": "screening", "filters": [{"indicator": "market_cap", "op": ">", "threshold": 5000}, {"indicator": "rsi", "op": "<", "threshold": 35}]}
+{"query": "lọc EPS >= 3000", "label": "screening", "filters": [{"indicator": "eps", "op": ">=", "threshold": 3000}]}
+{"query": "cổ phiếu tăng trưởng lợi nhuận trên 20%", "label": "screening", "filters": [{"indicator": "earnings_growth", "op": ">", "threshold": 20}]}
+{"query": "filter stocks with P/E below 8 and ROE above 18", "label": "screening", "filters": [{"indicator": "pe", "op": "<", "threshold": 8}, {"indicator": "roe", "op": ">", "threshold": 18}], "language": "en"}
+{"query": "khối lượng đột biến ngành thép", "label": "screening", "filters": [{"indicator": "volume", "op": ">", "threshold": 1.5}]}
+{"query": "top mã tăng mạnh nhất", "label": "market_data", "market_topics": ["movers"]}
+{"query": "mã nào giảm sâu nhất phiên này", "label": "market_data", "market_topics": ["movers"]}
+{"query": "khối ngoại bán ròng nhiều nhất", "label": "market_data", "market_topics": ["foreign"]}
+{"query": "top thanh khoản hôm nay", "label": "market_data", "market_topics": ["liquidity"]}
+{"query": "vốn hóa lớn nhất thị trường", "label": "market_data", "market_topics": ["marketcap"]}
+{"query": "liệt kê các mã ngành thép", "label": "market_data", "market_topics": ["list"]}
+{"query": "VN30 và HNX-Index đóng cửa bao nhiêu", "label": "market_data", "market_topics": ["index"]}
+{"query": "what's the foreign net buy today", "label": "market_data", "market_topics": ["foreign"], "language": "en"}
+{"query": "VN-Index hôm nay thế nào, mã nào tăng mạnh", "label": "market_data", "market_topics": ["index", "movers"]}
+{"query": "bản tin thị trường hôm nay", "label": "market_brief"}
+{"query": "đọc gì trước giờ mở cửa", "label": "market_brief"}
+{"query": "VN-Index có nên mua không", "label": "market_brief", "risk_flags": ["advice"]}
+{"query": "triển vọng VN30 tuần tới", "label": "market_brief", "risk_flags": ["prediction"]}
+{"query": "tổng kết phiên hôm nay và kịch bản phiên sau", "label": "closing_commentary"}
+{"query": "thị trường chiều nay thế nào", "label": "closing_commentary"}
+{"query": "quét cổ phiếu vượt đỉnh", "label": "breakout_scan"}
+{"query": "mã nào đang breakout", "label": "breakout_scan"}
+{"query": "tỷ giá trung tâm hôm nay", "label": "macro_sector", "macro_topics": ["fx"]}
+{"query": "giá dầu Brent và vàng SJC", "label": "macro_sector", "macro_topics": ["commodities", "gold"]}
+{"query": "triển vọng ngành ngân hàng", "label": "macro_sector", "macro_topics": ["sector"]}
+{"query": "lãi suất ngân hàng tháng này", "label": "macro_sector"}
+{"query": "USD/VND 3 tháng qua", "label": "macro_sector", "macro_topics": ["fx"], "time": {"kind": "relative", "n": 3, "unit": "month"}}
+{"query": "gold price today", "label": "macro_sector", "macro_topics": ["gold"], "language": "en"}
+{"query": "giá EUR/USD", "label": "out_of_scope"}
+{"query": "giá cổ phiếu Apple", "label": "out_of_scope"}
+{"query": "Tesla stock price", "label": "out_of_scope", "language": "en"}
+{"query": "giá Ethereum", "label": "out_of_scope"}
+{"query": "viết cho tôi bài thơ về mùa thu", "label": "out_of_scope"}
+{"query": "thời tiết Hà Nội hôm nay", "label": "out_of_scope"}
+{"query": "dịch câu này sang tiếng Anh", "label": "out_of_scope"}
+{"query": "xin chào", "label": "conversation"}
+{"query": "ok mình hiểu rồi", "label": "conversation"}
+{"query": "bạn làm được những gì", "label": "conversation"}
+{"query": "biên độ giá sàn HOSE là bao nhiêu", "label": "conversation"}
+{"query": "T+2 là gì", "label": "conversation"}
+{"query": "asdfgh", "label": "conversation"}
+{"query": "phân tích sâu hơn", "label": "valuation", "prior_intent": "valuation"}
+{"query": "chi tiết hơn", "label": "technical_analysis", "prior_intent": "technical_analysis"}
+{"query": "còn VNM thì sao", "label": "valuation", "prior_intent": "valuation", "tickers": ["VNM"]}
+{"query": "giá cổ phiếu thì sao", "label": "price_action", "prior_intent": "valuation"}

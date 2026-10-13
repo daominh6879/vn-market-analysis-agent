@@ -814,3 +814,18 @@ Hai hạn chế còn lại: (1) incremental `MAX(date)+1` không lấp được 
 
 **Q:** Hỏi "cổ tức HPG" ra chữ `[Errno 111] Connection refused` — lỗi ở đâu?
 **A:** Ollama không chạy nên không embed được bge-m3 cho truy xuất RAG; lỗi gốc bị đưa nguyên vào ngữ cảnh rồi LLM chép lại. Dữ liệu cổ tức đến từ bảng `dividends` nên không phụ thuộc Ollama. Giờ lỗi chỉ vào log; người dùng thấy "tạm thời không khả dụng".
+
+---
+
+**Q:** Người dùng hỏi "vinamilk" thay vì VNM, hay "ngân hàng thịnh vượng" thay vì VPB thì hệ thống có nhận ra không?
+**A:** Có. `extract_tickers` (`core/tickers.py`) tìm mã trước; không có mã thì tra bảng alias dựng từ `securities.name_aliases` + `company_name` (không phân biệt dấu/hoa thường, khớp cụm dài nhất trước, alias tối thiểu 4 ký tự). Đã kiểm tra trên DB thật 12/10/2026: `vinamilk`, `giá vinamilk hôm nay` → `['VNM']`; `ngân hàng thịnh vượng`, `ngan hang thinh vuong`, `VPBank`, `vpbank thế nào`, `Ngân hàng Việt Nam Thịnh Vượng` → `['VPB']`. Giới hạn: nếu câu đã có một mã, tên công ty bị bỏ qua ("phân tích HPG và vinamilk" → chỉ HPG); tên chưa có trong alias không ra mã ("VN milk" từng thiếu; đã thêm vào `TICKER_ENRICHMENT` trong `data/hose_universe.py`, có hiệu lực trên DB sau khi seed lại `securities`).
+
+---
+
+**Q:** `VND` là đồng tiền hay mã cổ phiếu?
+**A:** Cả hai. `extract_tickers` coi là tiền khi nằm trong cặp tỷ giá ("USD/VND", "VND/USD", "usd vnd") hoặc đi sau số/đơn vị tiền ("20.000 VND", "5 tỷ VND", "triệu VND"); chỗ khác là mã VNDirect ("compare SSI and VND P/B" → `['SSI', 'VND']`). Trước 12/10/2026 VND bị loại hẳn khỏi mã nên mọi câu so sánh có VNDirect đều mất VND.
+
+---
+
+**Q:** Vì sao gõ không dấu "the gioi di dong" từng không ra MWG, dù "thế giới di động" ra?
+**A:** `core/tickers._normalize` bỏ dấu bằng NFKD nhưng "đ" không có dạng tách nên giữ nguyên; alias lưu "the gioi di đong" không khớp "the gioi di dong" gõ trong câu. Đã thêm `replace("đ", "d")` ở cả hai phía; có test `tests/test_ticker_extraction.py::test_company_name_with_d_bar_matches_without_diacritics`.
