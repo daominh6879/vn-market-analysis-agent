@@ -314,7 +314,7 @@ def run_turn(
     system_prompt = _build_system(user_memory, episodes, chroma_turns=chroma_turns, user_id=user_id, tenant_id=tenant_id)
     client = create_client()
 
-    from agents.conversation_router import llm_route
+    from agents.conversation_router import llm_route, log_route_sample
     from agents.graph import build_graph
     from agents.checkpointer import PostgresCheckpointer
 
@@ -337,6 +337,7 @@ def run_turn(
         user_message, history, system_prompt, client,
         focus=prior["focus"],
     )
+    log_route_sample(user_message, route, bool(history))
 
     if route.get("type") == "agent":
         agent_state = _build_agent_state(route, user_message, conversation_id, user_id, tenant_id, history)
@@ -590,11 +591,12 @@ async def stream_turn(
 
     # ── LLM on top: single call decides route OR replies directly ─────────────
     yield _sse_status("routing")
-    from agents.conversation_router import llm_route
+    from agents.conversation_router import llm_route, log_route_sample
     route = llm_route(
         user_message, history, system_prompt, client,
         focus=prior["focus"],
     )
+    log_route_sample(user_message, route, bool(history))
 
     assistant_reply = ""
     node_path: list[str] = []

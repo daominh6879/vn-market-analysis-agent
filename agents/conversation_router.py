@@ -550,6 +550,26 @@ def _trace(decision: str, intent: str = "", ticker: str = "", fallback_used: boo
         pass
 
 
+def log_route_sample(query: str, route: dict, has_history: bool) -> None:
+    """Record the raw query + llm_route output (trace_events, kind='route_sample').
+
+    Source of real-traffic data for evaluating a trained router (intent_model/) against llm_route.
+    """
+    try:
+        from tracing import get_tracer
+        get_tracer().event("route_sample", {
+            "query": query,
+            "has_history": has_history,
+            "route": {k: route.get(k) for k in (
+                "type", "intent", "tickers", "sector", "screening", "market_topics", "macro_topics",
+                "rag_topics", "risk_flags", "language", "time_context", "reason")},
+            "segments": [{"intent": s.get("intent"), "query": s.get("query")}
+                         for s in route.get("segments") or []],
+        })
+    except Exception:
+        pass
+
+
 _MARKET_RULES_SHEET = """\
 Quy định giao dịch chứng khoán Việt Nam (dùng ĐÚNG các số này, không bịa thêm):
 - Biên độ dao động giá trong ngày so với giá tham chiếu: HOSE ±7%, HNX ±10%, UPCOM ±15%.
