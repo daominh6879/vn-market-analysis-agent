@@ -32,7 +32,7 @@ WEEK_AGO = (date.today() - timedelta(days=7)).isoformat()
 # ── Financial facts ────────────────────────────────────────────────────────────
 
 def test_financials_vci():
-    """fetch_finance_facts VCI → non-empty list with required keys."""
+    """fetch_finance_facts (vnmarket, annual) → non-empty list with required keys and the core metrics."""
     from ingest.fetch_financials import fetch_finance_facts
 
     facts = fetch_finance_facts(
@@ -40,60 +40,42 @@ def test_financials_vci():
         report_type="consolidated",
         period_from=2023,
         period_to=2024,
-        source="VCI",
     )
     assert isinstance(facts, list), "Expected list"
-    assert len(facts) > 0, "VCI returned 0 facts — API down or no data"
+    assert len(facts) > 0, "vnmarket returned 0 facts — API down or no data"
 
     required = {"ticker", "period", "metric_code", "value", "report_type"}
     for f in facts[:3]:
         missing = required - f.keys()
         assert not missing, f"Fact missing keys: {missing}"
 
-    print(f"\n  VCI facts: {len(facts)}, sample metric_codes: "
-          f"{list({f['metric_code'] for f in facts[:10]})}")
+    codes = {f["metric_code"] for f in facts}
+    assert {"doanh_thu_thuan", "loi_nhuan_sau_thue", "tong_tai_san", "von_chu_so_huu"} <= codes
+    print(f"\n  facts: {len(facts)}, sample metric_codes: {sorted(codes)[:10]}")
 
 
-def test_financials_kbs():
-    """fetch_finance_facts KBS via vnstock SDK → non-empty list."""
+def test_financials_quarterly():
+    """fetch_finance_facts quarterly → periods labelled Qn/YYYY."""
     from ingest.fetch_financials import fetch_finance_facts
 
     facts = fetch_finance_facts(
-        ticker=TICKER,
-        report_type="consolidated",
-        period_from=2023,
-        period_to=2024,
-        source="KBS",
+        ticker=TICKER, report_type="consolidated", period_from=2024, period_to=date.today().year, quarterly=True,
     )
-    assert isinstance(facts, list), "Expected list"
-    assert len(facts) > 0, "KBS via vnstock returned 0 facts"
-    print(f"\n  KBS facts: {len(facts)}")
+    assert facts, "vnmarket returned 0 quarterly facts"
+    assert all(f["period"].startswith("Q") and "/" in f["period"] for f in facts)
 
 
 # ── Stock prices ───────────────────────────────────────────────────────────────
 
-def test_prices_vnstock():
-    """vnstock Quote.history → DataFrame with price rows."""
-    try:
-        from vnstock.api.quote import Quote  # type: ignore[import]
-    except ImportError:
-        pytest.skip("vnstock not installed")
+def test_prices_vnmarket():
+    """vnmarket prices.history → DataFrame with price rows."""
+    from core.vnmarket_client import get_client
 
     from_date = (date.today() - timedelta(days=14)).isoformat()
-    to_date = TODAY
+    df = get_client().prices.history(TICKER, start=from_date, end=TODAY)
 
-    df = None
-    for source in ("VCI", "kbs"):
-        try:
-            q = Quote(symbol=TICKER, source=source)
-            df = q.history(start=from_date, end=to_date, interval="1D")
-            if df is not None and not df.empty:
-                break
-        except Exception:
-            continue
-
-    assert df is not None and not df.empty, f"vnstock returned no price data for {TICKER}"
-    assert "close" in df.columns or "close_adj" in df.columns, f"Missing close column: {df.columns.tolist()}"
+    assert df is not None and not df.empty, f"vnmarket returned no price data for {TICKER}"
+    assert {"time", "close", "volume"} <= set(df.columns), f"Missing columns: {df.columns.tolist()}"
     print(f"\n  Price rows: {len(df)}, cols: {df.columns.tolist()}")
 
 
@@ -121,7 +103,7 @@ def test_gold_sjc():
 
     result = fetch_sjc_gold()
     if result is None:
-        pytest.xfail("SJC gold scraper blocked (403) — known issue as of 2026-08")
+        pytest.xfail("SJC gold unavailable from vnmarket (blocked or no SJC 1L row)")
 
     required = {"buy_vnd", "sell_vnd", "source"}
     missing = required - result.keys()
