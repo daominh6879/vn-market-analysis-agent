@@ -81,4 +81,4 @@ Các mục dưới đây là điểm nghi vấn nêu trong `vn_stock_agent_test_
 - [ ] DeepSeek API trả `402 Insufficient Balance` (xác nhận 2026-10-14 bằng `create_client().generate(...)`). `llm_classify` nuốt exception và trả `conversation`, nên các test router/memory/e2e dùng LLM thật fail (test_router_intents_cache 79, test_regression_fixes 5, test_observability_streaming_e2e 3, test_conversation_memory 1, test_episodic_memory 1). Cần nạp tiền tài khoản DeepSeek rồi chạy lại các file này.
 
 - [ ] vnmarket không có nguồn cổ tức / sự kiện doanh nghiệp (đã grep mã nguồn 2026-10-14), nên `ingest/fetch_dividends.py` và `data/corporate_events_scraper.py` vẫn dùng vnstock vendored. Cần thêm endpoint vào vnmarket mới thay được.
-- [ ] Đợt chuyển `fetch_financials` / `fetch_ratios` sang vnmarket chưa được đối chiếu với `financial_facts` / `stock_ratios` thật vì Postgres không chạy (Docker Desktop tắt). Chạy lại `fetch_financials.py --ticker HPG --dry-run` và so sánh khi DB lên.
+- [x] Đợt chuyển `fetch_financials` / `fetch_ratios` sang vnmarket đã được đối chiếu với DB thật ngày 2026-10-14 (xem docs/notes/vnmarket-integration.md); chưa chạy job Dagster ghi dữ liệu mới.

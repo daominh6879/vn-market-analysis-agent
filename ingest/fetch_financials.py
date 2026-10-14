@@ -14,6 +14,7 @@ Run:     python ingest/fetch_financials.py --ticker HPG --period-from 2020 --per
 from __future__ import annotations
 
 import argparse
+import collections
 import re
 import sys
 import unicodedata
@@ -63,7 +64,6 @@ _FIELD_CODE_MAP: dict[str, str] = {
     # balance
     "bsa1":  "tai_san_ngan_han",
     "bsa2":  "tien_va_tuong_duong_tien",
-    "bsa15": "hang_ton_kho",
     "bsa23": "tai_san_dai_han",
     "bsa53": "tong_tai_san",
     "bsa54": "no_phai_tra",
@@ -85,7 +85,7 @@ def _facts_from_vnmarket(
     """vnmarket statement (rows=periods, cols=field codes) → financial_facts rows.
 
     Period labels: '2024' (annual) or 'Q3/2024' (quarterly), as the rest of the pipeline expects.
-    Columns with no mapping and no title are skipped (an opaque code is useless to the agent).
+    Columns with no mapping and no title, or whose title is shared by several codes, are skipped.
     """
     if df is None or df.empty or "year" not in df.columns:
         raise ValueError(f"Unexpected statement layout. Columns: {getattr(df, 'columns', [])}")
@@ -95,15 +95,13 @@ def _facts_from_vnmarket(
         code = str(col).lower()
         if code in _FIELD_CODE_MAP:
             metric_of[col] = _FIELD_CODE_MAP[code]
+    slug_of = {col: slugify(titles.get(str(col).lower()) or "") for col in df.columns
+               if col not in metric_of and str(col).lower() not in {"year", "quarter", "ticker", "public_date"}}
+    counts = collections.Counter(slug_of.values())
     taken = set(metric_of.values())
-    for col in df.columns:
-        if col in metric_of:
-            continue
-        title = titles.get(str(col).lower())
-        slug = slugify(title) if title else ""
-        if slug and slug not in taken and str(col).lower() not in {"year", "quarter", "ticker", "public_date"}:
+    for col, slug in slug_of.items():
+        if slug and counts[slug] == 1 and slug not in taken:   # a title shared by several codes is ambiguous: skip
             metric_of[col] = slug
-            taken.add(slug)
 
     facts, seen = [], set()
     for _, row in df.iterrows():

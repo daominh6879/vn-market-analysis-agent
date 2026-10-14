@@ -34,7 +34,9 @@ Tool mới (`tools/vnmarket_tools.py`, đăng ký trong `tools/registry.py` và 
 
 Thay đổi ngữ nghĩa cần biết: tỷ số trước đây là năm tài chính gần nhất (KBS, re-price); nay là TTM theo giá hiện tại. Ngân hàng không có `doanh_thu_thuan` (như trước), nên `revenue_growth_pct` NULL.
 
-**Chưa kiểm tra với DB**: lúc làm đợt này Postgres/Docker không chạy, nên chưa so được `financial_facts` cũ với dữ liệu mới và chưa ghi thử. Cần chạy `fetch_financials.py --ticker HPG --dry-run` rồi so với bảng hiện có trước khi chạy job Dagster.
+**Đối chiếu với DB (2026-10-14, HPG/VCB/FPT, năm 2020–2025, `source='vnstock'`)**: 2.131 dòng trùng khóa giữa `financial_facts` cũ và dữ liệu vnmarket, chênh lệch giá trị = 0. Lần chạy đầu có 15–18 dòng lệch mỗi mã: `hang_ton_kho` (đã map nhầm `bsa15` là hàng tồn kho ròng, nay bỏ để `bsa16` → `hang_ton_kho`, `bsa15` → `hang_ton_kho_rong`) và các tiêu đề trùng giữa nhiều mã trường (nay bỏ qua slug mơ hồ). Mỗi mã còn 18–30 dòng chỉ có ở bản cũ (tên metric KBS khác, ví dụ `lailo_thuan_sau_thue`) và 30–36 dòng chỉ có ở bản mới (ví dụ HPG có thêm `loi_nhuan_sau_thue`, `von_dieu_le`, `dong_tien_hoat_dong`); các dòng cũ không bị xóa.
+
+`stock_ratios` (HPG/VCB/FPT): `revenue_growth_pct`, `earnings_growth_pct` khớp bản lưu đến 2 chữ số; `pe`, `pb`, `roe`, `roa`, biên, `eps`, `ev_ebitda` khác do nay là TTM theo giá hiện tại (ví dụ HPG P/E 10,39 → 7,44, ROE 12,69% → 17,38%). `de_ratio` dùng `debt_per_equity` (nợ vay / vốn chủ, khớp ngữ nghĩa cũ: HPG 0,70) chứ không phải `debt_to_equity` (tổng nợ / vốn chủ, 0,97).
 
 ## Chưa thay (vẫn dùng vnstock vendored)
 - `ingest/fetch_dividends.py` và scraper sự kiện doanh nghiệp (`data/corporate_events_scraper.py`): đã grep mã nguồn vnmarket, không có endpoint cổ tức / sự kiện (chỉ có `dividend_yield` của Fireant).

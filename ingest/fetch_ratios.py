@@ -121,7 +121,7 @@ def ratio_row(ticker: str) -> dict:
         "net_margin_pct":      _ratio(latest, "after_tax_profit_margin", 100),
         "revenue_growth_pct":  revenue_growth,
         "earnings_growth_pct": earnings_growth,
-        "de_ratio":            _ratio(latest, "debt_to_equity"),
+        "de_ratio":            _ratio(latest, "debt_per_equity"),
         "ev_ebitda":           _ratio(latest, "ev_to_ebitda"),
     }
 

@@ -116,6 +116,15 @@ def test_vnmarket_fields_map_to_codes_or_slugged_titles_and_skip_opaque_zero_nan
     assert got == {"tong_tai_san": 9.0, "tai_san_khac": 4.0}
 
 
+def test_vnmarket_titles_shared_by_several_codes_are_skipped():
+    from ingest.fetch_financials import _facts_from_vnmarket
+    df = pd.DataFrame({"year": [2024], "quarter": [0], "bsa10": [1.0], "bsa11": [2.0], "bsa16": [3.0], "bsa15": [4.0]})
+    titles = {"bsa10": "Đầu tư", "bsa11": "Đầu tư", "bsa16": "Hàng tồn kho", "bsa15": "Hàng tồn kho, ròng"}
+    got = {f["metric_code"]: f["value"] for f in
+           _facts_from_vnmarket(df, titles, "HPG", "consolidated", "balance_sheet", 2020, 2026)}
+    assert got == {"hang_ton_kho": 3.0, "hang_ton_kho_rong": 4.0}   # gross stays hang_ton_kho; ambiguous 'Đầu tư' dropped
+
+
 def test_quarterly_block_shows_latest_quarters_with_yoy(monkeypatch):
     from agents.intents import rag_extras
     rows = [
@@ -159,7 +168,7 @@ def test_ratio_row_scales_percents_and_derives_eps(monkeypatch):
         "year": [2025, 2026], "quarter": [5, 2], "ratio_type": ["RATIO_YEAR", "RATIO_TTM"],
         "pe": [10.0, 8.0], "pb": [1.0, 1.2], "roe": [0.1, 0.17], "roa": [0.05, 0.09],
         "gross_margin": [0.1, 0.16], "after_tax_profit_margin": [0.08, 0.12],
-        "debt_to_equity": [0.9, 0.97], "ev_to_ebitda": [0.0, 7.0],
+        "debt_per_equity": [0.9, 0.97], "ev_to_ebitda": [0.0, 7.0],
         "market_cap": [1e12, 2e12], "number_of_shares_mkt_cap": [1e9, 1e9],
     })
     income = pd.DataFrame({"year": [2024, 2025], "quarter": [0, 0], "isa3": [100.0, 112.0], "isa22": [10.0, 15.0]})
