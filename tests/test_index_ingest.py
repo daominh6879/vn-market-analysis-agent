@@ -16,5 +16,5 @@ def test_vn30_without_constituents_is_none(monkeypatch):
     assert FI._foreign_net_by_date("VN30", "2026-10-01", "2026-10-09") is None
 
 
-def test_exchange_indices_use_vnstock_symbols():
+def test_exchange_indices_use_provider_symbols():
     assert FI._PROVIDER_SYMBOL == {"HNX": "HNXINDEX", "UPCOM": "UPCOMINDEX"}

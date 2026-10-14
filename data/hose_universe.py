@@ -3,7 +3,7 @@ data/hose_universe.py — HOSE universe: tickers, sector, index membership.
 
 Two layers:
   1. HOSE_SEED — hardcoded ~405 HOSE tickers with sector tags (always available).
-  2. fetch_and_save_hose_universe() — calls vnstock to refresh full list,
+  2. fetch_and_save_hose_universe() — calls vnmarket to refresh full list,
      saves to data/hose_tickers.json. Run periodically.
   3. load_hose_tickers() — reads json if exists, falls back to HOSE_SEED.
 
@@ -187,7 +187,7 @@ HOSE_SEED: list[tuple[str, str, str]] = [
     ("IJC", "Bất động sản", "HOSE"),
     ("TDC", "Bất động sản", "HOSE"),
     ("DTL", "Bất động sản", "HOSE"),
-    # ── Additional HOSE stocks (sector unknown — sourced from vnstock) ─────────
+    # ── Additional HOSE stocks (sector unknown — sourced from vnmarket) ─────────
     ("AAA", "Unknown", "HOSE"),
     ("AAM", "Unknown", "HOSE"),
     ("AAN", "Unknown", "HOSE"),
@@ -641,7 +641,7 @@ TICKER_ENRICHMENT: dict[str, dict] = {
 # Curated corrections to the sector / ICB industry that the seed list and vnstock produce.
 # Applied last (load + fetch + seed), so they survive a `--refresh` of the universe.
 #   VRE: owns shopping malls (real estate), not a retailer.
-#   EVF: a finance company, vnstock's ICB industry "Ngân hàng" put it in every bank list.
+#   EVF: a finance company, the old vnstock ICB industry "Ngân hàng" put it in every bank list.
 #   PNJ: jewelry/gold maker-retailer, kept out of the generic "bán lẻ" (electronics/grocery) group.
 #   HDG: diversified; kept under Tiện ích (power generation) instead of Bất động sản — judgment call,
 #        edit here if you prefer the other classification.
@@ -732,35 +732,30 @@ def load_hose_universe() -> list[dict]:
     return [_seed_record(t, s, m) for t, s, m in HOSE_SEED]
 
 
-# vnstock `industry_name` → coarse `securities.sector` bucket. Fills the sector gap for
-# HOSE tickers not classified in HOSE_SEED (microcaps). Only a data-build mapping, never
-# used at query time.
-_INDUSTRY_TO_SECTOR: dict[str, str] = {
-    "Ngân hàng": "Ngân hàng",
-    "Chứng khoán": "Chứng khoán",
-    "Tài chính khác": "Tài chính",
-    "Bảo hiểm": "Bảo hiểm",
-    "Bất động sản": "Bất động sản",
-    "Xây dựng": "Xây dựng",
-    "Vật liệu xây dựng": "Vật liệu",
-    "Khai khoáng": "Vật liệu",
-    "SX Nhựa - Hóa chất": "Hóa chất",
-    "Sản phẩm cao su": "Nông nghiệp",
-    "Nông - Lâm - Ngư": "Nông nghiệp",
-    "Chế biến Thủy sản": "Thực phẩm & Đồ uống",
-    "Thực phẩm - Đồ uống": "Thực phẩm & Đồ uống",
-    "Bán lẻ": "Bán lẻ",
-    "Bán buôn": "Bán lẻ",
-    "Công nghệ và thông tin": "Công nghệ",
-    "Tiện ích": "Tiện ích",
-    "Vận tải - kho bãi": "Logistics",
-    "Chăm sóc sức khỏe": "Y tế",
-    "Dịch vụ lưu trú, ăn uống, giải trí": "Du lịch",
-    "Dịch vụ tư vấn, hỗ trợ": "Công nghiệp",
-    "SX Hàng gia dụng": "Công nghiệp",
-    "SX Phụ trợ": "Công nghiệp",
-    "SX Thiết bị, máy móc": "Công nghiệp",
-    "Thiết bị điện": "Công nghiệp",
+# ICB level-2 code (vnmarket `listing.all().icb_code`) → coarse `securities.sector` bucket.
+# Fills the sector gap for HOSE tickers not classified in HOSE_SEED (microcaps). Only a
+# data-build mapping, never used at query time. Level-2 is all the listing carries, so e.g.
+# every 8700 financial-services name that is not in HOSE_SEED lands in "Tài chính".
+_ICB2_TO_SECTOR: dict[str, str] = {
+    "0500": "Dầu khí",
+    "1300": "Hóa chất",
+    "1700": "Vật liệu",
+    "2300": "Xây dựng",
+    "2700": "Công nghiệp",
+    "3300": "Công nghiệp",
+    "3500": "Thực phẩm & Đồ uống",
+    "3700": "Công nghiệp",
+    "4500": "Y tế",
+    "5300": "Bán lẻ",
+    "5500": "Công nghiệp",
+    "5700": "Du lịch",
+    "6500": "Công nghệ",
+    "7500": "Tiện ích",
+    "8300": "Ngân hàng",
+    "8500": "Bảo hiểm",
+    "8600": "Bất động sản",
+    "8700": "Tài chính",
+    "9500": "Công nghệ",
 }
 
 _COMPANY_PREFIXES = (
@@ -789,38 +784,49 @@ def _derive_core_alias(company_name: str) -> str:
 
 def fetch_and_save_hose_universe() -> int:
     """
-    Fetch full HOSE ticker list + company name + industry from vnstock and save a
+    Fetch full HOSE ticker list + company name + ICB industry via vnmarket and save a
     COMPLETE universe (ticker/exchange/sector/industry/company_name/name_aliases/tags)
     to data/hose_tickers.json. Returns count of tickers saved. Non-fatal on error.
     """
     try:
-        import warnings
-        warnings.filterwarnings("ignore")
-        from vnstock import Listing
+        from core.vnmarket_client import get_client
 
-        lst = Listing()
-        df = lst.symbols_by_exchange()
-        hose = df[(df["exchange"].str.upper() == "HOSE") & (df["type"].str.lower() == "stock")]
+        vn = get_client()
+        listing = vn.listing.all()
+        hose = listing[(listing["exchange"] == "HSX") & (listing["type"] == "STOCK")]
         if hose.empty:
-            sys.stderr.write("[hose_universe] vnstock returned empty HOSE list; cache not updated\n")
+            sys.stderr.write("[hose_universe] vnmarket returned empty HOSE list; cache not updated\n")
             return 0
 
-        # Company name from the exchange frame; fine-grained industry from the ICB frame.
-        org = dict(zip(hose["symbol"], hose["organ_name"].fillna("").astype(str)))
+        org = dict(zip(hose["symbol"], hose["name_vi"].fillna("").astype(str)))
+        icb = dict(zip(hose["symbol"], hose["icb_code"].fillna("").astype(str)))
         try:
-            ind_df = lst.symbols_by_industries(lang="vi")
-            ind = dict(zip(ind_df["symbol"], ind_df["industry_name"].fillna("").astype(str)))
+            sec = vn.listing.sectors()
+            icb_name = dict(zip(sec["icb_code"].astype(str), sec["name_vi"].fillna("").astype(str)))
         except Exception:
-            ind = {}
+            icb_name = {}
+
+        # ICB level-2 is coarser than the sector buckets already curated in the cache (e.g. no
+        # Chứng khoán / Logistics split), so tickers the cache classified keep that sector and
+        # industry; the ICB mapping only classifies tickers new to the universe.
+        try:
+            prev = {r["ticker"]: r for r in json.loads(_CACHE_PATH.read_text(encoding="utf-8"))}
+        except Exception:
+            prev = {}
 
         seed_map = {t: (s, m) for t, s, m in HOSE_SEED}
         rows = []
         for sym in sorted(hose["symbol"].tolist()):
             seed_sector, index_member = seed_map.get(sym, ("Unknown", "HOSE"))
-            industry = ind.get(sym, "")
-            sector = seed_sector if seed_sector != "Unknown" else _INDUSTRY_TO_SECTOR.get(industry, "Công nghiệp")
+            code = icb.get(sym, "")
+            old = prev.get(sym, {})
+            industry = old.get("industry") or icb_name.get(code, "")
+            if seed_sector != "Unknown":
+                sector = seed_sector
+            else:
+                sector = old.get("sector") or _ICB2_TO_SECTOR.get(code, "Công nghiệp")
             if not industry:
-                industry = sector  # vnstock has no industry for this symbol — mirror sector
+                industry = sector  # no ICB name for this symbol — mirror sector
             enr = _enrich(sym, sector)
 
             aliases = list(enr["name_aliases"])

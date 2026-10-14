@@ -115,7 +115,7 @@ class TestHoseUniverse:
         assert len(tickers) == len(set(tickers)), "Duplicate tickers in HOSE_SEED"
 
     def test_fetch_and_save_returns_zero_on_error(self):
-        with patch("vnstock.Listing", side_effect=Exception("network")):
+        with patch("core.vnmarket_client.get_client", side_effect=Exception("network")):
             from data.hose_universe import fetch_and_save_hose_universe
             n = fetch_and_save_hose_universe()
         assert n == 0

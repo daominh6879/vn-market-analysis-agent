@@ -1,15 +1,16 @@
 """
 tools/providers.py — PriceProvider interface + concrete implementations (bài 21).
 
-Providers:
-  FireantProvider    — Fireant REST API, primary for OHLCV + foreign volumes
-  VciDirectProvider  — VCI REST API, không dùng vnstock
-  TcbsDirectProvider — TCBS public API, fallback for VN stocks
+Providers (VN stocks go through the shared vnmarket client: throttle, retry, cache, fallback):
+  FireantProvider    — OHLCV + foreign volumes/values for ingest (nghìn đồng)
+  VciDirectProvider  — VND bars, batch bars, live foreign board
+  KbsProvider        — second reader of the same daily bars
+  TcbsDirectProvider — TCBS public API (endpoint dead; unused)
   FallbackProvider   — wraps two providers, tries primary first
   YFinanceProvider   — yfinance cho mã NYSE/NASDAQ
+  SsiIndexProvider   — VNINDEX/VN30/HNX/UPCOM with matched value (VCI chart)
 
-Provider priority for VN stocks: Fireant → VCI → TCBS
-Không import vnstock ở đây.
+Class names predate vnmarket and are kept for callers/tests.
 """
 
 from __future__ import annotations
@@ -122,257 +123,95 @@ def _thousands_to_vnd(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-# ── FireantProvider ───────────────────────────────────────────────────────────
+# ── vnmarket-backed providers ─────────────────────────────────────────────────
+# FireantProvider / VciDirectProvider / KbsProvider keep their names and public methods (callers,
+# tests and ingest import them) but every call now goes through the shared vnmarket client, which
+# supplies throttling, retry, caching and source fallback (VCI -> KBS -> DNSE -> SSI -> HOSE).
 
-_FIREANT_COOLDOWN_WINDOW = 60.0  # seconds; one shared pause per rate-limit outage
+def _vn():
+    from core.vnmarket_client import get_client
+    return get_client()
+
+
+def _bars(ticker: str, count: int) -> pd.DataFrame:
+    """Last `count` daily bars, VND, `time` as 'YYYY-MM-DD' strings."""
+    df = _vn().prices.history(ticker.upper(), count=count)
+    df = df.copy()
+    df["time"] = df["time"].dt.strftime("%Y-%m-%d")
+    return df[["time", "open", "high", "low", "close", "volume"]].drop_duplicates(subset=["time"]).reset_index(drop=True)
 
 
 class FireantProvider(PriceProvider):
     """
-    Fireant REST API — primary source for VN stock OHLCV + foreign volumes.
+    OHLCV + foreign volumes via vnmarket (no Fireant credentials needed).
 
-    Auth: POST {FIREANT_BASE}/authentication/login → accessToken (Bearer, cached).
-    Data: GET  {FIREANT_BASE}/symbols/{symbol}/historical-quotes
-    Response fields used: date, priceOpen, priceHigh, priceLow, priceClose,
-                          dealVolume, buyForeignQuantity, sellForeignQuantity.
-
-    `fetch_history_range()` returns extra columns foreign_buy_vol / foreign_sell_vol
-    so ingest scripts can upsert foreign_flows in the same pass.
+    `fetch_history_range()` returns extra columns foreign_buy_vol / foreign_sell_vol and
+    foreign_buy_value / foreign_sell_value (raw VND, NaN on days the source lacks them)
+    (all omitted when the foreign-flow sources fail) so ingest scripts can upsert foreign_flows
+    in the same pass. Prices are in nghìn đồng (the ohlcv_daily unit); fetch_price /
+    fetch_history convert to VND.
     """
-
-    _token: str | None = None  # class-level token shared across instances
-    _cooldown_until: float | None = None  # monotonic deadline while rate-limited
-
-    def __init__(self) -> None:
-        import os
-        self._base = os.getenv("FIREANT_BASE", "").rstrip("/")
-        self._email = os.getenv("FIREANT_EMAIL", "")
-        self._password = os.getenv("FIREANT_PASSWORD", "")
-
-    def _login(self) -> str:
-        import httpx
-        if not self._base or not self._email:
-            raise ValueError("FIREANT_BASE / FIREANT_EMAIL not set in env")
-        resp = httpx.post(
-            f"{self._base}/authentication/login",
-            json={"email": self._email, "password": self._password, "rememberMe": True},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        body = resp.json()
-        token = body.get("accessToken") or (body.get("data") or {}).get("accessToken")
-        if not token:
-            raise ValueError(f"Fireant login: no accessToken in response: {body}")
-        FireantProvider._token = token
-        return token
-
-    def _get_token(self) -> str:
-        if FireantProvider._token:
-            return FireantProvider._token
-        return self._login()
 
     def fetch_history_range(
         self, ticker: str, start_date: str, end_date: str
     ) -> "pd.DataFrame":
         """
-        Fetch OHLCV + foreign volumes for a date range.
-
         Returns DataFrame with columns:
-            time, open, high, low, close, volume,
-            foreign_buy_vol, foreign_sell_vol
-        Sorted oldest → newest, duplicates removed.
+            time, open, high, low, close, volume[, foreign_buy_vol, foreign_sell_vol]
+        Sorted oldest → newest, duplicates removed. Raises ValueError when empty.
         """
-        import httpx
-
-        days = (
-            datetime.strptime(end_date, "%Y-%m-%d")
-            - datetime.strptime(start_date, "%Y-%m-%d")
-        ).days
-        limit = int(days * 252 / 365) + 20
-
-        def _request(token: str) -> httpx.Response:
-            return httpx.get(
-                f"{self._base}/symbols/{ticker.upper()}/historical-quotes",
-                params={"startDate": start_date, "endDate": end_date, "offset": 0, "limit": limit},
-                headers={"Authorization": f"Bearer {token}"},
-                timeout=30,
-            )
-
-        def _request_with_cooldown(token: str) -> httpx.Response:
-            """One shared cooldown per Fireant outage — pause once, not per ticker.
-
-            On a 429 we sleep a single window then retry once. If the provider is
-            still rate-limited, the cooldown stays armed so every later ticker in
-            the batch fails fast instead of each burning its own backoff.
-            """
-            resp = _request(token)
-            if resp.status_code != 429:
-                return resp
-            now = time.monotonic()
-            if FireantProvider._cooldown_until is not None and now < FireantProvider._cooldown_until:
-                return resp  # inside an active outage window → fail fast
-            FireantProvider._cooldown_until = now + _FIREANT_COOLDOWN_WINDOW
-            time.sleep(_FIREANT_COOLDOWN_WINDOW)
-            resp = _request(token)
-            if resp.status_code != 429:
-                FireantProvider._cooldown_until = None  # recovered
-            else:
-                FireantProvider._cooldown_until = time.monotonic() + _FIREANT_COOLDOWN_WINDOW
-            return resp
-
-        token = self._get_token()
-        resp = _request_with_cooldown(token)
-        if resp.status_code == 401:
-            FireantProvider._token = None
-            resp = _request_with_cooldown(self._login())
-        resp.raise_for_status()
-
-        data = resp.json()
-        if not data:
-            raise ValueError(f"Fireant: no data for '{ticker}' {start_date}..{end_date}")
-
-        rows = [
-            {
-                "time":             str(d["date"])[:10],
-                "open":             float(d.get("priceOpen") or 0),
-                "high":             float(d.get("priceHigh") or 0),
-                "low":              float(d.get("priceLow") or 0),
-                "close":            float(d.get("priceClose") or 0),
-                "volume":           int(d.get("dealVolume") or 0),
-                "foreign_buy_vol":  int(d.get("buyForeignQuantity") or 0),
-                "foreign_sell_vol": int(d.get("sellForeignQuantity") or 0),
-            }
-            for d in data
-        ]
-        df = pd.DataFrame(rows)
+        vn = _vn()
+        px = vn.prices.history(ticker.upper(), start=start_date, end=end_date)
+        px = px.copy()
+        px["time"] = px["time"].dt.strftime("%Y-%m-%d")
+        df = px[["time", "open", "high", "low", "close", "volume"]].copy()
+        for col in _PRICE_COLS:
+            df[col] = df[col] / _THOUSAND_VND   # VND → nghìn đồng
+        df["volume"] = df["volume"].astype(int)
+        if df.empty:
+            raise ValueError(f"vnmarket: no data for '{ticker}' {start_date}..{end_date}")
+        try:
+            fg = vn.market.foreign(ticker.upper(), start=start_date, end=end_date, limit=1000)
+            fg = fg.assign(time=fg["date"].dt.strftime("%Y-%m-%d"))
+            fg = fg[["time", "buy_volume", "sell_volume", "buy_value", "sell_value"]].rename(columns={
+                "buy_volume": "foreign_buy_vol", "sell_volume": "foreign_sell_vol",
+                "buy_value": "foreign_buy_value", "sell_value": "foreign_sell_value"})   # values: raw VND
+            df = df.merge(fg, on="time", how="left")
+            vol_cols = ["foreign_buy_vol", "foreign_sell_vol"]
+            df[vol_cols] = df[vol_cols].fillna(0).astype(int)
+        except Exception:
+            pass   # prices without foreign columns; caller checks "foreign_buy_vol" in df.columns
         return df.sort_values("time").drop_duplicates(subset=["time"]).reset_index(drop=True)
 
     def fetch_price(self, ticker: str) -> float:
-        from datetime import date, timedelta
-        today = date.today()
-        df = self.fetch_history_range(ticker, str(today - timedelta(days=10)), str(today))
-        if df.empty:
-            raise ValueError(f"Fireant: no price for '{ticker}'")
-        return float(df["close"].iloc[-1]) * _THOUSAND_VND  # nghìn đồng → VND
+        return float(_bars(ticker, 5)["close"].iloc[-1])
 
     def fetch_history(self, ticker: str, days: int) -> pd.DataFrame:
-        from datetime import date, timedelta
-        today = date.today()
-        df = self.fetch_history_range(
-            ticker,
-            str(today - timedelta(days=days + 10)),
-            str(today),
-        )
-        if df.empty:
-            raise ValueError(f"Fireant: no history for '{ticker}'")
-        return _thousands_to_vnd(df.tail(days).reset_index(drop=True))  # nghìn đồng → VND
+        return _bars(ticker, days + 10).tail(days).reset_index(drop=True)
 
 
 # ── VciDirectProvider ─────────────────────────────────────────────────────────
 
 class VciDirectProvider(PriceProvider):
-    """
-    Gọi thẳng VCI REST API — không import vnstock.
-    POST https://trading.vietcap.com.vn/api/chart/OHLCChart/gap-chart
-    Trả giá VND cho mã chứng khoán Việt Nam.
-    """
-
-    _URL = "https://trading.vietcap.com.vn/api/chart/OHLCChart/gap-chart"
-    _HEADERS = {
-        "Content-Type": "application/json",
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        ),
-    }
+    """VND OHLCV, batch bars and live foreign board via vnmarket (VCI primary)."""
 
     def _fetch_ohlcv(self, ticker: str, count_back: int) -> pd.DataFrame:
-        import httpx
-
-        payload = {
-            "timeFrame": "ONE_DAY",
-            "symbols": [ticker.upper()],
-            "to": int(datetime.now().timestamp()),
-            "countBack": count_back,
-        }
-        resp = httpx.post(self._URL, json=payload, headers=self._HEADERS, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
-
-        if isinstance(data, dict) and "data" in data:
-            data = data["data"]
-        if not data:
-            raise ValueError(f"Không có dữ liệu cho '{ticker}'")
-
-        symbol_data = data[0]
-        # VCI returns columnar arrays: {o, h, l, c, v, t}
-        rows = [
-            {
-                "time":   datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%d"),
-                "open":   symbol_data["o"][i],
-                "high":   symbol_data["h"][i],
-                "low":    symbol_data["l"][i],
-                "close":  symbol_data["c"][i],
-                "volume": symbol_data["v"][i],
-            }
-            for i, ts in enumerate(symbol_data["t"])
-        ]
-        df = pd.DataFrame(rows)
-        return df.sort_values("time").drop_duplicates(subset=["time"]).reset_index(drop=True)
+        return _bars(ticker, count_back)
 
     def fetch_price(self, ticker: str) -> float:
-        df = self._fetch_ohlcv(ticker, count_back=5)
-        if df.empty:
-            raise ValueError(f"Không có dữ liệu giá cho '{ticker}'")
-        return float(df["close"].iloc[-1])
+        return float(self._fetch_ohlcv(ticker, count_back=5)["close"].iloc[-1])
 
     def fetch_history(self, ticker: str, days: int) -> pd.DataFrame:
-        df = self._fetch_ohlcv(ticker, count_back=days + 10)
-        if df.empty:
-            raise ValueError(f"Không có dữ liệu lịch sử cho '{ticker}'")
-        return df.tail(days).reset_index(drop=True)
+        return self._fetch_ohlcv(ticker, count_back=days + 10).tail(days).reset_index(drop=True)
 
     def fetch_batch_latest(self, tickers: list[str], count_back: int = 2) -> dict[str, pd.DataFrame]:
-        """Fetch latest OHLCV for multiple tickers. Uses concurrent single-ticker requests.
-
-        VCI gap-chart only supports 1 symbol per call; multi-symbol returns [].
-        Uses ThreadPoolExecutor to fetch in parallel (max 20 concurrent).
-        """
-        import httpx
+        """Latest OHLCV for multiple tickers. Concurrent single-ticker calls (max 20 workers);
+        vnmarket throttles per source, so bursts queue instead of getting blocked."""
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
         def _fetch_one(ticker: str) -> tuple[str, pd.DataFrame | None]:
-            payload = {
-                "timeFrame": "ONE_DAY",
-                "symbols": [ticker.upper()],
-                "to": int(datetime.now().timestamp()),
-                "countBack": count_back,
-            }
             try:
-                resp = httpx.post(self._URL, json=payload, headers=self._HEADERS, timeout=10)
-                resp.raise_for_status()
-                data = resp.json()
-                if isinstance(data, dict) and "data" in data:
-                    data = data["data"]
-                if not data:
-                    return ticker, None
-                symbol_data = data[0]
-                if not symbol_data.get("t"):
-                    return ticker, None
-                rows = [
-                    {
-                        "time":   datetime.fromtimestamp(int(ts), tz=timezone.utc).strftime("%Y-%m-%d"),
-                        "open":   symbol_data["o"][i],
-                        "high":   symbol_data["h"][i],
-                        "low":    symbol_data["l"][i],
-                        "close":  symbol_data["c"][i],
-                        "volume": symbol_data["v"][i],
-                    }
-                    for i, ts in enumerate(symbol_data["t"])
-                ]
-                df = pd.DataFrame(rows).sort_values("time").drop_duplicates(subset=["time"]).reset_index(drop=True)
-                return ticker.upper(), df
+                return ticker.upper(), _bars(ticker, count_back)
             except Exception:
                 return ticker, None
 
@@ -387,45 +226,25 @@ class VciDirectProvider(PriceProvider):
 
     def fetch_foreign_batch(self, tickers: list[str]) -> list[dict]:
         """
-        Fetch live foreign buy/sell values for a batch of tickers via VCI price board.
-
-        Endpoint: POST https://trading.vietcap.com.vn/api/price/symbols/getList
+        Live foreign buy/sell (raw VND values) from the vnmarket price board.
         Returns list of {ticker, buy_value, sell_value, net_value, buy_volume, sell_volume, net_volume}.
-        Raises on network error — callers should catch.
+        Raises on source failure — callers should catch.
         """
-        import httpx
-
-        url = "https://trading.vietcap.com.vn/api/price/symbols/getList"
-        payload = {"symbols": [t.upper() for t in tickers]}
-        resp = httpx.post(url, json=payload, headers=self._HEADERS, timeout=20)
-        resp.raise_for_status()
-        data = resp.json()
-
-        if isinstance(data, dict) and "data" in data:
-            data = data["data"]
-        if not data:
-            return []
-
+        board = _vn().market.quotes([t.upper() for t in tickers])
         rows = []
-        for item in data:
-            # ticker from listingInfo.symbol
-            listing = item.get("listingInfo") or {}
-            match = item.get("matchPrice") or {}
-            ticker = (listing.get("symbol") or listing.get("ticker") or "").upper().strip()
-            if not ticker:
-                continue
-            buy_vol = float(match.get("foreignBuyVolume") or 0)
-            buy_val = float(match.get("foreignBuyValue") or 0)
-            sell_vol = float(match.get("foreignSellVolume") or 0)
-            sell_val = float(match.get("foreignSellValue") or 0)
+        for r in board.itertuples():
+            buy_val = float(r.foreign_buy_value or 0)
+            sell_val = float(r.foreign_sell_value or 0)
+            buy_vol = int(r.foreign_buy_volume or 0)
+            sell_vol = int(r.foreign_sell_volume or 0)
             rows.append({
-                "ticker": ticker,
+                "ticker": str(r.symbol).upper(),
                 "buy_value": buy_val,
                 "sell_value": sell_val,
                 "net_value": buy_val - sell_val,
-                "buy_volume": int(buy_vol),
-                "sell_volume": int(sell_vol),
-                "net_volume": int(buy_vol - sell_vol),
+                "buy_volume": buy_vol,
+                "sell_volume": sell_vol,
+                "net_volume": buy_vol - sell_vol,
             })
         return rows
 
@@ -526,37 +345,13 @@ class FallbackProvider(PriceProvider):
 # ── KbsProvider ──────────────────────────────────────────────────────────────
 
 class KbsProvider(PriceProvider):
-    """vnstock KIS (kbs) source — fallback when VCI is down."""
-
-    def _kbs_history(self, ticker: str, start: str, end: str) -> "pd.DataFrame | None":
-        import warnings
-        warnings.filterwarnings("ignore")
-        from vnstock.api.quote import Quote
-        try:
-            q = Quote(symbol=ticker, source="kbs")
-            df = q.history(start=start, end=end, interval="1D")
-            return df if df is not None and not df.empty else None
-        except SystemExit:
-            raise ValueError(f"KBS rate limited for '{ticker}'")  # FallbackProvider → VCI
-        except Exception:
-            return None
+    """Second-opinion daily bars via vnmarket (same chain; kept so adjusted-price merges still have two readers)."""
 
     def fetch_price(self, ticker: str) -> float:
-        from datetime import date, timedelta
-        df = self._kbs_history(ticker, str(date.today() - timedelta(days=7)), str(date.today()))
-        if df is None:
-            raise ValueError(f"No KBS price for '{ticker}'")
-        return float(df["close"].iloc[-1]) * _THOUSAND_VND  # nghìn đồng → VND
+        return float(_bars(ticker, 5)["close"].iloc[-1])
 
     def fetch_history(self, ticker: str, days: int) -> pd.DataFrame:
-        from datetime import date, timedelta
-        start = str(date.today() - timedelta(days=days + 10))
-        df = self._kbs_history(ticker, start, str(date.today()))
-        if df is None:
-            raise ValueError(f"No KBS history for '{ticker}'")
-        df["time"] = df["time"].astype(str).str[:10]
-        out = df[["time", "open", "high", "low", "close", "volume"]].tail(days).reset_index(drop=True)
-        return _thousands_to_vnd(out)  # nghìn đồng → VND
+        return _bars(ticker, days + 10).tail(days).reset_index(drop=True)
 
 
 # ── YFinanceProvider ──────────────────────────────────────────────────────────

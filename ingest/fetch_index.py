@@ -38,7 +38,7 @@ def fetch_and_upsert(index_code: str, days: int = _DEFAULT_DAYS) -> int:
     try:
         df = provider.fetch_history(index_code, days)
     except Exception as e:
-        df = _fetch_via_vnstock(index_code, days) if index_code.upper() in _PROVIDER_SYMBOL else None
+        df = _fetch_via_vnmarket(index_code, days) if index_code.upper() in _PROVIDER_SYMBOL else None
         if df is None:
             sys.stderr.write(f"[fetch_index] {index_code}: SSI fetch failed: {e}\n")
             return 0
@@ -76,29 +76,30 @@ def fetch_and_upsert(index_code: str, days: int = _DEFAULT_DAYS) -> int:
     return n
 
 
-def _fetch_via_vnstock(index_code: str, days: int):
-    """HNX / UPCOM are not served by the VCI chart endpoint; vnstock has them as
+def _fetch_via_vnmarket(index_code: str, days: int):
+    """HNX / UPCOM are not served by the VCI chart endpoint; vnmarket has them as
     HNXINDEX / UPCOMINDEX (OHLC + volume only — no traded value)."""
     from datetime import date, timedelta
     try:
-        from vnstock import Quote
-        df = Quote(symbol=_PROVIDER_SYMBOL[index_code.upper()], source="VCI").history(
-            start=str(date.today() - timedelta(days=days + 10)), end=str(date.today()), interval="1D")
+        from core.vnmarket_client import get_client
+        df = get_client().prices.history(
+            _PROVIDER_SYMBOL[index_code.upper()],
+            start=str(date.today() - timedelta(days=days + 10)), end=str(date.today()))
         if df is None or df.empty:
             return None
         df = df.copy()
-        df["time"] = df["time"].astype(str).str[:10]
+        df["time"] = df["time"].dt.strftime("%Y-%m-%d")
         return df.drop_duplicates(subset=["time"]).sort_values("time").tail(days).reset_index(drop=True)
     except Exception as e:
-        sys.stderr.write(f"[fetch_index] {index_code}: vnstock fallback failed: {e}\n")
+        sys.stderr.write(f"[fetch_index] {index_code}: vnmarket fallback failed: {e}\n")
         return None
 
 
 def _index_members(index_code: str) -> list[str]:
-    """Current constituents of `index_code` (vnstock group list); [] if unavailable."""
+    """Current constituents of `index_code` (vnmarket group list); [] if unavailable."""
     try:
-        from vnstock import Listing
-        return [str(t).upper() for t in Listing(source="VCI").symbols_by_group(index_code)]
+        from core.vnmarket_client import get_client
+        return [str(t).upper() for t in get_client().listing.symbols(index_code)]
     except Exception as e:
         sys.stderr.write(f"[fetch_index] {index_code}: constituents lookup failed: {e}\n")
         return []

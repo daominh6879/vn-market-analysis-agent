@@ -33,7 +33,7 @@ class VnstockFinancialsConfig(Config):
     period_to: int = date.today().year
     report_type: str = "consolidated"
     source: str = "VCI"
-    quarterly: bool = False   # True → quarterly statements (period 'Q3/2024'); needs source="KBS"
+    quarterly: bool = False   # True → quarterly statements (period 'Q3/2024')
 
 
 class VnstockPricesConfig(Config):
@@ -74,7 +74,7 @@ def vnstock_financials(context: AssetExecutionContext, config: VnstockFinancials
                 context.log.info(f"  {ticker}: {n} facts upserted")
             else:
                 context.log.warning(f"  {ticker}: 0 facts returned")
-        except (Exception, SystemExit) as exc:   # vnstock raises SystemExit on rate limit
+        except (Exception, SystemExit) as exc:
             context.log.error(f"  {ticker} FAILED: {exc}")
             failed.append(ticker)
         time.sleep(1.5)
@@ -110,7 +110,7 @@ def vnstock_prices(context: AssetExecutionContext, config: VnstockPricesConfig) 
             n = fetch_and_insert(ticker, from_date, to_date)
             total_rows += n
             context.log.info(f"  {ticker}: {n} rows upserted")
-        except (Exception, SystemExit) as exc:   # vnstock raises SystemExit on rate limit
+        except (Exception, SystemExit) as exc:
             context.log.error(f"  {ticker} FAILED: {exc}")
             failed.append(ticker)
         time.sleep(1.1)
@@ -170,11 +170,11 @@ def vnstock_ratios(context: AssetExecutionContext) -> dict:
     for ticker in ticker_list:
         context.log.info(f"Fetching ratios: {ticker}")
         try:
-            from ingest.fetch_ratios import fetch_and_upsert  # single source of truth (re-prices to adjusted close)
+            from ingest.fetch_ratios import fetch_and_upsert  # single source of truth
             row = fetch_and_upsert(ticker)
             upserted += 1
             context.log.info(f"  {ticker}: upserted (pe={row['pe']}, pb={row['pb']}, roe={row['roe_pct']}%)")
-        except (Exception, SystemExit) as exc:   # vnstock raises SystemExit on rate limit
+        except (Exception, SystemExit) as exc:
             context.log.error(f"  {ticker} FAILED: {exc}")
             failed.append(ticker)
 

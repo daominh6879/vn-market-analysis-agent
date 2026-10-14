@@ -1,10 +1,10 @@
 """
-ingest/fetch_financials.py — Fetch financial statements from vnstock Finance API → Postgres.
+ingest/fetch_financials.py — Fetch financial statements via vnmarket → Postgres.
 
 Second data path (no PDF, no LLM):
-  vnstock Finance → financial_facts → Postgres (source='vnstock')
+  vnmarket finance.statement → financial_facts → Postgres (source='vnstock', legacy label)
 
-Query priority: vnstock > pdf (see extract_facts.query_fact)
+Query priority: structured API data (source='vnstock') > pdf (see extract_facts.query_fact)
 
 Schema:  python ingest/fetch_financials.py --ticker HPG --show-schema
 Dry run: python ingest/fetch_financials.py --ticker HPG --dry-run
@@ -48,188 +48,85 @@ def _period_cols(df) -> list[str]:
     return [c for c in df.columns if _PERIOD_RE.match(str(c))]
 
 
-# ── item_id → metric_code mapping ─────────────────────────────────────────────
-# vnstock item_id (English snake_case) → our Vietnamese metric_code convention.
-# Covers the 5 keys used by validators + common indicators.
-# Unmapped item_ids fall back to slugify(item) (Vietnamese diacritics stripped).
+# ── field code → metric_code mapping ───────────────────────────────────────────
+# vnmarket statements are keyed by stable VCI IQ field codes (same codes for banks and
+# non-banks). The codes below keep the metric_code convention the agent queries; every
+# other code falls back to slugify(title_vi) from the vnmarket metric dictionary.
 
-_ITEM_ID_MAP: dict[str, str] = {
-    # balance_sheet
-    "total_assets":            "tong_tai_san",
-    "current_assets":          "tai_san_ngan_han",
-    "long_term_assets":        "tai_san_dai_han",
-    "total_liabilities":       "no_phai_tra",
-    "liabilities":             "no_phai_tra",
-    "short_term_liabilities":  "no_ngan_han",
-    "long_term_liabilities":   "no_dai_han",
-    "owner_equity":            "von_chu_so_huu",
-    "equity":                  "von_chu_so_huu",
-    "total_equity":            "von_chu_so_huu",
-    "shareholders_equity":     "von_chu_so_huu",
-    "charter_capital":         "von_dieu_le",
-    "cash_and_cash_equivalents": "tien_va_tuong_duong_tien",
-    "inventories":             "hang_ton_kho",
-    # income_statement
-    "net_sales":               "doanh_thu_thuan",
-    "revenue":                 "doanh_thu_thuan",
-    "net_revenue":             "doanh_thu_thuan",
-    "gross_profit":            "loi_nhuan_gop",
-    "profit_after_tax":        "loi_nhuan_sau_thue",
-    "net_profit":              "loi_nhuan_sau_thue",
-    "net_profit_after_tax":    "loi_nhuan_sau_thue",
-    "profit_before_tax":       "loi_nhuan_truoc_thue",
-    "net_profit_loss_before_tax": "loi_nhuan_truoc_thue",
-    "ebit":                    "ebit",
-    "ebitda":                  "ebitda",
-    "operating_profit":        "loi_nhuan_hoat_dong",
-    "cost_of_sales":           "gia_von_hang_ban",
-    "interest_expense":        "chi_phi_lai_vay",
-    # cash_flow
-    "operating_cash_flow":     "dong_tien_hoat_dong",
-    "investing_cash_flow":     "dong_tien_dau_tu",
-    "financing_cash_flow":     "dong_tien_tai_chinh",
+_FIELD_CODE_MAP: dict[str, str] = {
+    # income
+    "isa3":  "doanh_thu_thuan",
+    "isa4":  "gia_von_hang_ban",
+    "isa5":  "loi_nhuan_gop",
+    "isa16": "loi_nhuan_truoc_thue",
+    "isa20": "loi_nhuan_sau_thue",
+    # balance
+    "bsa1":  "tai_san_ngan_han",
+    "bsa2":  "tien_va_tuong_duong_tien",
+    "bsa15": "hang_ton_kho",
+    "bsa23": "tai_san_dai_han",
+    "bsa53": "tong_tai_san",
+    "bsa54": "no_phai_tra",
+    "bsa55": "no_ngan_han",
+    "bsa67": "no_dai_han",
+    "bsa78": "von_chu_so_huu",
+    "bsa80": "von_dieu_le",
+    # cash flow
+    "cfa18": "dong_tien_hoat_dong",
+    "cfa26": "dong_tien_dau_tu",
+    "cfa34": "dong_tien_tai_chinh",
 }
 
 
-# ── KBS parser (rows=indicators, cols=periods) ─────────────────────────────────
-
-_QUARTER_COL_RE = re.compile(r"^(\d{4})-Q([1-4])$")
-
-
-def _period_label(col: str, quarterly: bool) -> str | None:
-    """KBS column → financial_facts.period: '2024' (annual) or 'Q3/2024' (quarterly)."""
-    m = _QUARTER_COL_RE.match(col)
-    if quarterly:
-        return f"Q{m.group(2)}/{m.group(1)}" if m else None
-    return None if m else col[:4]
-
-
-def _facts_from_kbs(
-    df, ticker: str, report_type: str, vnstock_report: str, period_from: int, period_to: int,
-    quarterly: bool = False,
+def _facts_from_vnmarket(
+    df, titles: dict[str, str], ticker: str, report_type: str, kind: str,
+    period_from: int, period_to: int, quarterly: bool = False,
 ) -> list[dict]:
-    # KBS: period columns are year strings ('2024') or quarter labels ('2024-Q3')
-    periods = [c for c in _period_cols(df)
-               if period_from <= int(c[:4]) <= period_to and _period_label(c, quarterly)]
-    if not periods:
-        raise ValueError(
-            f"No period column in range {period_from}–{period_to}. "
-            f"Columns: {df.columns.tolist()}"
-        )
+    """vnmarket statement (rows=periods, cols=field codes) → financial_facts rows.
 
-    # item_id preferred (reliable English slug); item fallback (slugify VN text)
-    has_item_id = "item_id" in df.columns
-    item_col = next(
-        (c for c in ("item", "Chỉ tiêu", "chi_tieu") if c in df.columns),
-        None,
-    )
-    if item_col is None:
-        item_col = next(
-            (c for c in df.columns if hasattr(df[c], "dtype") and str(df[c].dtype) == "object"),
-            None,
-        )
-    if item_col is None and not has_item_id:
-        raise ValueError(f"Cannot find item name column. Columns: {df.columns.tolist()}")
+    Period labels: '2024' (annual) or 'Q3/2024' (quarterly), as the rest of the pipeline expects.
+    Columns with no mapping and no title are skipped (an opaque code is useless to the agent).
+    """
+    if df is None or df.empty or "year" not in df.columns:
+        raise ValueError(f"Unexpected statement layout. Columns: {getattr(df, 'columns', [])}")
 
-    facts = []
-    for _, row in df.iterrows():
-        # Prefer item_id → mapped metric_code; fallback to slugify(item)
-        if has_item_id:
-            item_id = str(row.get("item_id", "")).strip().lower()
-            metric_code = _ITEM_ID_MAP.get(item_id) or (slugify(str(row.get(item_col, ""))) if item_col else item_id)
-        else:
-            item_name = str(row.get(item_col, "")).strip()
-            metric_code = slugify(item_name)
-
-        if not metric_code:
+    metric_of: dict[str, str] = {}
+    for col in df.columns:
+        code = str(col).lower()
+        if code in _FIELD_CODE_MAP:
+            metric_of[col] = _FIELD_CODE_MAP[code]
+    taken = set(metric_of.values())
+    for col in df.columns:
+        if col in metric_of:
             continue
-        for col in periods:
-            val = row.get(col)
-            try:
-                fval = float(val)
-            except (TypeError, ValueError):
-                continue
-            if fval == 0 or fval != fval:  # skip 0 and NaN
-                continue
-            facts.append(_make_fact(ticker, _period_label(col, quarterly), report_type,
-                                    metric_code, fval, vnstock_report))
-    return facts
+        title = titles.get(str(col).lower())
+        slug = slugify(title) if title else ""
+        if slug and slug not in taken and str(col).lower() not in {"year", "quarter", "ticker", "public_date"}:
+            metric_of[col] = slug
+            taken.add(slug)
 
-
-# ── VCI parser (rows=periods, cols=indicators) ─────────────────────────────────
-
-_VCI_NON_INDICATOR = frozenset({
-    "ticker", "symbol", "yearreport", "quarterreport", "year", "quarter",
-    "yearReport", "quarterReport",
-})
-
-_VCI_MAP: dict[str, str] = {
-    # income_statement
-    "revenue": "doanh_thu_thuan",
-    "net_revenue": "doanh_thu_thuan",
-    "gross_profit": "loi_nhuan_gop",
-    "profit_before_tax": "loi_nhuan_truoc_thue",
-    "profit_after_tax": "loi_nhuan_sau_thue",
-    "net_profit": "loi_nhuan_sau_thue",
-    "net_profit_after_tax": "loi_nhuan_sau_thue",
-    "ebit": "ebit",
-    "ebitda": "ebitda",
-    "operating_profit": "loi_nhuan_hoat_dong",
-    "interest_expense": "chi_phi_lai_vay",
-    # balance_sheet
-    "total_assets": "tong_tai_san",
-    "current_assets": "tai_san_ngan_han",
-    "long_term_assets": "tai_san_dai_han",
-    "total_liabilities": "no_phai_tra",
-    "short_term_liabilities": "no_ngan_han",
-    "long_term_liabilities": "no_dai_han",
-    "equity": "von_chu_so_huu",
-    "owner_equity": "von_chu_so_huu",
-    "charter_capital": "von_dieu_le",
-    # cash_flow
-    "operating_cash_flow": "dong_tien_hoat_dong",
-    "investing_cash_flow": "dong_tien_dau_tu",
-    "financing_cash_flow": "dong_tien_tai_chinh",
-}
-
-
-def _facts_from_vci(
-    df, ticker: str, report_type: str, vnstock_report: str, period_from: int, period_to: int
-) -> list[dict]:
-    period_col = next(
-        (c for c in ("yearReport", "year", "quarterReport", "quarter") if c in df.columns),
-        None,
-    )
-    if period_col is None:
-        raise ValueError(f"Cannot find period column in VCI DataFrame. Columns: {df.columns.tolist()}")
-
-    indicator_cols = [c for c in df.columns if c not in _VCI_NON_INDICATOR]
-
-    facts = []
+    facts, seen = [], set()
     for _, row in df.iterrows():
         try:
-            period = str(int(row[period_col]))[:4]
+            year, quarter = int(row["year"]), int(row.get("quarter") or 0)
         except (TypeError, ValueError):
             continue
-        if not (period_from <= int(period) <= period_to):
+        if not (period_from <= year <= period_to) or (quarter > 0) != quarterly:
             continue
-
-        for col in indicator_cols:
-            metric_code = _VCI_MAP.get(col.lower()) or _VCI_MAP.get(col) or slugify(col)
-            if not metric_code:
-                continue
-            val = row.get(col)
+        period = f"Q{quarter}/{year}" if quarterly else str(year)
+        for col, metric_code in metric_of.items():
             try:
-                fval = float(val)
+                fval = float(row[col])
             except (TypeError, ValueError):
                 continue
-            if fval == 0 or fval != fval:
+            if fval == 0 or fval != fval or (period, metric_code) in seen:  # skip 0, NaN, duplicates
                 continue
-            facts.append(_make_fact(ticker, period, report_type, metric_code, fval, vnstock_report))
+            seen.add((period, metric_code))
+            facts.append(_make_fact(ticker, period, report_type, metric_code, fval, kind))
     return facts
 
 
-def _make_fact(ticker, period, report_type, metric_code, value, vnstock_report) -> dict:
+def _make_fact(ticker, period, report_type, metric_code, value, kind) -> dict:
     return dict(
         ticker=ticker,
         period=str(period),
@@ -237,30 +134,19 @@ def _make_fact(ticker, period, report_type, metric_code, value, vnstock_report) 
         metric_code=metric_code,
         value=value,
         unit="VND",
-        source_file=f"vnstock_{vnstock_report}",
+        source_file=f"vnmarket_{kind}",
         source_page=0,
-        source="vnstock",
+        source="vnstock",   # legacy label: extract_facts.query_fact ranks structured API data first
     )
-
-
-def _parse_df(df, ticker, report_type, vnstock_report, period_from, period_to,
-              quarterly: bool = False) -> list[dict]:
-    """Auto-detect KBS (period cols) vs VCI (period rows) format."""
-    if _period_cols(df):
-        return _facts_from_kbs(df, ticker, report_type, vnstock_report, period_from, period_to, quarterly)
-    if quarterly:
-        raise ValueError("Quarterly statements are only parsed for the KBS layout (use --source KBS)")
-    return _facts_from_vci(df, ticker, report_type, vnstock_report, period_from, period_to)
 
 
 # ── Main fetch ─────────────────────────────────────────────────────────────────
 
 _REPORTS = [
-    ("income_statement", "KQKD"),
-    ("balance_sheet",    "CDKT"),
-    ("cash_flow",        "LCTT"),
+    ("income",   "income_statement", "KQKD"),
+    ("balance",  "balance_sheet",    "CDKT"),
+    ("cashflow", "cash_flow",        "LCTT"),
 ]
-
 
 
 def fetch_finance_facts(
@@ -268,49 +154,41 @@ def fetch_finance_facts(
     report_type: Literal["standalone", "consolidated"],
     period_from: int,
     period_to: int,
-    source: str = "VCI",
+    source: str = "VCI",   # kept for caller compatibility; vnmarket picks the provider itself
     show_schema: bool = False,
     quarterly: bool = False,
 ) -> list[dict]:
-    # Uses vnstock SDK — source must be "VCI" or "KBS"
-    try:
-        from vnstock import Finance  # type: ignore[import]
-    except ImportError:
-        print("vnstock not installed. Run: pip install vnstock")
-        sys.exit(1)
+    from core.vnmarket_client import get_client
 
-    import time as _time
-
-    f = Finance(symbol=ticker, source=source)
+    vn = get_client()
     all_facts: list[dict] = []
 
-    for i, (method_name, label) in enumerate(_REPORTS):
-        if i > 0:
-            _time.sleep(1.1)  # stay under 60 req/min community limit
-        print(f"  Fetching {label} (source={source})...")
+    for kind, report_name, label in _REPORTS:
+        print(f"  Fetching {label} (vnmarket)...")
         try:
-            try:
-                df = getattr(f, method_name)(period="quarter" if quarterly else "year")
-            except Exception:   # transient read timeout (iq.vietcap.com.vn): one retry before giving up
-                _time.sleep(5)
-                df = getattr(f, method_name)(period="quarter" if quarterly else "year")
+            df = vn.finance.statement(ticker, kind=kind, period="quarter" if quarterly else "year", labels=False)
         except Exception as exc:
             print(f"  [WARN] {label} failed: {exc}")
             continue
 
-        if df is None or (hasattr(df, "empty") and df.empty):
+        if df is None or df.empty:
             print(f"  [WARN] {label} returned empty")
             continue
 
         if show_schema:
-            print(f"\n=== {label} ({method_name}) ===")
+            print(f"\n=== {label} ({kind}) ===")
             print(f"Shape : {df.shape}")
             print(f"Columns: {df.columns.tolist()}")
             print(df.head(5).to_string())
             continue
 
         try:
-            facts = _parse_df(df, ticker, report_type, method_name, period_from, period_to, quarterly)
+            try:
+                titles = {str(r.field).lower(): r.title_vi for r in vn.finance.metrics(ticker, kind=kind).itertuples()
+                          if r.field}
+            except Exception:   # titles only name the unmapped codes; mapped metrics still ingest
+                titles = {}
+            facts = _facts_from_vnmarket(df, titles, ticker, report_type, report_name, period_from, period_to, quarterly)
             print(f"  → {len(facts)} facts")
             all_facts.extend(facts)
         except Exception as exc:
@@ -345,16 +223,17 @@ def insert_vnstock_facts(facts: list[dict]) -> int:
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Fetch financial statements from vnstock Finance API → Postgres")
+    parser = argparse.ArgumentParser(description="Fetch financial statements via vnmarket → Postgres")
     parser.add_argument("--ticker",       default="HPG",
                         help="One ticker, a comma-separated list, or 'all' (every active security)")
     parser.add_argument("--period-from",  dest="period_from", type=int, default=2020)
     parser.add_argument("--period-to",    dest="period_to",   type=int, default=2024)
     parser.add_argument("--report-type",  dest="report_type", default="consolidated",
                         choices=["standalone", "consolidated"])
-    parser.add_argument("--source",       default="VCI", choices=["VCI", "KBS"])
+    parser.add_argument("--source",       default="VCI", choices=["VCI", "KBS"],
+                        help="Ignored (vnmarket selects the provider); kept for existing callers")
     parser.add_argument("--quarterly",    action="store_true",
-                        help="Fetch quarterly statements (period 'Q3/2024'); requires --source KBS")
+                        help="Fetch quarterly statements (period 'Q3/2024')")
     parser.add_argument("--dry-run",      action="store_true", help="Print only, no insert")
     parser.add_argument("--show-schema",  action="store_true", help="Print DataFrame schema and exit")
     args = parser.parse_args()
@@ -368,9 +247,6 @@ def main() -> None:
     facts: list[dict] = []
     inserted = 0
     for i, ticker in enumerate(tickers):
-        if i > 0:
-            import time as _t
-            _t.sleep(1.5)  # between tickers; fetch_finance_facts already paces its 3 requests
         print(f"Fetching {ticker} ({args.period_from}–{args.period_to}, {args.source}, "
               f"{'quarterly' if args.quarterly else 'annual'}, {args.report_type})...")
         try:

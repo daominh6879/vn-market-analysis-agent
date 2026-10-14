@@ -36,3 +36,4 @@
 | Eval router + tools (mọi intent) | [docs/notes/eval-router-tools.md](docs/notes/eval-router-tools.md) |
 | Router LLM thay keyword rules | [docs/notes/llm-routing-no-keyword-rules.md](docs/notes/llm-routing-no-keyword-rules.md) |
 | Intent model (router huấn luyện, prototype) | [docs/notes/intent-model.md](docs/notes/intent-model.md) |
+| vnmarket (thay nguồn dữ liệu) | [docs/notes/vnmarket-integration.md](docs/notes/vnmarket-integration.md) |

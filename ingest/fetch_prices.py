@@ -4,7 +4,7 @@ ingest/fetch_prices.py — Bài 12: Tải giá cổ phiếu đã điều chỉnh
 Dùng giá close_adj — quan trọng cho bài 19 (chỉ báo kỹ thuật).
 Giá chưa điều chỉnh làm chỉ báo sai tại ngày chia cổ tức.
 
-Cài đặt: pip install vnstock
+Nguồn: vnmarket (VCI → KBS → DNSE → SSI → HOSE)
 Chạy: python ingest/fetch_prices.py --ticker HPG --from 2022-01-01 --to 2024-12-31
 """
 
@@ -47,46 +47,28 @@ def fetch_and_insert(ticker: str, from_date: str, to_date: str) -> int:
     latest = _latest_price_date(ticker)
     # "Up to date" = latest covers the last weekday, not calendar today — on
     # weekends the market is closed, so a Saturday run must skip rather than
-    # re-fetch every ticker and burn the vnstock rate limit for nothing.
+    # re-fetch every ticker and burn the source rate limit for nothing.
     if latest and latest >= _last_weekday(date.today()).isoformat():
         return 0  # already up to date
 
     if latest and latest > from_date:
         from_date = (date.fromisoformat(latest) + timedelta(days=1)).isoformat()  # skip already-fetched day
 
+    from core.vnmarket_client import get_client
+
     try:
-        from vnstock.api.quote import Quote  # type: ignore[import]
-    except ImportError:
-        print("vnstock chưa cài. Chạy: pip install vnstock")
-        sys.exit(1)
-
-    df = None
-    for source in ("kbs", "VCI"):
-        try:
-            q = Quote(symbol=ticker, source=source)
-            df = q.history(start=from_date, end=to_date, interval="1D")
-            if df is not None and not df.empty:
-                break
-        except SystemExit:
-            continue  # rate limited → try next source
-        except Exception:
-            continue
-
-    if df is None or df.empty:
-        print(f"Không có dữ liệu giá cho {ticker} ({from_date} → {to_date})")
+        df = get_client().prices.history(ticker, start=from_date, end=to_date)
+    except Exception as e:   # NoData / SourceError after the whole fallback chain
+        print(f"Không có dữ liệu giá cho {ticker} ({from_date} → {to_date}): {e}")
         return 0
 
-    # vnstock trả về cột: time, open, high, low, close, volume
-    # close là giá đã điều chỉnh theo mặc định của VCI source
-    df = df.rename(columns={"time": "ngay", "close": "close_adj"})
+    # vnmarket returns adjusted VND; stock_prices stores nghìn đồng (HPG 20.45)
     rows = []
     for _, row in df.iterrows():
-        ngay = str(row["ngay"])[:10]
-        close_adj = float(row["close_adj"]) if pd.notna(row.get("close_adj")) else None
-        volume = int(row["volume"]) if pd.notna(row.get("volume")) else 0
-        if close_adj is None:
+        if pd.isna(row.get("close")):
             continue  # skip rows with no price
-        rows.append((ticker, ngay, close_adj, volume))
+        volume = int(row["volume"]) if pd.notna(row.get("volume")) else 0
+        rows.append((ticker, row["time"].strftime("%Y-%m-%d"), float(row["close"]) / 1000.0, volume))
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -135,7 +117,7 @@ def main() -> None:
             except Exception as e:
                 print(f"  {t}: FAILED — {e}", file=sys.stderr)
                 failed.append(t)
-            time.sleep(3.2)  # stay under vnstock 20 req/min rate limit
+            time.sleep(3.2)  # stay under source rate limits
         print(f"\nTotal: {total} rows upserted")
         if failed:
             print(f"Failed ({len(failed)}): {', '.join(failed)}", file=sys.stderr)

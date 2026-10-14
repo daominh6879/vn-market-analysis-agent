@@ -2,14 +2,14 @@
 ingest/fetch_foreign_flows.py — Fetch per-ticker foreign trading data → foreign_flows.
 
 Two modes:
-  - Historical (--migrate / --start-date): Fireant historical-quotes endpoint,
-    per-ticker date range, derives values from volume × close price.
-  - Daily live (default): VCI price-board endpoint, today's session data,
-    falls back to Fireant historical for a specific date.
+  - Historical (--migrate / --start-date): vnmarket per-ticker date range; values come from the
+    foreign-flow source, else derived from volume × close price.
+  - Daily live (default): vnmarket price board, today's session data,
+    falls back to the historical path for a specific date.
 
 Provider priority:
-  Historical: FireantProvider (primary) → VCI fallback
-  Daily live:  VciDirectProvider (primary) → Fireant historical fallback
+  Historical: FireantProvider (vnmarket prices + CafeF/HOSE foreign flow)
+  Daily live:  VciDirectProvider (vnmarket live board)
 
 Usage:
     # initial 1-year backfill (all active securities):
@@ -31,6 +31,8 @@ import argparse
 import sys
 from datetime import date, timedelta
 from pathlib import Path
+
+import pandas as pd
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
@@ -103,7 +105,13 @@ def _fireant_rows_for_range(ticker: str, start: date, end: date) -> list[tuple]:
         close_price = float(row.get("close", 0))
         buy_val = round(buy_vol * close_price / 1e6, 4)
         sell_val = round(sell_vol * close_price / 1e6, 4)
-        net_val = round(net_vol * close_price / 1e6, 4)
+        # vnmarket publishes the real traded values (raw VND → tỷ đồng); prefer them
+        if pd.notna(row.get("foreign_buy_value")) and pd.notna(row.get("foreign_sell_value")):
+            buy_val = round(float(row["foreign_buy_value"]) / 1e9, 4)
+            sell_val = round(float(row["foreign_sell_value"]) / 1e9, 4)
+            net_val = round(buy_val - sell_val, 4)
+        else:
+            net_val = round(net_vol * close_price / 1e6, 4)
         rows.append((
             ticker,
             str(row["time"])[:10],

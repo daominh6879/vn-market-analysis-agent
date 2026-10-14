@@ -23,6 +23,8 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import pandas as pd
+
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -301,7 +303,11 @@ def fetch_and_upsert(
             # nghìn đồng → /1e6 gives tỷ đồng.
             buy_val = round(buy_vol * close_price / 1e6, 4)
             sell_val = round(sell_vol * close_price / 1e6, 4)
-            net_val = round(net_vol * close_price / 1e6, 4)
+            # vnmarket publishes the real traded values (raw VND → tỷ đồng); prefer them
+            if pd.notna(row.get("foreign_buy_value")) and pd.notna(row.get("foreign_sell_value")):
+                buy_val = round(float(row["foreign_buy_value"]) / 1e9, 4)
+                sell_val = round(float(row["foreign_sell_value"]) / 1e9, 4)
+            net_val = round(buy_val - sell_val, 4)
             foreign_rows.append((
                 ticker,
                 str(row["time"])[:10],

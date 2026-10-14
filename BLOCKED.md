@@ -77,3 +77,8 @@ Các mục dưới đây là điểm nghi vấn nêu trong `vn_stock_agent_test_
 - [ ] **Thiếu alias tên công ty**: đã thêm "vn milk" vào `TICKER_ENRICHMENT["VNM"]` (`data/hose_universe.py`, có test `test_vn_milk_alias_is_curated_for_vnm`); **DB chưa được seed lại** nên `securities.name_aliases` chưa có alias này cho tới khi chạy `python ingest/seed_securities.py` (hoặc asset Dagster seed). "nhà bán lẻ này", "vp b" mơ hồ, không thêm được.
 - [ ] **Bộ lọc `screening` chưa mô hình hoá**: ghép đúng chỉ báo–toán tử–ngưỡng cho nhiều bộ lọc cần token tagging; cascade phải rơi về LLM với `screening` cho đến khi có.
 - [ ] **Nhãn synthetic chưa đối chiếu với router thật**: quy tắc lọc nhiễu (`common.load_synthetic`) là cách đọc `ROUTING_RULES`; chưa chạy `llm_route` trên 155 câu seed để xác nhận các nhãn viết tay còn tranh cãi.
+
+- [ ] DeepSeek API trả `402 Insufficient Balance` (xác nhận 2026-10-14 bằng `create_client().generate(...)`). `llm_classify` nuốt exception và trả `conversation`, nên các test router/memory/e2e dùng LLM thật fail (test_router_intents_cache 79, test_regression_fixes 5, test_observability_streaming_e2e 3, test_conversation_memory 1, test_episodic_memory 1). Cần nạp tiền tài khoản DeepSeek rồi chạy lại các file này.
+
+- [ ] vnmarket không có nguồn cổ tức / sự kiện doanh nghiệp (đã grep mã nguồn 2026-10-14), nên `ingest/fetch_dividends.py` và `data/corporate_events_scraper.py` vẫn dùng vnstock vendored. Cần thêm endpoint vào vnmarket mới thay được.
+- [ ] Đợt chuyển `fetch_financials` / `fetch_ratios` sang vnmarket chưa được đối chiếu với `financial_facts` / `stock_ratios` thật vì Postgres không chạy (Docker Desktop tắt). Chạy lại `fetch_financials.py --ticker HPG --dry-run` và so sánh khi DB lên.

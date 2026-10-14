@@ -16,7 +16,7 @@ from tools.providers import PriceProvider, YFinanceProvider
 
 
 def _thousand_df() -> pd.DataFrame:
-    """What Fireant / KBS return: nghìn đồng."""
+    """Bars in nghìn đồng (ohlcv_daily unit)."""
     return pd.DataFrame({
         "time": ["2026-10-08", "2026-10-09"],
         "open": [57.0, 56.6], "high": [57.3, 57.0], "low": [56.6, 56.2], "close": [56.6, 56.7],
@@ -41,40 +41,39 @@ def _no_db_first(monkeypatch):
     monkeypatch.setattr("tools.ohlcv_db.query_ohlcv", lambda *a, **k: None)
 
 
-# ── providers: Fireant / KBS are nghìn đồng natively → normalized to VND ───────
+# ── providers: vnmarket serves VND natively; ingest range stays nghìn đồng ─────
+
+def _vn_vnd_client():
+    from unittest.mock import MagicMock
+    c = MagicMock()
+    c.prices.history.return_value = pd.DataFrame({
+        "time": pd.to_datetime(["2026-10-08", "2026-10-09"]),
+        "open": [57000, 56600], "high": [57300, 57000], "low": [56600, 56200], "close": [56600, 56700],
+        "volume": [2272500, 3049500],
+    })
+    c.market.foreign.side_effect = RuntimeError("no foreign in this test")
+    return c
+
 
 def test_fireant_fetch_history_and_price_return_vnd(monkeypatch):
+    monkeypatch.setattr("core.vnmarket_client.get_client", _vn_vnd_client)
     fa = P.FireantProvider()
-    monkeypatch.setattr(fa, "fetch_history_range", lambda *a, **k: _thousand_df())
     assert fa.fetch_price("VCB") == 56_700
     df = fa.fetch_history("VCB", 2)
     assert df["close"].tolist() == [56_600, 56_700]
     assert df["volume"].tolist() == [2272500, 3049500]  # volume untouched
 
 
-def test_fireant_range_stays_raw_for_ingest(monkeypatch):
+def test_fireant_range_stays_nghin_dong_for_ingest(monkeypatch):
     """ingest/fetch_ohlcv.py stores fetch_history_range as-is (nghìn đồng)."""
-    fa = P.FireantProvider()
-    monkeypatch.setattr(fa, "_get_token", lambda: "t")
-
-    class _Resp:
-        status_code = 200
-
-        def raise_for_status(self):
-            pass
-
-        def json(self):
-            return [{"date": "2026-10-09T00:00:00", "priceOpen": 56.6, "priceHigh": 57.0,
-                     "priceLow": 56.2, "priceClose": 56.7, "dealVolume": 1}]
-
-    monkeypatch.setattr("httpx.get", lambda *a, **k: _Resp())
-    df = fa.fetch_history_range("VCB", "2026-10-09", "2026-10-09")
+    monkeypatch.setattr("core.vnmarket_client.get_client", _vn_vnd_client)
+    df = P.FireantProvider().fetch_history_range("VCB", "2026-10-08", "2026-10-09")
     assert df["close"].iloc[-1] == pytest.approx(56.7)
 
 
 def test_kbs_returns_vnd(monkeypatch):
+    monkeypatch.setattr("core.vnmarket_client.get_client", _vn_vnd_client)
     kbs = P.KbsProvider()
-    monkeypatch.setattr(kbs, "_kbs_history", lambda *a, **k: _thousand_df())
     assert kbs.fetch_price("VCB") == 56_700
     assert kbs.fetch_history("VCB", 2)["close"].iloc[-1] == 56_700
 

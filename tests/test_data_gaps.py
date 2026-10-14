@@ -96,13 +96,24 @@ def test_rows_from_events_splits_cash_and_stock_and_counts_skips():
 
 # ── quarterly statements ─────────────────────────────────────────────────────
 
-def test_quarterly_columns_become_q_slash_year_and_annual_ignores_them():
-    from ingest.fetch_financials import _facts_from_kbs
-    df = pd.DataFrame({"item_id": ["net_sales"], "item": ["x"], "2025-Q1": [5.0], "2024": [3.0], "2024-Q4": [2.0]})
-    q = _facts_from_kbs(df, "FPT", "consolidated", "income_statement", 2020, 2026, quarterly=True)
-    a = _facts_from_kbs(df, "FPT", "consolidated", "income_statement", 2020, 2026, quarterly=False)
+def test_quarterly_rows_become_q_slash_year_and_annual_ignores_them():
+    from ingest.fetch_financials import _facts_from_vnmarket
+    df = pd.DataFrame({"year": [2025, 2024, 2024], "quarter": [1, 4, 0], "isa3": [5.0, 2.0, 3.0]})
+    q = _facts_from_vnmarket(df, {}, "FPT", "consolidated", "income_statement", 2020, 2026, quarterly=True)
+    a = _facts_from_vnmarket(df, {}, "FPT", "consolidated", "income_statement", 2020, 2026, quarterly=False)
     assert sorted(f["period"] for f in q) == ["Q1/2025", "Q4/2024"]
     assert [f["period"] for f in a] == ["2024"]
+    assert {f["metric_code"] for f in q + a} == {"doanh_thu_thuan"}
+
+
+def test_vnmarket_fields_map_to_codes_or_slugged_titles_and_skip_opaque_zero_nan():
+    from ingest.fetch_financials import _facts_from_vnmarket
+    df = pd.DataFrame({"year": [2024], "quarter": [0], "bsa53": [9.0], "bsa99": [4.0], "bsa98": [0.0],
+                       "bsa97": [float("nan")], "zzz1": [7.0]})
+    titles = {"bsa99": "Tài sản khác", "bsa98": "Không có", "bsa97": "Rỗng"}
+    got = {f["metric_code"]: f["value"] for f in
+           _facts_from_vnmarket(df, titles, "HPG", "consolidated", "balance_sheet", 2020, 2026)}
+    assert got == {"tong_tai_san": 9.0, "tai_san_khac": 4.0}
 
 
 def test_quarterly_block_shows_latest_quarters_with_yoy(monkeypatch):
@@ -129,15 +140,37 @@ def test_quarterly_block_without_data_refuses_to_guess(monkeypatch):
 def test_ratio_history_facts_one_row_per_year_and_ratio():
     from ingest.fetch_ratios import ratio_history_facts
     df = pd.DataFrame({
-        "item_id": ["roe", "trailing_eps", "pe_ratio"], "item": ["ROE", "EPS", "PE"],
-        "2024-Năm": [12.5, 1900.0, 11.0], "2020": [20.1, 2500.0, float("nan")], "TTM": [1, 2, 3],
+        "ratio_type": ["RATIO_YEAR", "RATIO_YEAR", "RATIO_TTM"], "year_report": [2024, 2020, 2026],
+        "roe": [0.125, 0.201, 0.3], "pe": [11.0, 0.0, 9.0], "pb": [1.5, 2.0, 1.0],
+        "market_cap": [2.0e12, 1.0e12, 5.0e12], "number_of_shares_mkt_cap": [1.0e9, 1.0e9, 1.0e9],
     })
     facts = ratio_history_facts("HPG", df)
     got = {(f["period"], f["metric_code"]): f["value"] for f in facts}
-    assert got[("2020", "ratio_roe_pct")] == 20.1 and got[("2024", "ratio_eps")] == 1900.0
-    assert ("2020", "ratio_pe") not in got                      # NaN skipped
+    assert got[("2020", "ratio_roe_pct")] == 20.1 and got[("2024", "ratio_eps")] == round(2000 / 11.0, 2)
+    assert ("2020", "ratio_pe") not in got and ("2020", "ratio_eps") not in got   # 0 = not applicable
     assert all(f["source"] == "vnstock_ratio" for f in facts)
-    assert {f["period"] for f in facts} == {"2020", "2024"}     # non-year columns ignored
+    assert {f["period"] for f in facts} == {"2020", "2024"}     # TTM rows ignored
+
+
+def test_ratio_row_scales_percents_and_derives_eps(monkeypatch):
+    from unittest.mock import MagicMock
+    from ingest import fetch_ratios
+    ratios = pd.DataFrame({
+        "year": [2025, 2026], "quarter": [5, 2], "ratio_type": ["RATIO_YEAR", "RATIO_TTM"],
+        "pe": [10.0, 8.0], "pb": [1.0, 1.2], "roe": [0.1, 0.17], "roa": [0.05, 0.09],
+        "gross_margin": [0.1, 0.16], "after_tax_profit_margin": [0.08, 0.12],
+        "debt_to_equity": [0.9, 0.97], "ev_to_ebitda": [0.0, 7.0],
+        "market_cap": [1e12, 2e12], "number_of_shares_mkt_cap": [1e9, 1e9],
+    })
+    income = pd.DataFrame({"year": [2024, 2025], "quarter": [0, 0], "isa3": [100.0, 112.0], "isa22": [10.0, 15.0]})
+    client = MagicMock()
+    client.finance.ratios.return_value = ratios
+    client.finance.statement.return_value = income
+    monkeypatch.setattr("core.vnmarket_client.get_client", lambda: client)
+    row = fetch_ratios.ratio_row("HPG")
+    assert (row["pe"], row["roe_pct"], row["net_margin_pct"], row["de_ratio"]) == (8.0, 17.0, 12.0, 0.97)
+    assert row["eps"] == 250.0 and row["ev_ebitda"] == 7.0       # 2000 VND price / 8
+    assert (row["revenue_growth_pct"], row["earnings_growth_pct"]) == (12.0, 50.0)
 
 
 def test_yearly_prefers_published_ratios_for_requested_years(monkeypatch):

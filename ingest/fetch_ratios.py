@@ -1,5 +1,5 @@
 """
-ingest/fetch_ratios.py — Fetch KBS valuation ratios → stock_ratios.
+ingest/fetch_ratios.py — Fetch valuation ratios via vnmarket → stock_ratios.
 
 Single-command daily refresh of P/E, P/B, ROE, EPS… for VN30+VN100 tickers.
 Mirrors the Dagster asset vnstock_ratios (pipeline/assets_vnstock.py).
@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import math
 import sys
-import time
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
@@ -66,129 +65,125 @@ def _get(latest, key) -> float | None:
         return None
 
 
-def _reprice(ticker: str, fiscal_year: int | None, pe, pb, eps):
-    """Re-express KBS year-end valuation at today's adjusted price.
+def _ratio(latest, key, scale: float = 1.0) -> float | None:
+    """vnmarket reports 0.0 for a ratio that does not apply (bank-only ratios on non-banks, etc.)."""
+    v = _get(latest, key)
+    return None if not v else round(v * scale, 4)
 
-    KBS pe/pb are computed at the fiscal year-end price and eps is the raw (pre-dilution)
-    figure. With ref = adjusted close on the last session <= Dec 31 and now = latest close:
-        eps_adj = ref / pe          (so a later stock dividend/split is reflected)
-        pe_live = pe * now / ref    (= now / eps_adj)
-        pb_live = pb * now / ref
-    Returns (pe, pb, eps) unchanged if prices are unavailable.
-    """
-    if not fiscal_year or not pe or pe <= 0:
-        return pe, pb, eps
+
+def _eps(latest) -> float | None:
+    """EPS implied by the ratio frame: price (market_cap / shares) / pe. vnmarket has no EPS field."""
+    pe, cap, shares = _get(latest, "pe"), _get(latest, "market_cap"), _get(latest, "number_of_shares_mkt_cap")
+    if not pe or pe <= 0 or not cap or not shares:
+        return None
+    return round(cap / shares / pe, 2)
+
+
+def _latest_ttm(df):
+    """Newest TTM row of the vnmarket ratio frame (priced at today's market cap)."""
+    rows = df[df["ratio_type"] == "RATIO_TTM"] if "ratio_type" in df.columns else df
+    rows = (rows if not rows.empty else df).sort_values(["year", "quarter"])
+    return rows.iloc[-1]
+
+
+def _growth_pct(vn, ticker: str) -> tuple[float | None, float | None]:
+    """YoY growth (%) of net revenue and parent net profit from the last two annual statements."""
     try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT close FROM ohlcv_daily WHERE ticker=%s AND date <= %s "
-                            "ORDER BY date DESC LIMIT 1", (ticker, f"{fiscal_year}-12-31"))
-                ref = cur.fetchone()
-                cur.execute("SELECT close FROM ohlcv_daily WHERE ticker=%s ORDER BY date DESC LIMIT 1",
-                            (ticker,))
-                now = cur.fetchone()
-        if not now or not now[0] or float(now[0]) <= 0:
-            return pe, pb, eps
-        if not ref or not ref[0] or float(ref[0]) <= 0:
-            # No price history back to the fiscal year-end: P/B cannot be re-priced, but P/E can be
-            # made consistent with the latest close (P/E x EPS = price) instead of keeping a stale raw pair.
-            if eps and eps > 0:
-                return round(float(now[0]) * 1000.0 / eps, 2), None, eps
-            return pe, pb, eps
-        ref_p, now_p = float(ref[0]) * 1000.0, float(now[0]) * 1000.0  # nghìn đồng → VND
-        scale = now_p / ref_p
-        return round(pe * scale, 2), (round(pb * scale, 2) if pb else pb), round(ref_p / pe, 2)
+        df = vn.finance.statement(ticker, kind="income", period="year", labels=False).sort_values("year")
     except Exception:
-        return pe, pb, eps
+        return None, None
+
+    def g(col):
+        s = df[col].dropna() if col in df.columns else df.iloc[0:0]
+        return round((float(s.iloc[-1]) / float(s.iloc[-2]) - 1) * 100, 2) if len(s) >= 2 and s.iloc[-2] > 0 else None
+
+    return g("isa3"), g("isa22")
+
+
+def ratio_row(ticker: str) -> dict:
+    """Latest valuation/profitability snapshot for `ticker` via vnmarket (no DB access).
+
+    pe/pb/ev_ebitda/roe/roa/margins are TTM and already priced at today's market cap, so no
+    re-pricing is needed. Percent fields are x100; de_ratio is a plain ratio.
+    """
+    from core.vnmarket_client import get_client
+    vn = get_client()
+    latest = _latest_ttm(vn.finance.ratios(ticker))
+    revenue_growth, earnings_growth = _growth_pct(vn, ticker)
+    return {
+        "ticker":              ticker,
+        "pe":                  _ratio(latest, "pe"),
+        "pb":                  _ratio(latest, "pb"),
+        "roe_pct":             _ratio(latest, "roe", 100),
+        "roa_pct":             _ratio(latest, "roa", 100),
+        "eps":                 _eps(latest),
+        "gross_margin_pct":    _ratio(latest, "gross_margin", 100),
+        "net_margin_pct":      _ratio(latest, "after_tax_profit_margin", 100),
+        "revenue_growth_pct":  revenue_growth,
+        "earnings_growth_pct": earnings_growth,
+        "de_ratio":            _ratio(latest, "debt_to_equity"),
+        "ev_ebitda":           _ratio(latest, "ev_to_ebitda"),
+    }
 
 
 def fetch_and_upsert(ticker: str) -> dict:
-    """Fetch latest annual ratios for `ticker` from KBS and upsert into stock_ratios."""
-    from vnstock.api.financial import Finance as VnFinance
-
-    df = VnFinance(symbol=ticker, source='KBS').ratio(period='year', lang='en')
-    df = df.set_index('item_id').drop(columns=['item'], errors='ignore')
-    latest = df.iloc[:, 0]
-    try:
-        fiscal_year = int(str(latest.name)[:4])
-    except (TypeError, ValueError):
-        fiscal_year = None
-
-    de_pct = _get(latest, 'debt_to_equity')
-    pe, pb, eps = _reprice(ticker, fiscal_year, _get(latest, 'pe_ratio'),
-                           _get(latest, 'pb_ratio'), _get(latest, 'trailing_eps'))
-    row = {
-        "ticker":             ticker,
-        "pe":                 pe,
-        "pb":                 pb,
-        "roe_pct":            _get(latest, 'roe'),
-        "roa_pct":            _get(latest, 'roa'),
-        "eps":                eps,
-        "gross_margin_pct":   _get(latest, 'gross_margin'),
-        "net_margin_pct":     _get(latest, 'net_margin'),
-        "revenue_growth_pct": _get(latest, 'net_revenue'),
-        "earnings_growth_pct": _get(latest, 'profit_after_tax_for_shareholders_of_the_parent_company'),
-        "de_ratio":           de_pct / 100 if de_pct is not None else None,
-        "ev_ebitda":          _get(latest, 'ev_ebitda'),
-    }
+    """Fetch the latest ratios for `ticker` via vnmarket and upsert into stock_ratios."""
+    row = ratio_row(ticker)
+    if all(row[k] is None for k in ("pe", "pb", "roe_pct", "eps")):
+        raise ValueError("vnmarket returned no ratios")   # a run that produces nothing must fail
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(_UPSERT_SQL, row)
     return row
 
 
-# KBS ratio item_id → financial_facts.metric_code for the per-year history (ROE 2020 vs 2024, EPS 2023...).
+# vnmarket ratio column → (financial_facts.metric_code, scale) for the per-year history (ROE 2020 vs 2024, EPS 2023...).
 _HISTORY_METRICS = {
-    "roe": "ratio_roe_pct",
-    "roa": "ratio_roa_pct",
-    "trailing_eps": "ratio_eps",
-    "pe_ratio": "ratio_pe",
-    "pb_ratio": "ratio_pb",
-    "gross_margin": "ratio_gross_margin_pct",
-    "net_margin": "ratio_net_margin_pct",
+    "roe": ("ratio_roe_pct", 100),
+    "roa": ("ratio_roa_pct", 100),
+    "pe": ("ratio_pe", 1),
+    "pb": ("ratio_pb", 1),
+    "gross_margin": ("ratio_gross_margin_pct", 100),
+    "after_tax_profit_margin": ("ratio_net_margin_pct", 100),
 }
 
 
 def ratio_history_facts(ticker: str, df) -> list[dict]:
-    """KBS ratio frame (rows=item_id, cols=years) → financial_facts rows, one per (year, ratio).
+    """vnmarket ratio frame → financial_facts rows, one per (fiscal year, ratio).
 
-    Values are as published for that fiscal year (EPS is NOT adjusted for later splits/stock
-    dividends; P/E and P/B are at that year's closing price) — the stock_ratios snapshot is the
-    re-priced one.
+    Uses the RATIO_YEAR rows. Values are as of that fiscal year-end (EPS = year-end price / P/E,
+    NOT adjusted for later splits/stock dividends) — the stock_ratios snapshot is the current one.
     """
-    import re
-    df = df.set_index("item_id").drop(columns=["item"], errors="ignore")
+    rows = df[df["ratio_type"] == "RATIO_YEAR"] if "ratio_type" in df.columns else df.iloc[0:0]
     facts: list[dict] = []
-    for col in df.columns:
-        m = re.match(r"(\d{4})(?:-\S+)?$", str(col))   # KBS labels annual columns '2025-Năm'
-        if not m:
+    for _, r in rows.iterrows():
+        try:
+            year = str(int(r["year_report"]))
+        except (TypeError, ValueError):
             continue
-        year = m.group(1)
-        for item_id, metric in _HISTORY_METRICS.items():
-            if item_id not in df.index:
-                continue
-            v = _get(df[col], item_id)
+        values = {metric: _ratio(r, col, scale) for col, (metric, scale) in _HISTORY_METRICS.items()}
+        values["ratio_eps"] = _eps(r)
+        for metric, v in values.items():
             if v is None:
                 continue
             facts.append(dict(
                 ticker=ticker, period=year, report_type="consolidated", metric_code=metric,
                 value=v, unit="VND" if metric == "ratio_eps" else ("x" if metric in ("ratio_pe", "ratio_pb") else "%"),
-                source_file="vnstock_kbs_ratio", source_page=0, source="vnstock_ratio",
+                source_file="vnmarket_ratio", source_page=0, source="vnstock_ratio",
             ))
     return facts
 
 
 def fetch_and_upsert_history(ticker: str) -> int:
-    from vnstock.api.financial import Finance as VnFinance
+    from core.vnmarket_client import get_client
     from ingest.fetch_financials import insert_vnstock_facts
 
-    df = VnFinance(symbol=ticker, source="KBS").ratio(period="year", lang="en")
-    facts = ratio_history_facts(ticker, df)
+    facts = ratio_history_facts(ticker, get_client().finance.ratios(ticker))
     return insert_vnstock_facts(facts) if facts else 0
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Fetch KBS valuation ratios → stock_ratios")
+    parser = argparse.ArgumentParser(description="Fetch valuation ratios via vnmarket → stock_ratios")
     parser.add_argument("--tickers", default="",
                         help="Comma-separated tickers; empty = every active security")
     parser.add_argument("--history", action="store_true",
@@ -217,7 +212,6 @@ def main() -> None:
                     raise ValueError("no ratio history returned")
                 upserted += 1
                 print(f"  {t}: {n} yearly ratio facts")
-                time.sleep(3.2)
                 continue
             row = fetch_and_upsert(t)
             upserted += 1
@@ -225,7 +219,6 @@ def main() -> None:
         except Exception as e:
             print(f"  {t}: FAILED — {e}", file=sys.stderr)
             failed.append(t)
-        time.sleep(3.2)  # stay under vnstock 20 req/min rate limit
 
     print(f"\nTotal: {upserted}/{len(tickers)} upserted")
     if failed:

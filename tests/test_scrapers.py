@@ -1,100 +1,95 @@
 """
-tests/test_scrapers.py — Unit tests for FX and gold scrapers (Phase 3).
+tests/test_scrapers.py — Unit tests for FX and gold scrapers (now backed by vnmarket).
 
-Mock network calls. Verify parsing logic against representative XML fixtures.
+The vnmarket client is stubbed; no network calls.
 """
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
+import pytest
+
+
+def _client(fx=None, gold=None, fx_exc=None, gold_exc=None):
+    c = MagicMock()
+    if fx_exc:
+        c.macro.fx.side_effect = fx_exc
+    else:
+        c.macro.fx.return_value = fx
+    if gold_exc:
+        c.macro.gold.side_effect = gold_exc
+    else:
+        c.macro.gold.return_value = gold
+    return c
+
 
 # ── VCB FX scraper ────────────────────────────────────────────────────────────
 
-_VCB_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
-<root>
-  <DateTime>8/26/2026 7:00:01 AM</DateTime>
-  <Exrate CurrencyCode="USD" CurrencyName="USD" Buy="25,920" Sell="26,330" Transfer="26,125"/>
-  <Exrate CurrencyCode="EUR" CurrencyName="EUR" Buy="28,100" Sell="29,200" Transfer="28,650"/>
-</root>"""
+_FX = pd.DataFrame([
+    {"currency": "USD", "name": "USD", "buy_cash": 25920.0, "buy_transfer": 26125.0, "sell": 26330.0},
+    {"currency": "EUR", "name": "EUR", "buy_cash": 28100.0, "buy_transfer": 28650.0, "sell": 29200.0},
+])
 
 
 class TestFxScraper:
-    def _mock_resp(self, content: bytes = _VCB_XML, status: int = 200):
-        mock = MagicMock()
-        mock.raise_for_status = MagicMock()
-        mock.status_code = status
-        mock.content = content
-        return mock
-
     def test_returns_usd_rates(self):
-        with patch("httpx.get", return_value=self._mock_resp()):
+        with patch("core.vnmarket_client.get_client", return_value=_client(fx=_FX)):
             from data.fx_scraper import fetch_vcb_usdvnd
             result = fetch_vcb_usdvnd()
-        assert result is not None
         assert result["buy"] == 25920.0
         assert result["sell"] == 26330.0
         assert result["transfer"] == 26125.0
         assert result["source"] == "vietcombank"
 
-    def test_returns_none_on_http_error(self):
-        mock = MagicMock()
-        mock.raise_for_status.side_effect = Exception("HTTP 503")
-        with patch("httpx.get", return_value=mock):
+    def test_returns_none_on_source_error(self):
+        with patch("core.vnmarket_client.get_client", return_value=_client(fx_exc=Exception("all sources failed"))):
             from data.fx_scraper import fetch_vcb_usdvnd
-            result = fetch_vcb_usdvnd()
-        assert result is None
+            assert fetch_vcb_usdvnd() is None
 
     def test_returns_none_on_missing_usd(self):
-        xml_no_usd = b"""<?xml version="1.0"?>
-        <root><Exrate CurrencyCode="EUR" Buy="28000" Sell="29000" Transfer="28500"/></root>"""
-        with patch("httpx.get", return_value=self._mock_resp(xml_no_usd)):
+        with patch("core.vnmarket_client.get_client", return_value=_client(fx=_FX[_FX.currency == "EUR"])):
             from data.fx_scraper import fetch_vcb_usdvnd
-            result = fetch_vcb_usdvnd()
-        assert result is None
+            assert fetch_vcb_usdvnd() is None
+
+    def test_returns_none_when_usd_has_no_buy_sell(self):
+        mid_only = pd.DataFrame([{"currency": "USD", "name": "USD", "buy_cash": None,
+                                  "buy_transfer": None, "sell": None, "mid": 26000.0}])
+        with patch("core.vnmarket_client.get_client", return_value=_client(fx=mid_only)):
+            from data.fx_scraper import fetch_vcb_usdvnd
+            assert fetch_vcb_usdvnd() is None
 
     def test_midpoint_rate(self):
         from data.fx_scraper import midpoint_rate
-        data = {"buy": 25920.0, "sell": 26330.0, "transfer": 26125.0}
-        mid = midpoint_rate(data)
-        assert mid == 26125.0
+        assert midpoint_rate({"buy": 25920.0, "sell": 26330.0, "transfer": 26125.0}) == 26125.0
 
 
 # ── SJC gold scraper ──────────────────────────────────────────────────────────
 
-# SJC XML format (approximate — actual format may vary)
-_SJC_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
-<root>
-  <item type="SJC" khu_vuc="TP.HCM" buy="147,600,000" sell="150,600,000"/>
-  <item type="SJC" khu_vuc="Ha Noi"  buy="147,600,000" sell="150,600,000"/>
-</root>"""
+def _gold_df():
+    df = pd.DataFrame([
+        {"brand": "SJC", "type": "Vàng nhẫn SJC 99,99% 1 chỉ", "branch": "Hồ Chí Minh", "buy": 140.8e6, "sell": 143.8e6},
+        {"brand": "SJC", "type": "Vàng SJC 1L, 10L, 1KG", "branch": "Miền Bắc", "buy": 141.0e6, "sell": 144.0e6},
+        {"brand": "SJC", "type": "Vàng SJC 1L, 10L, 1KG", "branch": "Hồ Chí Minh", "buy": 141.3e6, "sell": 144.3e6},
+    ])
+    df.attrs["source"] = "sjc"
+    return df
 
 
 class TestGoldScraper:
-    def _mock_resp(self, content: bytes = _SJC_XML):
-        mock = MagicMock()
-        mock.raise_for_status = MagicMock()
-        mock.content = content
-        return mock
-
     def test_returns_buy_sell_vnd(self):
-        with patch("httpx.get", return_value=self._mock_resp()):
+        with patch("core.vnmarket_client.get_client", return_value=_client(gold=_gold_df())):
             from data.gold_vn_scraper import fetch_sjc_gold
             result = fetch_sjc_gold()
-        assert result is not None
-        assert result["buy_vnd"] == pytest.approx(147.6, abs=0.1)
-        assert result["sell_vnd"] == pytest.approx(150.6, abs=0.1)
+        assert result["buy_vnd"] == pytest.approx(141.3, abs=0.01)
+        assert result["sell_vnd"] == pytest.approx(144.3, abs=0.01)
         assert result["source"] == "sjc"
 
     def test_returns_none_on_error(self):
-        mock = MagicMock()
-        mock.raise_for_status.side_effect = Exception("network")
         # fetch_sjc_gold falls back to a yfinance world-price estimate; disable it so
         # "every source failed" is what's under test (and no live network call is made).
-        with patch("httpx.get", return_value=mock),              patch("data.gold_vn_scraper._fetch_yfinance_gold_estimate", return_value=None):
+        with patch("core.vnmarket_client.get_client", return_value=_client(gold_exc=Exception("network"))), \
+             patch("data.gold_vn_scraper._fetch_yfinance_gold_estimate", return_value=None):
             from data.gold_vn_scraper import fetch_sjc_gold
-            result = fetch_sjc_gold()
-        assert result is None
-
-
-import pytest
+            assert fetch_sjc_gold() is None

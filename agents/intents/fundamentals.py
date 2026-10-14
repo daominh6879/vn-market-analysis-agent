@@ -1,7 +1,7 @@
 """
 agents/intents/fundamentals.py — Nhóm 3: Cơ bản & Định giá.
 
-Fetches real valuation metrics (P/E, P/B, ROE, EPS) via vnstock KBS source,
+Fetches real valuation metrics (P/E, P/B, ROE, EPS) via vnmarket (TTM ratios),
 pre-computes rankings in Python, injects factual statements into LLM prompt.
 LLM only narrates — never re-derives comparisons from scratch.
 Falls back to rag/qa.py for BCTC-specific questions.
@@ -22,7 +22,7 @@ from core.tickers import get_sector_peers
 
 # ── Data fetching ─────────────────────────────────────────────────────────────
 
-# In-process TTL cache — L1 guard; Postgres is L2; live vnstock is fallback
+# In-process TTL cache — L1 guard; Postgres is L2; live vnmarket is fallback
 _VALUATION_CACHE: dict[str, tuple[float, dict]] = {}
 _CACHE_TTL = 3600        # 1 hour in-process
 _STALE_THRESHOLD = 172800  # 48 hours — treat Postgres row as stale beyond this
@@ -86,8 +86,8 @@ def _fetch_from_db(ticker: str) -> dict | None:
         return None
 
 
-def _fetch_from_vnstock(ticker: str) -> dict | None:
-    """Live vnstock KBS call. Returns None on any error."""
+def _fetch_live(ticker: str) -> dict | None:
+    """Live vnmarket call (same builder as the stored snapshot, ingest.fetch_ratios). Returns an empty record on any error."""
     def _empty() -> dict:
         return {
             "ticker": ticker, "pe": None, "pb": None, "roe": None,
@@ -98,49 +98,16 @@ def _fetch_from_vnstock(ticker: str) -> dict | None:
             "net_income": None, "ev_ebitda": None,
         }
     try:
-        from vnstock.api.financial import Finance as _VnFinance
-        df = _VnFinance(symbol=ticker, source='KBS').ratio(period='year', lang='en')
-        df = df.set_index('item_id').drop(columns=['item'], errors='ignore')
-        latest = df.iloc[:, 0]
-
-        def _get(key) -> float | None:
-            v = latest.get(key)
-            if v is None:
-                return None
-            try:
-                f = float(v)
-                return None if math.isnan(f) else f
-            except (TypeError, ValueError):
-                return None
-
-        roe_pct = _get('roe')
-        de_pct  = _get('debt_to_equity')
-        # Same re-pricing as the stored snapshot (ingest.fetch_ratios), so live and DB values agree.
-        from ingest.fetch_ratios import _reprice
-        try:
-            fiscal_year = int(str(latest.name)[:4])
-        except (TypeError, ValueError):
-            fiscal_year = None
-        pe, pb, eps = _reprice(ticker, fiscal_year, _get('pe_ratio'), _get('pb_ratio'), _get('trailing_eps'))
+        from ingest.fetch_ratios import ratio_row
+        row = ratio_row(ticker)
         return {
-            "ticker":             ticker,
-            "as_of":              _time.strftime("%d/%m/%Y"),
-            "pe":                 pe,
-            "pb":                 pb,
-            "roe":                roe_pct / 100 if roe_pct is not None else None,
-            "roe_pct":            roe_pct,
-            "roa_pct":            _get('roa'),
-            "eps":                eps,
-            "price":              None,
-            "gross_margin_pct":   _get('gross_margin'),
-            "net_margin_pct":     _get('net_margin'),
-            "revenue_growth_pct": _get('net_revenue'),
-            "earnings_growth_pct": _get('profit_after_tax_for_shareholders_of_the_parent_company'),
-            "de_ratio":           de_pct / 100 if de_pct is not None else None,
-            "op_cashflow":        None,
-            "fcf":                None,
-            "net_income":         None,
-            "ev_ebitda":          _get('ev_ebitda'),
+            **row,
+            "as_of":       _time.strftime("%d/%m/%Y"),
+            "roe":         row["roe_pct"] / 100 if row["roe_pct"] is not None else None,
+            "price":       None,
+            "op_cashflow": None,
+            "fcf":         None,
+            "net_income":  None,
         }
     except Exception:
         return _empty()
@@ -157,9 +124,9 @@ def _fetch_valuation(ticker: str) -> dict:
     # L2: Postgres (Dagster pre-fetches daily)
     result = _fetch_from_db(ticker)
 
-    # L3: live vnstock fallback (hits rate limit only when Postgres missing/stale)
+    # L3: live vnmarket fallback (only when Postgres missing/stale)
     if result is None:
-        result = _fetch_from_vnstock(ticker)
+        result = _fetch_live(ticker)
 
     _VALUATION_CACHE[ticker] = (now, result)
     return result
@@ -255,7 +222,7 @@ def _build_analysis(ticker: str, rows: list[dict], avg_label: str = "TB ngành")
         lines.append(f"| **{avg_label}** | **{avg_pe:.1f}** | - | {_fmt(avg_roe, '.1f', '%') if avg_roe else '-'} | - |")
     as_of = next((r["as_of"] for r in rows if r.get("as_of")), None)
     if as_of:
-        lines.append(f"Số liệu định giá cập nhật ngày {as_of} (nguồn: vnstock/KBS, báo cáo năm gần nhất).")
+        lines.append(f"Số liệu định giá cập nhật ngày {as_of} (nguồn: vnmarket, chỉ số TTM theo giá hiện tại).")
     lines.append("Lưu ý: P/E, P/B quy về giá đóng cửa tại thời điểm cập nhật số liệu"
                  + (f" ({as_of})" if as_of else "")
                  + ", không theo giá đang giao dịch trong phiên; EPS là EPS năm tài chính gần nhất "
@@ -408,7 +375,7 @@ def _assemble_fund_report(
         f"## Định giá (P/E, P/B, EV/EBITDA)\n{dinh_gia}\n\n"
         f"## Lợi thế cạnh tranh (Moat)\n{moat}\n\n"
         f"## Nhận định tổng thể\n{nhan_dinh}\n\n"
-        f"[Nguồn: vnstock/KBS]"
+        f"[Nguồn: vnmarket]"
     )
 
 

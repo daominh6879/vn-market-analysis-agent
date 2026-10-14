@@ -11,7 +11,7 @@ Steps:
   5. OHLCV + foreign  — Fireant (primary) -> VCI/KBS fallback, 1-year backfill
   6. Foreign latest   — VCI price board, real traded value for the latest session
   7. Market index     — SSI iBoard, 365 days (VNINDEX/HNX/UPCOM/VN30/HNX30)
-  8. Stock ratios     — vnstock KBS → stock_ratios (P/E, P/B, ROE, EPS for peer tickers)
+  8. Stock ratios     — vnmarket → stock_ratios (P/E, P/B, ROE, EPS for peer tickers)
   9. Audit            — scripts/audit_db.py to verify completeness
 
 Usage:
@@ -283,64 +283,29 @@ def backfill_market_index(dry: bool) -> bool:
     )
 
 
-# ── Step 8: Stock ratios (vnstock KBS → stock_ratios) ─────────────────────────
+# ── Step 8: Stock ratios (vnmarket → stock_ratios) ─────────────────────────
 
 def populate_ratios(dry: bool) -> bool:
-    print("\n[8/9] Stock ratios (vnstock KBS → stock_ratios)")
-    from pipeline.assets_vnstock import _UPSERT_SQL
+    print("\n[8/9] Stock ratios (vnmarket → stock_ratios)")
     from core.tickers import get_tickers
     ticker_list = get_tickers()
     print(f"  tickers ({len(ticker_list)}): {ticker_list}")
     if dry:
-        print(f"  [DRY] would fetch {len(ticker_list)} tickers via vnstock KBS")
+        print(f"  [DRY] would fetch {len(ticker_list)} tickers via vnmarket")
         return True
 
-    import math, time
-    from vnstock.api.financial import Finance as VnFinance
-    from core.db import get_conn
+    from ingest.fetch_ratios import fetch_and_upsert
 
     ok = failed = 0
     for ticker in ticker_list:
         print(f"  {ticker}", end="", flush=True)
         try:
-            df = VnFinance(symbol=ticker, source='KBS').ratio(period='year', lang='en')
-            df = df.set_index('item_id').drop(columns=['item'], errors='ignore')
-            latest = df.iloc[:, 0]
-
-            def _get(key):
-                v = latest.get(key)
-                if v is None:
-                    return None
-                try:
-                    f = float(v)
-                    return None if math.isnan(f) else f
-                except (TypeError, ValueError):
-                    return None
-
-            de_pct  = _get('debt_to_equity')
-            row = {
-                "ticker":             ticker,
-                "pe":                 _get('pe_ratio'),
-                "pb":                 _get('pb_ratio'),
-                "roe_pct":            _get('roe'),
-                "roa_pct":            _get('roa'),
-                "eps":                _get('trailing_eps'),
-                "gross_margin_pct":   _get('gross_margin'),
-                "net_margin_pct":     _get('net_margin'),
-                "revenue_growth_pct": _get('net_revenue'),
-                "earnings_growth_pct": _get('profit_after_tax_for_shareholders_of_the_parent_company'),
-                "de_ratio":           de_pct / 100 if de_pct is not None else None,
-                "ev_ebitda":          _get('ev_ebitda'),
-            }
-            with get_conn() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(_UPSERT_SQL, row)
+            row = fetch_and_upsert(ticker)
             print(f"  OK (pe={row['pe']}, roe={row['roe_pct']}%)")
             ok += 1
         except Exception as e:
             print(f"  ERROR: {e}")
             failed += 1
-        time.sleep(2.0)
 
     print(f"  -> {ok} OK, {failed} errors")
     return failed == 0

@@ -141,7 +141,7 @@ def _published_yearly(ticker: str, years: list[str]) -> str | None:
     if not lines:
         return None
     return (f"[ROE/EPS THEO NĂM — {ticker}]\n" + "\n".join(lines) +
-            "\nNguồn: chỉ số công bố theo từng năm tài chính (vnstock/KBS); EPS là EPS của năm đó, "
+            "\nNguồn: chỉ số công bố theo từng năm tài chính (vnmarket); EPS là EPS của năm đó, "
             "chưa điều chỉnh cho cổ phiếu thưởng/tách cổ phiếu về sau.")
 
 

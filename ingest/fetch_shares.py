@@ -4,7 +4,7 @@ ingest/fetch_shares.py — Fill securities.listed_shares (số cổ phiếu lưu
 market_cap = listed_shares × latest close, used by market_data (top vốn hóa) and screening.
 
 Sources, in order:
-  1. vnstock VCI Company.overview() → `issue_share`
+  1. vnmarket company.profile() → `listed_shares`, then company.overview() → `issue_share`
   2. Fallback for tickers still at 0: charter capital in financial_facts (`von_dieu_le`)
      ÷ 10,000 VND par value (all VN listed shares are par 10,000) — flagged as approximate.
 
@@ -12,7 +12,7 @@ Usage:
     python ingest/fetch_shares.py                    # all active tickers with listed_shares = 0
     python ingest/fetch_shares.py --all              # refresh every active ticker
     python ingest/fetch_shares.py --tickers VNM,HPG
-    python ingest/fetch_shares.py --charter-only     # skip vnstock, DB fallback only
+    python ingest/fetch_shares.py --charter-only     # skip vnmarket, DB fallback only
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from __future__ import annotations
 import argparse
 import math
 import sys
-import time
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
@@ -34,60 +33,24 @@ from core.db import get_conn
 PAR_VALUE_VND = 10_000
 
 
-CALL_TIMEOUT_S = 30   # vnstock has no request timeout of its own; a stuck call must not hang the job
-
-
-def _shares_from_overview(ticker: str, source: str, column: str) -> int | None:
-    from vnstock import Company
-    df = Company(symbol=ticker, source=source).overview()
-    if df is None or df.empty or column not in df.columns:
-        return None
-    col = df[column]
-    if hasattr(col, "columns"):   # VCI returns duplicated column labels for some tickers (e.g. BCG, SVI)
-        col = col.iloc[:, 0]
+def _positive_int(v) -> int | None:
     try:
-        v = float(col.iloc[0])
+        f = float(v)
     except (TypeError, ValueError):
         return None
-    return int(v) if not math.isnan(v) and v > 0 else None
-
-
-MIN_CALL_INTERVAL_S = 1.2   # vnstock community tier: 60 requests/minute
-RATE_LIMIT_WAIT_S = 65
-_last_call = 0.0
-
-
-def _with_timeout(fn, *args):
-    from concurrent.futures import ThreadPoolExecutor
-    ex = ThreadPoolExecutor(max_workers=1)
-    try:
-        return ex.submit(fn, *args).result(timeout=CALL_TIMEOUT_S)
-    finally:
-        ex.shutdown(wait=False)   # abandon a stuck worker instead of blocking on it
-
-
-def _paced_call(ticker: str, source: str, column: str) -> int | None:
-    """One vnstock request, spaced under the rate limit. vnstock raises SystemExit when the limit is hit:
-    wait out the window and retry once instead of letting it kill the process."""
-    global _last_call
-    for attempt in (1, 2):
-        time.sleep(max(0.0, MIN_CALL_INTERVAL_S - (time.monotonic() - _last_call)))
-        _last_call = time.monotonic()
-        try:
-            return _with_timeout(_shares_from_overview, ticker, source, column)
-        except SystemExit:
-            if attempt == 2:
-                return None
-            time.sleep(RATE_LIMIT_WAIT_S)
-        except Exception:
-            return None
-    return None
+    return int(f) if not math.isnan(f) and f > 0 else None
 
 
 def fetch_issue_share(ticker: str) -> int | None:
-    """Shares outstanding: KBS `outstanding_shares` (fast), then VCI `issue_share`. None when unavailable."""
-    for source, column in (("KBS", "outstanding_shares"), ("VCI", "issue_share")):
-        n = _paced_call(ticker, source, column)
+    """Shares outstanding via vnmarket: `company.profile` listed_shares (KBS), then
+    `company.overview` issue_share (VCI IQ). None when unavailable. Throttling/retry live in vnmarket."""
+    from core.vnmarket_client import get_client
+    vn = get_client()
+    for getter, key in ((vn.company.profile, "listed_shares"), (vn.company.overview, "issue_share")):
+        try:
+            n = _positive_int(getter(ticker).get(key))
+        except Exception:
+            continue
         if n:
             return n
     return None
@@ -135,13 +98,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Fill securities.listed_shares")
     parser.add_argument("--tickers", default="")
     parser.add_argument("--all", action="store_true", help="Refresh every active ticker, not just missing")
-    parser.add_argument("--charter-only", action="store_true", help="Skip vnstock; use charter capital only")
+    parser.add_argument("--charter-only", action="store_true", help="Skip vnmarket; use charter capital only")
     args = parser.parse_args()
 
     ok, failed = 0, []
     if not args.charter_only:
         tickers = _target_tickers(args)
-        print(f"listed_shares: {len(tickers)} tickers via vnstock VCI")
+        print(f"listed_shares: {len(tickers)} tickers via vnmarket")
         for t in tickers:
             try:
                 n = fetch_issue_share(t)
@@ -154,13 +117,12 @@ def main() -> None:
             except Exception as exc:
                 print(f"  {t}: FAILED — {exc}", file=sys.stderr)
                 failed.append(t)
-            time.sleep(3.2)  # stay under vnstock rate limit
 
     approx = fill_from_charter_capital()
-    print(f"\nvnstock: {ok} updated, {len(failed)} missing. "
+    print(f"\nvnmarket: {ok} updated, {len(failed)} missing. "
           f"Charter-capital fallback (approx, ÷{PAR_VALUE_VND:,}): {approx} updated.")
     if failed:
-        print(f"Missing from vnstock: {', '.join(failed)}", file=sys.stderr)
+        print(f"Missing from vnmarket: {', '.join(failed)}", file=sys.stderr)
 
 
 if __name__ == "__main__":

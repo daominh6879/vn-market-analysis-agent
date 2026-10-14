@@ -141,6 +141,43 @@ TOOL_REGISTRY: dict[str, dict] = {
         "cost_hint": "free",
         "side_effect": False,
     },
+    # ── vnmarket live tools ───────────────────────────────────────────────────
+    "get_live_quotes": {
+        "version": "1.0",
+        "timeout": 15,
+        "cost_hint": "low",
+        "side_effect": False,
+    },
+    "get_intraday_ticks": {
+        "version": "1.0",
+        "timeout": 15,
+        "cost_hint": "low",
+        "side_effect": False,
+    },
+    "get_vn_index_board": {
+        "version": "1.0",
+        "timeout": 60,
+        "cost_hint": "low",
+        "side_effect": False,
+    },
+    "get_live_sector_performance": {
+        "version": "1.0",
+        "timeout": 15,
+        "cost_hint": "low",
+        "side_effect": False,
+    },
+    "get_proprietary_trading": {
+        "version": "1.0",
+        "timeout": 15,
+        "cost_hint": "low",
+        "side_effect": False,
+    },
+    "get_company_profile": {
+        "version": "1.0",
+        "timeout": 15,
+        "cost_hint": "low",
+        "side_effect": False,
+    },
 }
 
 

@@ -41,6 +41,14 @@ from tools.price import (
     get_sector_performance,
     search_financial_news,
 )
+from tools.vnmarket_tools import (
+    get_company_profile,
+    get_intraday_ticks,
+    get_live_quotes,
+    get_live_sector_performance,
+    get_proprietary_trading,
+    get_vn_index_board,
+)
 from tools.rag_query import ask_report as _ask_report
 from tools.qa_agent import answer as _qa_answer
 
@@ -320,6 +328,56 @@ async def answer_financial_question(question: str) -> str:
         return _result_to_text(result)
     except asyncio.TimeoutError:
         return f"[upstream_error] Timeout sau {_TIMEOUT_RAG:.0f}s. Thử lại sau."
+
+
+_TIMEOUT_VNMARKET = 30.0
+
+
+def _as_message(fn):
+    """vnmarket tools put the readable text in `message`; `data` is the raw records (too noisy for MCP)."""
+    def inner(*args):
+        r = fn(*args)
+        return r.model_copy(update={"data": None}) if r.status == "ok" else r
+    return inner
+
+
+@mcp.tool()
+async def get_live_quotes_board(tickers: str) -> str:
+    """
+    Bảng giá trực tiếp (vnmarket): giá, tham chiếu/trần/sàn, khối lượng, khối ngoại mua/bán.
+    tickers: mã CK cách nhau bằng dấu phẩy, ví dụ "HPG,VCB,FPT".
+    """
+    return await _run(_as_message(get_live_quotes), [t for t in tickers.split(",") if t.strip()], timeout=_TIMEOUT_VNMARKET)
+
+
+@mcp.tool()
+async def get_ticks(ticker: str, limit: int = 20) -> str:
+    """Các lệnh khớp gần nhất trong phiên của một mã (thời gian, giá, khối lượng, bên chủ động)."""
+    return await _run(_as_message(get_intraday_ticks), ticker, limit, timeout=_TIMEOUT_VNMARKET)
+
+
+@mcp.tool()
+async def get_index_board() -> str:
+    """Bảng chỉ số HOSE: VNIndex, VN30, VNMid và các chỉ số ngành (điểm, % thay đổi)."""
+    return await _run(_as_message(get_vn_index_board), timeout=70.0)
+
+
+@mcp.tool()
+async def get_sector_live() -> str:
+    """% thay đổi hôm nay theo ngành, lấy trực tiếp từ nguồn (không qua DB)."""
+    return await _run(_as_message(get_live_sector_performance), timeout=_TIMEOUT_VNMARKET)
+
+
+@mcp.tool()
+async def get_prop_trading(ticker: str, days: int = 10) -> str:
+    """Giao dịch tự doanh theo ngày của một mã (mua/bán, tỷ đồng)."""
+    return await _run(_as_message(get_proprietary_trading), ticker, days, timeout=_TIMEOUT_VNMARKET)
+
+
+@mcp.tool()
+async def get_company_info(ticker: str) -> str:
+    """Hồ sơ doanh nghiệp: vốn hóa, biên độ 52 tuần, sở hữu nước ngoài, mô tả ngành nghề."""
+    return await _run(_as_message(get_company_profile), ticker, timeout=_TIMEOUT_VNMARKET)
 
 
 def _warmup() -> None:

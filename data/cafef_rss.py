@@ -2,7 +2,7 @@
 data/cafef_rss.py — Vietnamese financial news via RSS + HTML scraper.
 
 Fetch priority:
-  1. RSS feeds — CafeF (market news + corporate), Tinnhanhchungkhoan
+  1. RSS feeds via vnmarket (CafeF market + business, other outlets as fallback)
   2. HTML scraper — CafeF stock market page (fallback when RSS < min_articles)
 
 Returns list[dict] with keys: title, url, source, published_at
@@ -12,19 +12,12 @@ from __future__ import annotations
 
 import re
 import sys
-import xml.etree.ElementTree as ET
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
-
-_RSS_FEEDS = [
-    ("https://cafef.vn/thi-truong-chung-khoan.rss", "cafef"),
-    ("https://cafef.vn/doanh-nghiep.rss",            "cafef"),
-]
 
 _CAFEF_MARKET_URL = "https://cafef.vn/thi-truong-chung-khoan.chn"
 
@@ -65,98 +58,60 @@ def _parse_date(raw: str) -> Optional[datetime]:
     return None
 
 
-# ── RSS parser ────────────────────────────────────────────────────────────────
-
-def _parse_rss(xml_text: str, source: str, cutoff: datetime) -> list[dict]:
-    """Parse RSS 2.0 XML string, return articles newer than cutoff."""
-    try:
-        root = ET.fromstring(xml_text)
-    except ET.ParseError as e:
-        sys.stderr.write(f"[cafef_rss] RSS parse error ({source}): {e}\n")
-        return []
-
-    articles = []
-    for item in root.findall(".//item"):
-        title = (item.findtext("title") or "").strip()
-        # CafeF wraps titles in CDATA — ET strips it automatically
-        url = (item.findtext("link") or "").strip()
-        if not title or not url:
-            continue
-        if any(p in url.lower() for p in _NOISE_URL_PATTERNS):
-            continue
-
-        pub_raw = item.findtext("pubDate") or ""
-        pub_dt = _parse_date(pub_raw)
-        if pub_dt and pub_dt < cutoff:
-            continue
-
-        pub_iso = pub_dt.isoformat() if pub_dt else datetime.now(timezone.utc).isoformat()
-        articles.append({
-            "title":        title,
-            "url":          url,
-            "source":       source,
-            "published_at": pub_iso,
-        })
-
-    return articles
-
-
 # ── RSS fetch ─────────────────────────────────────────────────────────────────
+
+def _iso_vn(ts) -> str:
+    """vnmarket timestamps are naive Vietnam local time -> ISO string with +07:00."""
+    return ts.to_pydatetime().replace(tzinfo=timezone(timedelta(hours=7))).isoformat()
+
 
 def fetch_rss_news(target_date: Optional[str] = None, max_age_hours: int = 36) -> list[dict]:
     """
-    Fetch all RSS feeds in parallel and return deduped list sorted by recency.
+    Latest market + business RSS news via vnmarket (CafeF first, other outlets as fallback),
+    deduped and sorted by recency.
     target_date: YYYY-MM-DD cap — articles older than max_age_hours before midnight
                  of target_date are dropped.
     """
-    try:
-        import httpx
-    except ImportError:
-        sys.stderr.write("[cafef_rss] httpx not installed\n")
-        return []
-
     if target_date:
         try:
             base = datetime.strptime(target_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-            # Allow articles up to max_age_hours before the date
             cutoff = base - timedelta(hours=max_age_hours)
         except Exception:
             cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
     else:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
 
-    def _fetch_one(feed_url: str, source: str) -> list[dict]:
-        try:
-            resp = httpx.get(
-                feed_url,
-                timeout=12,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (compatible; VNMarketBrief/1.0)",
-                    "Accept": "application/rss+xml, application/xml, text/xml, */*",
-                },
-                follow_redirects=True,
-            )
-            if resp.status_code != 200:
-                sys.stderr.write(f"[cafef_rss] {feed_url} → HTTP {resp.status_code}\n")
-                return []
-            return _parse_rss(resp.text, source, cutoff)
-        except Exception as e:
-            sys.stderr.write(f"[cafef_rss] {feed_url} failed: {e}\n")
-            return []
+    try:
+        from core.vnmarket_client import get_client
+        vn = get_client()
+    except Exception as e:
+        sys.stderr.write(f"[cafef_rss] vnmarket unavailable: {e}\n")
+        return []
 
-    all_articles: list[dict] = []
+    articles: list[dict] = []
     seen_urls: set = set()
+    for feed in ("market", "business"):
+        try:
+            df = vn.news.latest(feed, limit=50)
+        except Exception as e:
+            sys.stderr.write(f"[cafef_rss] feed {feed} failed: {e}\n")
+            continue
+        source = df.attrs.get("source", "cafef")
+        for row in df.itertuples():
+            url = (row.link or "").strip()
+            title = (row.title or "").strip()
+            if not title or not url or url in seen_urls:
+                continue
+            if any(p in url.lower() for p in _NOISE_URL_PATTERNS):
+                continue
+            pub_iso = _iso_vn(row.published)
+            if datetime.fromisoformat(pub_iso) < cutoff:
+                continue
+            seen_urls.add(url)
+            articles.append({"title": title, "url": url, "source": source, "published_at": pub_iso})
 
-    with ThreadPoolExecutor(max_workers=3) as ex:
-        futures = {ex.submit(_fetch_one, url, src): src for url, src in _RSS_FEEDS}
-        for fut in as_completed(futures):
-            for art in (fut.result() or []):
-                if art["url"] not in seen_urls:
-                    seen_urls.add(art["url"])
-                    all_articles.append(art)
-
-    all_articles.sort(key=lambda x: x.get("published_at", ""), reverse=True)
-    return all_articles
+    articles.sort(key=lambda x: x.get("published_at", ""), reverse=True)
+    return articles
 
 
 # ── HTML scraper (Option A fallback) ─────────────────────────────────────────
@@ -248,74 +203,24 @@ _CAFEF_SEARCH_URL = "https://cafef.vn/tim-kiem.chn"
 
 def fetch_ticker_news(ticker: str, max_articles: int = 10) -> list[dict]:
     """
-    Scrape CafeF search for ticker-specific news articles.
-
-    Uses CafeF's search page: cafef.vn/tim-kiem.chn?keywords={ticker}
-    Extracts article links via title attribute pattern (same as market scraper).
+    Ticker-specific news via vnmarket company.news (KBS -> VCI -> VNDirect).
     Returns list[dict] with keys: title, url, source, published_at — compatible
-    with fetch_vn_market_news() output.
+    with fetch_vn_market_news() output. `url` is the source's article path/link as given.
     """
     try:
-        import httpx
-    except ImportError:
-        return []
-
-    try:
-        resp = httpx.get(
-            _CAFEF_SEARCH_URL,
-            params={"keywords": ticker.upper(), "channelid": "0"},
-            timeout=15,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Referer": "https://cafef.vn/",
-            },
-            follow_redirects=True,
-        )
-        if resp.status_code != 200:
-            sys.stderr.write(f"[cafef_ticker] search {ticker} → HTTP {resp.status_code}\n")
-            return []
-        html = resp.text
+        from core.vnmarket_client import get_client
+        df = get_client().company.news(ticker.upper(), limit=max_articles)
     except Exception as e:
-        sys.stderr.write(f"[cafef_ticker] search {ticker} failed: {e}\n")
+        sys.stderr.write(f"[cafef_ticker] news {ticker} failed: {e}\n")
         return []
 
-    import html as _html
-
-    articles: list[dict] = []
-    seen_urls: set = set()
-
-    pattern = re.compile(
-        r'href="(/[^"]*-188[^"]+\.chn)"[^>]*title="([^"]{20,250})"',
-        re.IGNORECASE,
-    )
-    for href, title_raw in pattern.findall(html):
-        if any(p in href.lower() for p in _NOISE_URL_PATTERNS):
-            continue
-        title = _html.unescape(re.sub(r"\s+", " ", title_raw).strip())
-        if len(title) < 20:
-            continue
-
-        url = f"https://cafef.vn{href}"
-        if url in seen_urls:
-            continue
-        seen_urls.add(url)
-
-        pub_iso = datetime.now(timezone.utc).isoformat()
-        date_match = re.search(r"-188(\d{12})\d*\.chn", href)
-        if date_match:
-            try:
-                stamp = "20" + date_match.group(1)
-                dt = datetime.strptime(stamp, "%Y%m%d%H%M%S")
-                dt = dt.replace(tzinfo=timezone(timedelta(hours=7)))
-                pub_iso = dt.isoformat()
-            except Exception:
-                pass
-
-        articles.append({"title": title, "url": url, "source": "cafef", "published_at": pub_iso})
-        if len(articles) >= max_articles:
-            break
-
-    return articles
+    source = df.attrs.get("source", "vnmarket")
+    return [
+        {"title": " ".join(str(r.title).split()), "url": r.url_path or "", "source": source,
+         "published_at": _iso_vn(r.published)}
+        for r in df.sort_values("published", ascending=False).head(max_articles).itertuples()
+        if r.title
+    ]
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────

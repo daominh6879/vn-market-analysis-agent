@@ -42,187 +42,137 @@ def _fireant_api_rows(n: int = 5, ticker: str = "HPG") -> list[dict]:
     return list(reversed(rows))  # API returns newest first
 
 
-def _mock_fireant_resp(rows: list[dict] | None = None, status: int = 200) -> MagicMock:
-    resp = MagicMock()
-    resp.status_code = status
-    resp.raise_for_status = MagicMock()
-    if status == 401:
-        resp.raise_for_status.side_effect = Exception("401 Unauthorized")
-    resp.json.return_value = rows if rows is not None else _fireant_api_rows()
-    return resp
+
+# ═══ 1. FireantProvider (now backed by vnmarket) ══════════════════════════════
+
+def _vn_client(n: int = 5, foreign: bool = True, empty: bool = False, foreign_exc: Exception | None = None):
+    """Fake vnmarket client: prices.history (VND) + market.foreign."""
+    base = pd.Timestamp("2026-08-03")
+    days = [base + pd.Timedelta(days=i) for i in range(n)]
+    px = pd.DataFrame({
+        "time": days,
+        "open": [20_000 + i * 100 for i in range(n)],
+        "high": [20_500 + i * 100 for i in range(n)],
+        "low": [19_800 + i * 100 for i in range(n)],
+        "close": [20_200 + i * 100 for i in range(n)],
+        "volume": [1_000_000 + i * 10_000 for i in range(n)],
+    })
+    fg = pd.DataFrame({
+        "date": days, "symbol": "HPG",
+        "buy_volume": [50_000.0 + i * 500 for i in range(n)],
+        "sell_volume": [20_000.0 + i * 200 for i in range(n)],
+        "buy_value": [1.0e9 + i * 1e7 for i in range(n)],
+        "sell_value": [0.5e9 + i * 1e7 for i in range(n)],
+    })
+    c = MagicMock()
+    c.prices.history.return_value = px.iloc[0:0] if empty else px
+    if foreign_exc:
+        c.market.foreign.side_effect = foreign_exc
+    else:
+        c.market.foreign.return_value = fg
+    return c
 
 
-def _mock_login_resp(token: str = "test-token") -> MagicMock:
-    resp = MagicMock()
-    resp.raise_for_status = MagicMock()
-    resp.json.return_value = {"accessToken": token}
-    return resp
-
-
-# ═══ 1. FireantProvider ═══════════════════════════════════════════════════════
-
-class TestFireantProviderLogin:
-    def setup_method(self):
-        from tools.providers import FireantProvider
-        FireantProvider._token = None  # reset class-level token before each test
-
-    def test_login_sets_class_token(self):
-        from tools.providers import FireantProvider
-        with patch("httpx.post", return_value=_mock_login_resp("tok123")):
-            p = FireantProvider()
-            token = p._login()
-        assert token == "tok123"
-        assert FireantProvider._token == "tok123"
-
-    def test_get_token_reuses_cached(self):
-        from tools.providers import FireantProvider
-        FireantProvider._token = "cached-token"
-        with patch("httpx.post") as mock_post:
-            p = FireantProvider()
-            token = p._get_token()
-        mock_post.assert_not_called()
-        assert token == "cached-token"
-
-    def test_get_token_calls_login_when_none(self):
-        from tools.providers import FireantProvider
-        FireantProvider._token = None
-        with patch("httpx.post", return_value=_mock_login_resp("fresh-tok")):
-            p = FireantProvider()
-            token = p._get_token()
-        assert token == "fresh-tok"
-
-    def test_login_missing_access_token_raises(self):
-        from tools.providers import FireantProvider
-        bad_resp = MagicMock()
-        bad_resp.raise_for_status = MagicMock()
-        bad_resp.json.return_value = {"error": "invalid credentials"}
-        with patch("httpx.post", return_value=bad_resp):
-            p = FireantProvider()
-            with pytest.raises(ValueError, match="no accessToken"):
-                p._login()
+def _patch_vn(client):
+    return patch("core.vnmarket_client.get_client", return_value=client)
 
 
 class TestFireantProviderFetchHistoryRange:
-    def setup_method(self):
-        from tools.providers import FireantProvider
-        FireantProvider._token = "test-token"
-        FireantProvider._cooldown_until = None
-
     def test_returns_dataframe_with_correct_columns(self):
         from tools.providers import FireantProvider
-        api_rows = _fireant_api_rows(10)
-        with patch("httpx.get", return_value=_mock_fireant_resp(api_rows)):
-            p = FireantProvider()
-            df = p.fetch_history_range("HPG", "2026-08-01", "2026-08-10")
+        with _patch_vn(_vn_client(10)):
+            df = FireantProvider().fetch_history_range("HPG", "2026-08-01", "2026-08-14")
         assert isinstance(df, pd.DataFrame)
         required = {"time", "open", "high", "low", "close", "volume", "foreign_buy_vol", "foreign_sell_vol"}
         assert required.issubset(set(df.columns))
 
+    def test_prices_are_nghin_dong(self):
+        from tools.providers import FireantProvider
+        with _patch_vn(_vn_client(3)):
+            df = FireantProvider().fetch_history_range("HPG", "2026-08-01", "2026-08-05")
+        assert df["close"].iloc[0] == pytest.approx(20.2)   # 20,200 VND -> 20.2 nghìn đồng
+
     def test_sorted_oldest_to_newest(self):
         from tools.providers import FireantProvider
-        with patch("httpx.get", return_value=_mock_fireant_resp(_fireant_api_rows(10))):
-            p = FireantProvider()
-            df = p.fetch_history_range("HPG", "2026-08-01", "2026-08-10")
+        with _patch_vn(_vn_client(10)):
+            df = FireantProvider().fetch_history_range("HPG", "2026-08-01", "2026-08-14")
         assert list(df["time"]) == sorted(df["time"].tolist())
 
-    def test_foreign_volumes_parsed(self):
+    def test_foreign_volumes_merged_by_date(self):
         from tools.providers import FireantProvider
-        api_rows = _fireant_api_rows(3)
-        with patch("httpx.get", return_value=_mock_fireant_resp(api_rows)):
-            p = FireantProvider()
-            df = p.fetch_history_range("HPG", "2026-08-01", "2026-08-03")
-        # all foreign volumes should be positive
-        assert (df["foreign_buy_vol"] >= 0).all()
-        assert (df["foreign_sell_vol"] >= 0).all()
+        with _patch_vn(_vn_client(3)):
+            df = FireantProvider().fetch_history_range("HPG", "2026-08-01", "2026-08-05")
+        assert df["foreign_buy_vol"].tolist() == [50_000, 50_500, 51_000]
+        assert df["foreign_sell_vol"].tolist() == [20_000, 20_200, 20_400]
 
-    def test_401_triggers_reauth(self):
+    def test_foreign_values_are_raw_vnd(self):
         from tools.providers import FireantProvider
-        FireantProvider._token = "expired-token"
-        api_rows = _fireant_api_rows(5)
-        # First call returns 401, second succeeds after re-login
-        resp_401 = MagicMock()
-        resp_401.status_code = 401
-        resp_ok = _mock_fireant_resp(api_rows)
-        with (
-            patch("httpx.get", side_effect=[resp_401, resp_ok]),
-            patch("httpx.post", return_value=_mock_login_resp("new-token")),
-        ):
-            p = FireantProvider()
-            df = p.fetch_history_range("HPG", "2026-08-01", "2026-08-05")
-        assert not df.empty
-        assert FireantProvider._token == "new-token"
+        with _patch_vn(_vn_client(2)):
+            df = FireantProvider().fetch_history_range("HPG", "2026-08-01", "2026-08-05")
+        assert df["foreign_buy_value"].tolist() == [1.0e9, 1.01e9]
+        assert df["foreign_sell_value"].tolist() == [0.5e9, 0.51e9]
 
-    def test_429_pauses_once_then_succeeds(self):
+    def test_foreign_source_failure_keeps_prices_without_foreign_columns(self):
         from tools.providers import FireantProvider
-        api_rows = _fireant_api_rows(5)
-        resp_429 = _mock_fireant_resp(status=429)
-        resp_ok = _mock_fireant_resp(api_rows)
-        with (
-            patch("httpx.get", side_effect=[resp_429, resp_ok]),
-            patch("tools.providers.time.sleep") as mock_sleep,
-        ):
-            p = FireantProvider()
-            df = p.fetch_history_range("HPG", "2026-08-01", "2026-08-05")
-        assert not df.empty
-        assert mock_sleep.call_count == 1  # one shared cooldown pause
-
-    def test_429_full_outage_pauses_once_across_tickers(self):
-        from tools.providers import FireantProvider
-        resp_429 = _mock_fireant_resp(status=429)
-        resp_429.raise_for_status.side_effect = Exception("429 Too Many Requests")
-        with (
-            patch("httpx.get", return_value=resp_429),
-            patch("tools.providers.time.sleep") as mock_sleep,
-        ):
-            p = FireantProvider()
-            # First ticker: pause once, retry still 429 → raise
-            with pytest.raises(Exception, match="429"):
-                p.fetch_history_range("HPG", "2026-08-01", "2026-08-05")
-            # Second ticker: still in cooldown → fail fast, no extra sleep
-            with pytest.raises(Exception, match="429"):
-                p.fetch_history_range("VCB", "2026-08-01", "2026-08-05")
-        assert mock_sleep.call_count == 1  # shared pause, not per ticker
+        with _patch_vn(_vn_client(3, foreign_exc=RuntimeError("all sources failed"))):
+            df = FireantProvider().fetch_history_range("HPG", "2026-08-01", "2026-08-05")
+        assert len(df) == 3
+        assert "foreign_buy_vol" not in df.columns
 
     def test_empty_response_raises(self):
         from tools.providers import FireantProvider
-        with patch("httpx.get", return_value=_mock_fireant_resp([])):
-            p = FireantProvider()
+        with _patch_vn(_vn_client(empty=True)):
             with pytest.raises(ValueError, match="no data"):
-                p.fetch_history_range("HPG", "2026-08-01", "2026-08-05")
+                FireantProvider().fetch_history_range("HPG", "2026-08-01", "2026-08-05")
 
-    def test_date_string_truncated_to_10_chars(self):
-        """Fireant returns ISO datetime strings; time part must be stripped."""
+    def test_date_string_is_10_chars(self):
         from tools.providers import FireantProvider
-        api_rows = _fireant_api_rows(3)
-        with patch("httpx.get", return_value=_mock_fireant_resp(api_rows)):
-            p = FireantProvider()
-            df = p.fetch_history_range("HPG", "2026-08-01", "2026-08-03")
+        with _patch_vn(_vn_client(3)):
+            df = FireantProvider().fetch_history_range("HPG", "2026-08-01", "2026-08-05")
         for t in df["time"]:
             assert len(str(t)) == 10, f"Expected YYYY-MM-DD, got: {t}"
 
 
 class TestFireantProviderInterface:
-    def setup_method(self):
+    def test_fetch_price_returns_last_close_in_vnd(self):
         from tools.providers import FireantProvider
-        FireantProvider._token = "test-token"
-
-    def test_fetch_price_returns_last_close(self):
-        from tools.providers import FireantProvider
-        api_rows = _fireant_api_rows(5)
-        expected_close = float(api_rows[0]["priceClose"])  # oldest row after sort
-        with patch("httpx.get", return_value=_mock_fireant_resp(api_rows)):
-            p = FireantProvider()
-            price = p.fetch_price("HPG")
-        # fetch_price returns last close (newest after sort)
-        assert isinstance(price, float)
-        assert price > 0
+        with _patch_vn(_vn_client(5)):
+            price = FireantProvider().fetch_price("HPG")
+        assert price == 20_600.0
 
     def test_fetch_history_returns_tail_n_rows(self):
         from tools.providers import FireantProvider
-        with patch("httpx.get", return_value=_mock_fireant_resp(_fireant_api_rows(20))):
-            p = FireantProvider()
-            df = p.fetch_history("HPG", 10)
-        assert len(df) <= 10
+        with _patch_vn(_vn_client(20)):
+            df = FireantProvider().fetch_history("HPG", 10)
+        assert len(df) == 10
+
+
+class TestVciDirectProviderForeignBatch:
+    def test_maps_board_to_foreign_rows(self):
+        from tools.providers import VciDirectProvider
+        board = pd.DataFrame([{
+            "symbol": "HPG", "foreign_buy_volume": 355_200, "foreign_sell_volume": 1_398_554,
+            "foreign_buy_value": 7_295_590_000, "foreign_sell_value": 28_715_036_250,
+        }])
+        c = MagicMock()
+        c.market.quotes.return_value = board
+        with _patch_vn(c):
+            rows = VciDirectProvider().fetch_foreign_batch(["hpg"])
+        c.market.quotes.assert_called_once_with(["HPG"])
+        assert rows == [{
+            "ticker": "HPG", "buy_value": 7_295_590_000.0, "sell_value": 28_715_036_250.0,
+            "net_value": 7_295_590_000.0 - 28_715_036_250.0,
+            "buy_volume": 355_200, "sell_volume": 1_398_554, "net_volume": 355_200 - 1_398_554,
+        }]
+
+    def test_batch_latest_skips_failed_tickers(self):
+        from tools.providers import VciDirectProvider
+        c = _vn_client(3)
+        c.prices.history.side_effect = [c.prices.history.return_value, RuntimeError("boom")]
+        with _patch_vn(c):
+            out = VciDirectProvider().fetch_batch_latest(["HPG", "XXX"])
+        assert list(out) == ["HPG"] or list(out) == ["XXX"]
+        assert len(out) == 1
 
 
 # ═══ 2. _detect_provider with Fireant ════════════════════════════════════════
@@ -711,8 +661,6 @@ class TestForeignLiveOrchestration:
 def test_fireant_live_fetch_hpg():
     """Fireant live: fetch 5 days of HPG OHLCV + foreign volumes."""
     from tools.providers import FireantProvider
-    FireantProvider._token = None
-
     today = date.today()
     start = str(today - timedelta(days=10))
     end = str(today)
@@ -726,3 +674,30 @@ def test_fireant_live_fetch_hpg():
     assert (df["close"] > 0).all()
     print(f"\n  HPG rows={len(df)}, latest={df['time'].iloc[-1]}, "
           f"close={df['close'].iloc[-1]:,.0f}")
+
+
+# ═══ 8. Foreign rows prefer real traded values over volume × close ════════════
+
+def test_foreign_rows_use_real_values_when_present():
+    from ingest import fetch_foreign_flows as FF
+    df = pd.DataFrame([{
+        "time": "2026-10-13", "open": 20.7, "high": 20.7, "low": 20.35, "close": 20.45, "volume": 11_561_600,
+        "foreign_buy_vol": 355_200, "foreign_sell_vol": 1_398_554,
+        "foreign_buy_value": 7_295_590_000.0, "foreign_sell_value": 28_715_036_250.0,
+    }])
+    with patch.object(FF, "_fireant") as fa:
+        fa.fetch_history_range.return_value = df
+        rows = FF._fireant_rows_for_range("HPG", date(2026, 10, 13), date(2026, 10, 13))
+    assert rows == [("HPG", "2026-10-13", 7.2956, 28.715, -21.4194, 355_200, 1_398_554, -1_043_354)]
+
+
+def test_foreign_rows_fall_back_to_volume_times_close():
+    from ingest import fetch_foreign_flows as FF
+    df = pd.DataFrame([{
+        "time": "2026-10-13", "open": 20.7, "high": 20.7, "low": 20.35, "close": 20.0, "volume": 1,
+        "foreign_buy_vol": 1_000_000, "foreign_sell_vol": 500_000,
+    }])
+    with patch.object(FF, "_fireant") as fa:
+        fa.fetch_history_range.return_value = df
+        rows = FF._fireant_rows_for_range("HPG", date(2026, 10, 13), date(2026, 10, 13))
+    assert rows[0][2:5] == (20.0, 10.0, 10.0)   # tỷ đồng = vol × close(nghìn đồng) / 1e6

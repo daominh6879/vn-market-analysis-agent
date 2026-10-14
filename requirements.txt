@@ -87,3 +87,6 @@ pytest-asyncio>=0.23.0
 # arize-phoenix>=4.0.0
 # opentelemetry-sdk>=1.20.0
 # opentelemetry-exporter-otlp-proto-grpc>=1.20.0
+
+# ── Market data (local package, editable) ─────────────────────────────────────
+-e ../vnmarket

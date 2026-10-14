@@ -33,7 +33,7 @@ from pipeline.assets_vnstock import vnstock_financials_job, vnstock_ratios_job
 
 _TZ = "Asia/Ho_Chi_Minh"
 _VNSTOCK_PAUSE = 3.2   # stay under the vnstock rate limit
-_SHARES_PAUSE = 0.0    # pacing lives in fetch_shares._paced_call (60 req/min limit)
+_SHARES_PAUSE = 0.0    # pacing lives in vnmarket (per-source throttle)
 _MAX_CONSECUTIVE_FAILURES = 15   # dead provider → stop instead of crawling through every ticker
 
 
