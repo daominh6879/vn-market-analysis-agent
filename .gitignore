@@ -34,6 +34,7 @@ outputs/
 *.parquet
 *.csv
 *.jsonl
+!intent_model/data/*.jsonl
 
 # Qdrant / vector stores
 .qdrant/
