@@ -1,5 +1,5 @@
 """
-pipeline/assets_vnstock.py — Dagster assets for vnstock data ingestion.
+pipeline/assets_vnstock.py — Dagster assets for market data ingestion via vnmarket (asset names keep the legacy vnstock prefix).
 
 Assets:
   vnstock_financials — fetch annual financial statements → Postgres financial_facts
@@ -45,11 +45,10 @@ class VnstockPricesConfig(Config):
 
 @asset(
     group_name="vnstock",
-    description="Fetch annual financial statements from vnstock → Postgres financial_facts (source='vnstock'). Upserts — safe to re-run.",
+    description="Fetch annual financial statements from vnmarket → Postgres financial_facts (source='vnstock'). Upserts — safe to re-run.",
     retry_policy=RetryPolicy(max_retries=3, delay=60),
 )
 def vnstock_financials(context: AssetExecutionContext, config: VnstockFinancialsConfig) -> dict:
-    import time
     from ingest.fetch_financials import fetch_finance_facts, insert_vnstock_facts
     from core.tickers import get_tickers
 
@@ -77,7 +76,6 @@ def vnstock_financials(context: AssetExecutionContext, config: VnstockFinancials
         except (Exception, SystemExit) as exc:
             context.log.error(f"  {ticker} FAILED: {exc}")
             failed.append(ticker)
-        time.sleep(1.5)
 
     if failed:
         context.log.warning(f"vnstock_financials: {len(failed)} tickers failed: {failed}")
@@ -89,11 +87,10 @@ def vnstock_financials(context: AssetExecutionContext, config: VnstockFinancials
 
 @asset(
     group_name="vnstock",
-    description="Fetch daily stock prices from vnstock → Postgres stock_prices. Upserts — safe to re-run.",
+    description="Fetch daily stock prices from vnmarket → Postgres stock_prices. Upserts — safe to re-run.",
     retry_policy=RetryPolicy(max_retries=3, delay=30),
 )
 def vnstock_prices(context: AssetExecutionContext, config: VnstockPricesConfig) -> dict:
-    import time
     from ingest.fetch_prices import fetch_and_insert
     from core.tickers import get_tickers
 
@@ -113,11 +110,12 @@ def vnstock_prices(context: AssetExecutionContext, config: VnstockPricesConfig) 
         except (Exception, SystemExit) as exc:
             context.log.error(f"  {ticker} FAILED: {exc}")
             failed.append(ticker)
-        time.sleep(1.1)
 
     if failed:
         context.log.warning(f"vnstock_prices: {len(failed)} tickers failed: {failed}")
     context.log.info(f"vnstock_prices done: {total_rows} total rows")
+    if ticker_list and total_rows == 0:
+        raise RuntimeError(f"vnstock_prices: 0 rows for {len(ticker_list)} tickers; failed={failed[:10]}")
     return {"total_rows": total_rows, "tickers": ticker_list, "failed": failed, "date_range": f"{from_date}→{to_date}"}
 
 
@@ -155,11 +153,10 @@ ON CONFLICT (ticker) DO UPDATE SET
 
 @asset(
     group_name="vnstock",
-    description="Fetch KBS valuation ratios (P/E, P/B, ROE, EPS…) → Postgres stock_ratios. Daily upsert.",
+    description="Fetch valuation ratios (vnmarket) (P/E, P/B, ROE, EPS…) → Postgres stock_ratios. Daily upsert.",
     retry_policy=RetryPolicy(max_retries=2, delay=120),
 )
 def vnstock_ratios(context: AssetExecutionContext) -> dict:
-    import time
     from core.tickers import get_tickers
 
     ticker_list = get_tickers()   # every active security, not just the VN30/VN100 labels
@@ -178,7 +175,6 @@ def vnstock_ratios(context: AssetExecutionContext) -> dict:
             context.log.error(f"  {ticker} FAILED: {exc}")
             failed.append(ticker)
 
-        time.sleep(2.0)  # KBS rate limit guard
 
     if failed:
         context.log.warning(f"vnstock_ratios: {len(failed)} failed: {failed}")

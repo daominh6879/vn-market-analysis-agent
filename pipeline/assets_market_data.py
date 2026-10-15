@@ -14,7 +14,6 @@ the next day instead of looping.
 """
 
 import sys
-import time
 from datetime import date
 from pathlib import Path
 
@@ -29,11 +28,11 @@ from dagster import (
     RunRequest, ScheduleDefinition, SkipReason, asset, define_asset_job, sensor,
 )
 
+from pipeline.assets_market_brief import corporate_events_job
 from pipeline.assets_vnstock import vnstock_financials_job, vnstock_ratios_job
 
 _TZ = "Asia/Ho_Chi_Minh"
-_VNSTOCK_PAUSE = 3.2   # stay under the vnstock rate limit
-_SHARES_PAUSE = 0.0    # pacing lives in vnmarket (per-source throttle)
+# Request pacing lives in vnmarket (per-source throttle), so the loops below do not sleep.
 _MAX_CONSECUTIVE_FAILURES = 15   # dead provider → stop instead of crawling through every ticker
 
 
@@ -52,7 +51,7 @@ def _fail_if_nothing(name: str, done: int, total: int, failed: list[str]) -> Non
 
 @asset(
     group_name="market_data",
-    description="Re-seed securities (sector overrides) and fill listed_shares (vnstock VCI, charter-capital fallback).",
+    description="Re-seed securities (sector overrides) and fill listed_shares (vnmarket, charter-capital fallback).",
     retry_policy=RetryPolicy(max_retries=2, delay=300),
 )
 def securities_shares(context: AssetExecutionContext) -> dict:
@@ -60,7 +59,7 @@ def securities_shares(context: AssetExecutionContext) -> dict:
     from ingest.fetch_shares import fetch_issue_share, fill_from_charter_capital, update_shares
 
     context.log.info(f"securities re-seeded: {seed_from_json()} rows")
-    # Cheap DB-only fill first so market cap works even if the provider is down; vnstock values overwrite it.
+    # Cheap DB-only fill first so market cap works even if the provider is down; vnmarket values overwrite it.
     approx = fill_from_charter_capital()
     context.log.info(f"charter-capital fallback filled {approx} tickers")
     tickers = _tickers("all")
@@ -79,10 +78,9 @@ def securities_shares(context: AssetExecutionContext) -> dict:
                 break
         if i % 25 == 0:
             context.log.info(f"  progress {i}/{len(tickers)} ok={ok} failed={len(failed)}")
-        time.sleep(_SHARES_PAUSE)
-    context.log.info(f"listed_shares: vnstock {ok}/{len(tickers)}, charter-capital fallback {approx}")
+    context.log.info(f"listed_shares: vnmarket {ok}/{len(tickers)}, charter-capital fallback {approx}")
     _fail_if_nothing("securities_shares", ok + approx, len(tickers), failed)
-    return {"vnstock": ok, "charter_fallback": approx, "missing": len(failed)}
+    return {"vnmarket": ok, "charter_fallback": approx, "missing": len(failed)}
 
 
 # ── dividends ────────────────────────────────────────────────────────────────
@@ -93,7 +91,7 @@ class DividendsConfig(Config):
 
 @asset(
     group_name="market_data",
-    description="Dividend history (cash + stock) from vnstock events → Postgres dividends. Upserts.",
+    description="Dividend history (cash + stock) from vnmarket company.events → Postgres dividends. Upserts.",
     retry_policy=RetryPolicy(max_retries=2, delay=300),
 )
 def stock_dividends(context: AssetExecutionContext, config: DividendsConfig) -> dict:
@@ -113,7 +111,6 @@ def stock_dividends(context: AssetExecutionContext, config: DividendsConfig) -> 
         except (Exception, SystemExit) as exc:
             context.log.warning(f"  {t}: {exc}")
             failed.append(t)
-        time.sleep(_VNSTOCK_PAUSE)
     context.log.info(f"dividends: {rows_total} rows from {done}/{len(tickers)} tickers")
     _fail_if_nothing("stock_dividends", done, len(tickers), failed)
     if tickers and rows_total == 0:   # tickers answered but nothing parsed → parser/schema drift, not success
@@ -144,7 +141,6 @@ def ratio_history(context: AssetExecutionContext) -> dict:
         except (Exception, SystemExit) as exc:
             context.log.warning(f"  {t}: {exc}")
             failed.append(t)
-        time.sleep(_VNSTOCK_PAUSE)
     context.log.info(f"ratio_history: {facts} facts from {done}/{len(tickers)} tickers")
     _fail_if_nothing("ratio_history", done, len(tickers), failed)
     return {"facts": facts, "tickers": done, "failed": failed}
@@ -179,7 +175,6 @@ def financials_quarterly(context: AssetExecutionContext, config: QuarterlyConfig
         except (Exception, SystemExit) as exc:
             context.log.warning(f"  {t}: {exc}")
             failed.append(t)
-        time.sleep(4.0)   # ~3 requests per ticker (IS, BS, CF)
     context.log.info(f"financials_quarterly: {facts} facts from {done}/{len(tickers)} tickers")
     _fail_if_nothing("financials_quarterly", done, len(tickers), failed)
     return {"facts": facts, "tickers": done, "failed": failed}
@@ -257,12 +252,13 @@ _BOOTSTRAP_CHECKS: list[tuple[str, str, str]] = [
      "annual_financials"),
     ("vnstock_ratios_job", _tickers_below_coverage("stock_ratios WHERE true"), "stock_ratios"),
     ("daily_snapshots_job", "SELECT NOT EXISTS (SELECT 1 FROM daily_snapshots)", "snapshots"),
+    ("corporate_events_job", "SELECT NOT EXISTS (SELECT 1 FROM corporate_events)", "corporate_events"),
 ]
 
 
 @sensor(
     jobs=[securities_shares_job, stock_dividends_job, ratio_history_job, financials_quarterly_job, daily_snapshots_job,
-          vnstock_financials_job, vnstock_ratios_job],
+          vnstock_financials_job, vnstock_ratios_job, corporate_events_job],
     name="data_bootstrap_sensor",
     minimum_interval_seconds=600,
     default_status=DefaultSensorStatus.RUNNING,

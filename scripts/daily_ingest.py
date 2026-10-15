@@ -6,8 +6,8 @@ Runs every table's incremental fetch in order:
   2. ohlcv_daily + foreign_flows (Fireant, single pass per ticker)
   3. foreign_flows latest session (VCI price board — real traded value)
   4. market_index_daily (VCI index provider)
-  5. stock_prices (vnstock, incremental)
-  6. stock_ratios (vnstock KBS)
+  5. stock_prices (vnmarket, incremental)
+  6. stock_ratios (vnmarket)
   7. market_quotes (global quotes — commodity/fx/crypto)
   8. daily_snapshots (SJC gold, SBV central rate, VCB USD → "so với hôm qua")
 
@@ -91,13 +91,13 @@ def main() -> None:
         # Stock prices (1-year backfill)
         ok &= run(
             [PYTHON, "ingest/fetch_prices.py", "--all-securities", "--days-back", "365"],
-            "Stock prices (vnstock, 1-year backfill)",
+            "Stock prices (vnmarket, 1-year backfill)",
         )
 
-        # Stock ratios (vnstock KBS)
+        # Stock ratios (vnmarket)
         ok &= run(
             [PYTHON, "ingest/fetch_ratios.py"],
-            "Stock ratios (vnstock KBS)",
+            "Stock ratios (vnmarket)",
         )
 
         # Corporate events (populate once)
@@ -113,7 +113,7 @@ def main() -> None:
         )
 
         # Market cap inputs, dividend history, per-year ratios, quarterly statements.
-        # Slow (vnstock rate limit) — one-off backfill; failures are non-fatal.
+        # Slow (provider rate limit) — one-off backfill; failures are non-fatal.
         run([PYTHON, "ingest/fetch_shares.py"], "Shares outstanding (securities.listed_shares)")
         run([PYTHON, "ingest/fetch_dividends.py"], "Dividend history (dividends)")
         run([PYTHON, "ingest/fetch_ratios.py", "--history"], "Yearly ratio history (financial_facts ratio_*)")
@@ -145,16 +145,16 @@ def main() -> None:
             "Market index daily",
         )
 
-        # Stock prices (vnstock, incremental)
+        # Stock prices (vnmarket, incremental)
         ok &= run(
             [PYTHON, "ingest/fetch_prices.py", "--all-securities"],
-            "Stock prices (vnstock)",
+            "Stock prices (vnmarket)",
         )
 
-        # Stock ratios (vnstock KBS)
+        # Stock ratios (vnmarket)
         ok &= run(
             [PYTHON, "ingest/fetch_ratios.py"],
-            "Stock ratios (vnstock KBS)",
+            "Stock ratios (vnmarket)",
         )
 
         # Global quotes (commodity/fx/crypto/gold)

@@ -71,7 +71,7 @@ class CorporateEventsConfig(Config):
 @asset(
     group_name="market_brief",
     description=(
-        "Scrape CafeF corporate events calendar → upsert corporate_events. "
+        "Corporate events calendar (vnmarket VCI IQ, CafeF fallback) → upsert corporate_events. "
         "Run weekdays 07:00 to capture same-day events before brief generation."
     ),
     retry_policy=RetryPolicy(max_retries=2, delay=60),
@@ -91,6 +91,8 @@ def corporate_events_ingest(
 
     events = scrape_events(start, end)
     context.log.info(f"corporate_events_ingest: scraped {len(events)} events")
+    if not events:
+        raise RuntimeError(f"corporate_events_ingest: 0 events for {start} → {end} (vnmarket and CafeF both empty)")
 
     n = upsert_events(events)
     context.log.info(f"corporate_events_ingest done — {n} rows upserted")

@@ -1,7 +1,7 @@
 """
 data/corporate_events_scraper.py — Scrape corporate event calendar from CafeF.
 
-Source: https://cafef.vn/lich-su-kien.chn (HTML table, public, no login).
+Source: vnmarket market.events (VCI IQ); CafeF HTML calendar (https://cafef.vn/lich-su-kien.chn) is the fallback.
 Returns list of dicts ready for upsert into corporate_events table.
 
 Usage:
@@ -80,82 +80,60 @@ def _extract_ratio(note: str) -> Optional[float]:
     return None
 
 
-_TCBS_EVENTS_URL = "https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/events"
+# VCI event_code -> corporate_events.event_type. Insider/major-holder trades (DDIND/DDINS/DDRP) and
+# listing/other notices are not corporate actions, so they are not stored.
+_VCI_EVENT_TYPE = {"DIV": "dividend", "ISS": "rights_issue", "AGME": "agm", "AGMR": "agm", "EGME": "agm"}
 
 
-def scrape_tcbs_events(
+def _ts_date(v) -> Optional[date]:
+    """pandas Timestamp / NaT / None -> date | None."""
+    return None if v is None or v != v else v.date()
+
+
+def fetch_vnmarket_events(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    tickers: Optional[list[str]] = None,
 ) -> list[dict]:
     """
-    Fetch corporate events from TCBS public API (no auth required).
+    Corporate-event calendar for every listed company via vnmarket market.events (VCI IQ).
 
-    Queries per-ticker for VN30 universe (or provided list).
-    Returns list of dicts matching corporate_events schema.
-
-    TCBS endpoint: GET /stock-insight/v1/stock/events?ticker=HPG&page=0&size=10
-    Response JSON: {"data": [{"ticker", "eventName", "exrightDate",
-                               "recordDate", "issueDate", "ratio"}, ...]}
+    DIV/ISS use the ex-rights date (announced events without one yet are skipped); AGM events use the
+    meeting date (display date) and record date. Returns dicts matching the corporate_events schema.
     """
-    try:
-        import httpx
-    except ImportError as e:
-        sys.stderr.write(f"[tcbs_events] Missing dependency: {e}\n")
-        return []
+    from core.vnmarket_client import get_client
+    from vnmarket import NoData
 
     if start_date is None:
         start_date = date.today() - timedelta(days=1)
     if end_date is None:
         end_date = date.today() + timedelta(days=14)
-    if tickers is None:
-        from data.hose_universe import get_vn30_tickers
-        tickers = get_vn30_tickers()
+    try:
+        df = get_client().market.events(start_date, end_date, codes=",".join(_VCI_EVENT_TYPE))
+    except NoData:
+        return []
 
     events: list[dict] = []
-    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
-
-    for ticker in tickers:
-        try:
-            resp = httpx.get(
-                _TCBS_EVENTS_URL,
-                params={"ticker": ticker, "page": "0", "size": "10"},
-                headers=headers,
-                timeout=10,
-            )
-            resp.raise_for_status()
-            payload = resp.json()
-        except Exception as e:
-            sys.stderr.write(f"[tcbs_events] {ticker}: {e}\n")
+    for r in df.to_dict("records"):
+        etype = _VCI_EVENT_TYPE.get(r.get("event_code"))
+        if etype is None:
             continue
-
-        items = payload if isinstance(payload, list) else payload.get("data", [])
-        for item in items:
-            # TCBS date fields: "exrightDate" / "recordDate" / "issueDate" (YYYY-MM-DD or DD/MM/YYYY)
-            raw_exdate = item.get("exrightDate") or item.get("exDate") or ""
-            raw_recdate = item.get("recordDate") or ""
-            note = item.get("eventName") or item.get("name") or ""
-
-            ex_date = _parse_date(raw_exdate) if raw_exdate else None
-            record_date = _parse_date(raw_recdate) if raw_recdate else None
-            effective_date = ex_date or record_date
-            if effective_date is None or not (start_date <= effective_date <= end_date):
-                continue
-
-            etype = _classify_event(note)
-            ratio_raw = item.get("ratio") or item.get("value") or ""
-            ratio = _extract_ratio(str(ratio_raw)) if ratio_raw else None
-
-            events.append({
-                "ticker": ticker.upper(),
-                "event_type": etype,
-                "ex_date": ex_date or effective_date,
-                "record_date": record_date,
-                "ratio": ratio,
-                "note": note,
-                "source_url": _TCBS_EVENTS_URL,
-            })
-
+        ex_date = _ts_date(r.get("display_date1" if etype == "agm" else "exright_date"))
+        if ex_date is None or not (start_date <= ex_date <= end_date):
+            continue
+        title = r.get("event_title_vi") or ""
+        ratio = _extract_ratio(title)
+        exercise = r.get("exercise_ratio")
+        if ratio is None and etype == "rights_issue" and exercise is not None and exercise == exercise:
+            ratio = round(float(exercise) * 100, 4)
+        events.append({
+            "ticker": str(r["ticker"]).upper(),
+            "event_type": etype,
+            "ex_date": ex_date,
+            "record_date": _ts_date(r.get("record_date")),
+            "ratio": ratio,
+            "note": title,
+            "source_url": "vnmarket:vci_iq/events",
+        })
     return events
 
 
@@ -163,15 +141,15 @@ def scrape_events(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
 ) -> list[dict]:
-    """
-    Scrape corporate events: CafeF first (aggregate view), TCBS as fallback.
-
-    Returns combined deduplicated list.
-    """
-    events = scrape_cafef_events(start_date, end_date)
+    """Corporate events: vnmarket (VCI IQ) first, CafeF HTML scrape as fallback when it is empty or down."""
+    try:
+        events = fetch_vnmarket_events(start_date, end_date)
+    except Exception as e:
+        sys.stderr.write(f"[corporate_events_scraper] vnmarket failed: {e}\n")
+        events = []
     if not events:
-        sys.stderr.write("[corporate_events_scraper] CafeF returned 0 events — trying TCBS\n")
-        events = scrape_tcbs_events(start_date, end_date)
+        sys.stderr.write("[corporate_events_scraper] vnmarket returned 0 events — trying CafeF\n")
+        events = scrape_cafef_events(start_date, end_date)
     return events
 
 

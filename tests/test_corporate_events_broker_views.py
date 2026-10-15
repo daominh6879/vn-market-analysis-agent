@@ -282,3 +282,54 @@ class TestRegistry:
 
     def test_get_broker_views_cost_hint(self):
         assert TOOL_REGISTRY["get_broker_views"]["cost_hint"] == "free"
+
+
+# ── vnmarket calendar → corporate_events rows ────────────────────────────────
+
+class TestFetchVnmarketEvents:
+    def _frame(self):
+        import pandas as pd
+        ts = pd.Timestamp
+        return pd.DataFrame([
+            dict(ticker="anv", event_code="DIV", event_title_vi="Trả cổ tức bằng tiền mặt - Đợt 1 2026 - 500 VND",
+                 exright_date=ts("2026-10-29"), record_date=ts("2026-10-30"), display_date1=ts("2026-10-29"),
+                 exercise_ratio=0.05),
+            dict(ticker="PMJ", event_code="ISS", event_title_vi="Phát hành cổ phiếu - Cổ phiếu thưởng",
+                 exright_date=ts("2026-10-30"), record_date=ts("2026-11-02"), display_date1=ts("2026-10-30"),
+                 exercise_ratio=0.70),
+            dict(ticker="MCP", event_code="DIV", event_title_vi="Trả cổ tức bằng tiền mặt - Cả năm 2025 - 400 VND",
+                 exright_date=pd.NaT, record_date=pd.NaT, display_date1=ts("2026-10-20"), exercise_ratio=0.04),
+            dict(ticker="UDC", event_code="AGME", event_title_vi="UDC - Tổ chức ĐHĐCĐ thường niên 2026",
+                 exright_date=ts("2026-10-02"), record_date=ts("2026-10-05"), display_date1=ts("2026-10-25"),
+                 exercise_ratio=float("nan")),
+            dict(ticker="XYZ", event_code="DDIND", event_title_vi="Đăng kí Bán 100 XYZ",
+                 exright_date=pd.NaT, record_date=pd.NaT, display_date1=ts("2026-10-20"), exercise_ratio=float("nan")),
+        ])
+
+    def test_maps_codes_dates_and_ratios(self):
+        from data.corporate_events_scraper import fetch_vnmarket_events
+        client = MagicMock()
+        client.market.events.return_value = self._frame()
+        with patch("core.vnmarket_client.get_client", return_value=client):
+            ev = fetch_vnmarket_events(date(2026, 10, 14), date(2026, 11, 5))
+        by = {(e["ticker"], e["event_type"]): e for e in ev}
+        assert set(by) == {("ANV", "dividend"), ("PMJ", "rights_issue"), ("UDC", "agm")}   # MCP: no ex-date yet
+        assert by[("ANV", "dividend")]["ex_date"] == date(2026, 10, 29)
+        assert by[("ANV", "dividend")]["record_date"] == date(2026, 10, 30)
+        assert by[("PMJ", "rights_issue")]["ratio"] == 70.0          # from exercise_ratio
+        assert by[("UDC", "agm")]["ex_date"] == date(2026, 10, 25)   # meeting date, not the record-list date
+
+    def test_out_of_window_events_dropped(self):
+        from data.corporate_events_scraper import fetch_vnmarket_events
+        client = MagicMock()
+        client.market.events.return_value = self._frame()
+        with patch("core.vnmarket_client.get_client", return_value=client):
+            ev = fetch_vnmarket_events(date(2026, 10, 28), date(2026, 10, 31))
+        assert {e["ticker"] for e in ev} == {"ANV", "PMJ"}
+
+    def test_scrape_events_falls_back_to_cafef_when_vnmarket_empty(self):
+        import data.corporate_events_scraper as m
+        with patch.object(m, "fetch_vnmarket_events", return_value=[]), \
+             patch.object(m, "scrape_cafef_events", return_value=[{"ticker": "AAA"}]) as cf:
+            assert m.scrape_events() == [{"ticker": "AAA"}]
+            cf.assert_called_once()

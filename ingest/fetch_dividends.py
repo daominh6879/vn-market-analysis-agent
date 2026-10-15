@@ -1,7 +1,7 @@
 """
 ingest/fetch_dividends.py — Dividend history (cash + stock) → dividends table.
 
-Source: vnstock VCI Company.events() filtered to dividend events. Amounts are not a stable
+Source: vnmarket company.events (VCI IQ) filtered to dividend (DIV) and share-issue (ISS) events. Amounts are not a stable
 column across providers, so the cash/stock figure is parsed from the event title text
 (`parse_dividend_text`). Rows whose text yields no figure are skipped and reported.
 
@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-import time
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
@@ -95,7 +94,7 @@ def _to_date(v):
 
 
 def rows_from_events(ticker: str, df) -> tuple[list[dict], int]:
-    """vnstock events frame → dividend rows; second value = dividend events with no parsable figure."""
+    """vnmarket events frame → dividend rows; second value = dividend events with no parsable figure."""
     out: list[dict] = []
     skipped = 0
     for _, r in df.iterrows():
@@ -119,7 +118,7 @@ def rows_from_events(ticker: str, df) -> tuple[list[dict], int]:
             continue
         common = dict(ticker=ticker, ex_date=ex, record_date=_to_date(_first(row, "record_date")),
                       payment_date=_to_date(_first(row, "payout_date", "issue_date", "payment_date")),
-                      note=title[:500], source="vnstock_vci")
+                      note=title[:500], source="vnmarket_vci")
         if parsed["cash_per_share"] is not None:
             out.append({**common, "kind": "cash", "cash_per_share": parsed["cash_per_share"], "stock_ratio_pct": None})
         if parsed["stock_ratio_pct"] is not None:
@@ -150,12 +149,13 @@ def upsert_dividends(rows: list[dict]) -> int:
 
 
 def fetch_events_df(ticker: str):
-    from vnstock import Company
+    """DIV + ISS events for `ticker` (retry/throttle live in vnmarket). None when the ticker has no events."""
+    from vnmarket import NoData
+    from core.vnmarket_client import get_client
     try:
-        return Company(symbol=ticker, source="VCI").events()
-    except Exception:   # transient read timeout from iq.vietcap.com.vn: one retry before the caller counts a failure
-        time.sleep(5)
-        return Company(symbol=ticker, source="VCI").events()
+        return get_client().company.events(ticker, codes="DIV,ISS")
+    except NoData:
+        return None
 
 
 def main() -> None:
@@ -192,7 +192,6 @@ def main() -> None:
         except Exception as exc:
             print(f"  {t}: FAILED — {exc}", file=sys.stderr)
             failed.append(t)
-        time.sleep(3.2)
     print(f"\ndividends: {total} rows{' (dry-run)' if args.dry_run else ''}; failed: {len(failed)}")
     if failed:
         sys.exit(1)

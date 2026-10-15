@@ -38,10 +38,22 @@ Thay đổi ngữ nghĩa cần biết: tỷ số trước đây là năm tài ch
 
 `stock_ratios` (HPG/VCB/FPT): `revenue_growth_pct`, `earnings_growth_pct` khớp bản lưu đến 2 chữ số; `pe`, `pb`, `roe`, `roa`, biên, `eps`, `ev_ebitda` khác do nay là TTM theo giá hiện tại (ví dụ HPG P/E 10,39 → 7,44, ROE 12,69% → 17,38%). `de_ratio` dùng `debt_per_equity` (nợ vay / vốn chủ, khớp ngữ nghĩa cũ: HPG 0,70) chứ không phải `debt_to_equity` (tổng nợ / vốn chủ, 0,97).
 
-## Chưa thay (vẫn dùng vnstock vendored)
-- `ingest/fetch_dividends.py` và scraper sự kiện doanh nghiệp (`data/corporate_events_scraper.py`): đã grep mã nguồn vnmarket, không có endpoint cổ tức / sự kiện (chỉ có `dividend_yield` của Fireant).
+## Cổ tức và sự kiện doanh nghiệp (đã thay, bỏ hẳn vnstock)
+vnmarket thêm 2 API trên nguồn VCI IQ `/v1/events`: `vn.company.events(symbol, start, end, codes, limit)` và `vn.market.events(start, end, codes, limit)` (lịch cả thị trường, có cột `ticker`). API nhận page size ≥ 2000 nên không cần phân trang.
+
+| File | Thay đổi |
+|---|---|
+| `ingest/fetch_dividends.py` | `fetch_events_df` gọi `company.events(t, codes="DIV,ISS")`; `NoData` → `None`. Phải lọc `codes`: mặc định API trả cả giao dịch nội bộ (DDRP/DDIND/DDINS) và `limit` cũ 50 làm HPG chỉ còn 2 dòng DIV. `source` đổi thành `vnmarket_vci`. |
+| `data/corporate_events_scraper.py` | `fetch_vnmarket_events` gọi `market.events`; `scrape_events` dùng vnmarket trước, CafeF HTML làm dự phòng; bỏ scraper TCBS. |
+| `pipeline/assets_market_brief.py` | `corporate_events_ingest` raise khi 0 sự kiện. |
+| `pipeline/assets_market_data.py` | thêm kiểm tra bootstrap `corporate_events` vào `data_bootstrap_sensor`; bỏ các `time.sleep` (vnmarket đã throttle theo nguồn). |
+
+Ánh xạ `event_code` (VCI) → `corporate_events.event_type`: `DIV`→`dividend`, `ISS`→`rights_issue`, `AGME`/`AGMR`/`EGME`→`agm`. Các mã còn lại (giao dịch cổ đông lớn/nội bộ DDIND/DDINS/DDRP, niêm yết bổ sung AIS, SUSP, MOVE, OTHE…) không lưu. `ex_date` = ngày GDKHQ (`exright_date`; sự kiện đã công bố nhưng chưa có ngày GDKHQ thì bỏ qua); với `agm` là ngày họp (`display_date1`). `ratio` lấy từ tiêu đề (`_extract_ratio`), thiếu thì `exercise_ratio × 100` cho `rights_issue`. Loại `gdkhq` không còn được sinh ra (VCI không tách riêng).
+
+Dự phòng khi VCI IQ lỗi: ngày 2026-10-14 `iq.vietcap.com.vn` nhận kết nối TCP/TLS nhưng không trả byte nào (cả 3 IP CDN, `ReadTimeout`), `fetch_dividends` toàn bộ mã không có dữ liệu. vnmarket thêm `vnd.events` (VNDirect `api-finfo.vndirect.com.vn/v4/events`) vào `Fallback` của `company.events`/`market.events`, trả cùng dạng khung với VCI. Ánh xạ: `DIVIDEND`→`DIV` (`value_per_share`=`dividend`, `payout_date`=`expiredDate`), `STOCKDIV`/`KINDDIV`→`DIV`, `ISSUE`→`ISS` (`exercise_ratio`=`ratio`/100), `MEETING`→`AGME`, `meetingRight`→`AGMR`; các loại khác bị bỏ. Đã kiểm với HPG: 2026-05-11 tiền 500đ, 2026-05-25 cổ phiếu 10% khớp bảng `dividends` (nguồn VCI). Giới hạn đã đo: lịch sử HPG qua VNDirect chỉ 6 dòng (từ 2022) so với 13 dòng của VCI (từ 2017); lịch thị trường 2026-10-13…28 có DIV 24, AGME 18, AGMR 6, ISS 2 (VCI trước đó ISS 8). Không có `record_date` từ nguồn này.
 
 ## Kiểm thử
+- Đã bỏ `vnstock` khỏi `requirements.txt` và `Dockerfile.api`; `vendor/vnmarket` (gitignored) cần đồng bộ lại từ `../vnmarket/src/vnmarket` khi build image.
 - Test mới: `tests/test_vnmarket_tools.py` (10), `tests/test_fetch_prices_vnmarket.py` (2); `tests/test_fireant_ingest.py` 49 pass.
 - Kiểm tra live: HPG foreign flow 2026-10-09..13 khớp bảng `foreign_flows` trong Postgres; `listed_shares` HPG 8,442,964,520; SJC 1L mua 141.3 / bán 144.3.
 - `tests/test_minio_pipeline.py` và `tests/test_pipeline.py::test_new_pdf_indexed` lỗi do MinIO; test router/memory/e2e dùng LLM thật lỗi do DeepSeek `402 Insufficient Balance` (xem BLOCKED.md).

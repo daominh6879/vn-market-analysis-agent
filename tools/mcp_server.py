@@ -107,7 +107,7 @@ async def get_price(ticker: str) -> str:
     """
     Trả giá đóng cửa gần nhất của mã chứng khoán.
 
-    Mã VN (2-4 ký tự, không dấu chấm): giá VND, nguồn vnstock.
+    Mã VN (2-4 ký tự, không dấu chấm): giá VND, nguồn vnmarket.
     Mã quốc tế (có dấu chấm hoặc >4 ký tự như AAPL, TSLA): giá USD, nguồn yfinance.
 
     Ví dụ: ticker="HPG" → giá VND; ticker="AAPL" → giá USD.
@@ -122,7 +122,7 @@ async def get_ohlcv(ticker: str, days: int = 60) -> str:
     """
     Trả dữ liệu lịch sử OHLCV (Open/High/Low/Close/Volume) của mã chứng khoán.
 
-    Mã VN (2-4 ký tự): dữ liệu VND, nguồn vnstock.
+    Mã VN (2-4 ký tự): dữ liệu VND, nguồn vnmarket.
     Mã quốc tế (có dấu chấm hoặc >4 ký tự): dữ liệu USD, nguồn yfinance.
     Mặc định lấy 60 phiên gần nhất. days tối thiểu 1.
 

@@ -415,14 +415,14 @@ def _run_sensor(empty_flags):
 
 
 def test_bootstrap_sensor_requests_only_empty_datasets():
-    out = _run_sensor([True, False, True, False, False, True, False])
+    out = _run_sensor([True, False, True, False, False, True, False, False])
     assert sorted(r.job_name for r in out) == ["ratio_history_job", "securities_shares_job", "vnstock_ratios_job"]
     assert all(r.run_key.endswith(date.today().isoformat()) for r in out)   # one retry per day
 
 
 def test_bootstrap_sensor_skips_when_everything_populated():
     from dagster import SkipReason
-    assert isinstance(_run_sensor([False] * 7), SkipReason)
+    assert isinstance(_run_sensor([False] * 8), SkipReason)
 
 
 def test_data_jobs_cover_all_active_securities_not_index_labels():
@@ -434,3 +434,17 @@ def test_data_jobs_cover_all_active_securities_not_index_labels():
     offenders = [str(f.relative_to(root)) for f in files
                  if f.name != "assets_market_data.py" and re.search(r"get_ratio_tickers\(\)", f.read_text(encoding="utf-8"))]
     assert not offenders, offenders
+
+
+def test_fetch_events_df_requests_dividend_codes_and_maps_nodata_to_none():
+    from unittest.mock import MagicMock, patch
+    from vnmarket import NoData
+    from ingest.fetch_dividends import fetch_events_df
+
+    client = MagicMock()
+    client.company.events.return_value = "frame"
+    with patch("core.vnmarket_client.get_client", return_value=client):
+        assert fetch_events_df("HPG") == "frame"
+        client.company.events.assert_called_once_with("HPG", codes="DIV,ISS")
+        client.company.events.side_effect = NoData("none")
+        assert fetch_events_df("XXX") is None
