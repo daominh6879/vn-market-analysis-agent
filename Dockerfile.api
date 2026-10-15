@@ -3,11 +3,11 @@ WORKDIR /app
 # CPU-only torch (default Linux wheel bundles ~4GB of CUDA libs, unused here)
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 COPY requirements.txt .
-# vnstock is not on PyPI (vendored from .venv into vendor/, deps below); pandas-ta pins numba==0.61.2 (no py3.14 wheel) so it is installed --no-deps; UI/eval/pipeline-only packages are not needed by the API
-RUN grep -viE "^(vnstock|chainlit|streamlit|dagster|ragas|datasets|chromadb|pandas-ta|langchain-chroma|langchain-google-vertexai)" requirements.txt > req-docker.txt \
+# vnmarket (sibling repo, `-e ../vnmarket`) is vendored into vendor/vnmarket; its deps httpx/pandas/certifi are installed below; pandas-ta pins numba==0.61.2 (no py3.14 wheel) so it is installed --no-deps; UI/eval/pipeline-only packages are not needed by the API
+RUN grep -viE "^(-e \.\./vnmarket|chainlit|streamlit|dagster|ragas|datasets|chromadb|pandas-ta|langchain-chroma|langchain-google-vertexai)" requirements.txt > req-docker.txt \
  && pip install --no-cache-dir -r req-docker.txt && rm req-docker.txt \
  && pip install --no-cache-dir numba llvmlite && pip install --no-cache-dir --pre --no-deps pandas-ta \
- && pip install --no-cache-dir seaborn openpyxl psutil tenacity pytz importlib-metadata
+ && pip install --no-cache-dir httpx pandas certifi seaborn openpyxl psutil tenacity pytz importlib-metadata
 COPY . .
 ENV PYTHONPATH=/app/vendor
 EXPOSE 8031
