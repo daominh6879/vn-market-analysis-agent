@@ -37,3 +37,5 @@
 | Router LLM thay keyword rules | [docs/notes/llm-routing-no-keyword-rules.md](docs/notes/llm-routing-no-keyword-rules.md) |
 | Intent model (router huấn luyện, prototype) | [docs/notes/intent-model.md](docs/notes/intent-model.md) |
 | vnmarket (thay nguồn dữ liệu) | [docs/notes/vnmarket-integration.md](docs/notes/vnmarket-integration.md) |
+| Portfolio API + AI tư vấn mua/bán + đồng bộ TCBS | [docs/notes/portfolio-advisor.md](docs/notes/portfolio-advisor.md) |
+| (cũ) Nghiên cứu model LightGBM tín hiệu — đã gỡ | [docs/notes/portfolio-signals.md](docs/notes/portfolio-signals.md) |

@@ -82,3 +82,5 @@ Các mục dưới đây là điểm nghi vấn nêu trong `vn_stock_agent_test_
 
 - [x] vnmarket không có nguồn cổ tức / sự kiện doanh nghiệp → đã thêm `company.events` và `market.events` (VCI IQ `/v1/events`) vào vnmarket; `fetch_dividends.py` và `corporate_events_scraper.py` đã chuyển sang vnmarket, bỏ phụ thuộc `vnstock` (2026-10-14).
 - [x] Đợt chuyển `fetch_financials` / `fetch_ratios` sang vnmarket đã được đối chiếu với DB thật ngày 2026-10-14 (xem docs/notes/vnmarket-integration.md); chưa chạy job Dagster ghi dữ liệu mới.
+
+- [ ] Đồng bộ TCBS (`POST /portfolio/{user_id}/tcbs/sync`) chưa chạy với TCBS thật: cần `TCBS_API_KEY` (tạo trên TCInvest), `TCBS_ACCOUNT_NO` (tiểu khoản thường) trong `.env` và Smart OTP tại thời điểm gọi. Docs: https://developers.tcbs.com.vn/docs/v1.0.0/introduction/ (2026-10-19). Chưa xác nhận trường hợp tiểu khoản margin và thời hạn JWT (docs không nêu).
