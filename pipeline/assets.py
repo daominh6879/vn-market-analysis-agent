@@ -415,6 +415,10 @@ from pipeline.assets_market_data import (
     ratio_history_schedule, financials_quarterly_schedule, daily_snapshots_schedule,
     data_bootstrap_sensor,
 )
+from pipeline.assets_proprietary import (
+    proprietary_flows_ingest, breakout_signals_daily, proprietary_flows_job, breakout_signals_job,
+    proprietary_flows_schedule, breakout_signals_schedule, gated_mid_beats_ungated,
+)
 from pipeline.assets_ohlcv import (
     ohlcv_daily_ingest,
     ohlcv_ingest_job,
@@ -629,7 +633,8 @@ defs = Definitions(
             ohlcv_daily_ingest,
             market_index_daily_ingest, global_quotes_ingest,
             foreign_flows_ingest, corporate_events_ingest, daily_brief,
-            securities_shares, stock_dividends, ratio_history, financials_quarterly, daily_snapshots],
+            securities_shares, stock_dividends, ratio_history, financials_quarterly, daily_snapshots,
+            proprietary_flows_ingest, breakout_signals_daily],
     jobs=[ingestion_job, ingestion_full_rebuild_job, delete_job,
           news_job, news_purge_job,
           vnstock_financials_job, vnstock_prices_job, vnstock_ratios_job,
@@ -637,13 +642,16 @@ defs = Definitions(
           market_index_ingest_job,
           foreign_flows_job, corporate_events_job, daily_brief_job,
           securities_shares_job, stock_dividends_job, ratio_history_job,
-          financials_quarterly_job, daily_snapshots_job],
+          financials_quarterly_job, daily_snapshots_job,
+          proprietary_flows_job, breakout_signals_job],
     schedules=[daily_schedule, news_schedule, news_purge_schedule,
                vnstock_financials_schedule, vnstock_prices_schedule, vnstock_ratios_schedule,
                ohlcv_ingest_schedule,
                market_index_ingest_schedule,
                foreign_flows_schedule, corporate_events_schedule, daily_brief_schedule,
                securities_shares_schedule, stock_dividends_schedule, stock_dividends_all_schedule,
-               ratio_history_schedule, financials_quarterly_schedule, daily_snapshots_schedule],
+               ratio_history_schedule, financials_quarterly_schedule, daily_snapshots_schedule,
+               proprietary_flows_schedule, breakout_signals_schedule],
     sensors=[minio_new_pdf_sensor, data_bootstrap_sensor],
+    asset_checks=[gated_mid_beats_ungated],
 )

@@ -29,6 +29,7 @@ from dagster import (
 )
 
 from pipeline.assets_market_brief import corporate_events_job
+from pipeline.assets_proprietary import breakout_signals_job, proprietary_flows_job
 from pipeline.assets_vnstock import vnstock_financials_job, vnstock_ratios_job
 
 _TZ = "Asia/Ho_Chi_Minh"
@@ -253,12 +254,16 @@ _BOOTSTRAP_CHECKS: list[tuple[str, str, str]] = [
     ("vnstock_ratios_job", _tickers_below_coverage("stock_ratios WHERE true"), "stock_ratios"),
     ("daily_snapshots_job", "SELECT NOT EXISTS (SELECT 1 FROM daily_snapshots)", "snapshots"),
     ("corporate_events_job", "SELECT NOT EXISTS (SELECT 1 FROM corporate_events)", "corporate_events"),
+    ("proprietary_flows_job", _tickers_below_coverage("proprietary_flows WHERE true"), "proprietary_flows"),
+    ("breakout_signals_job",
+     "SELECT EXISTS (SELECT 1 FROM proprietary_flows) AND NOT EXISTS (SELECT 1 FROM breakout_signals)", "breakout_signals"),
 ]
 
 
 @sensor(
     jobs=[securities_shares_job, stock_dividends_job, ratio_history_job, financials_quarterly_job, daily_snapshots_job,
-          vnstock_financials_job, vnstock_ratios_job, corporate_events_job],
+          vnstock_financials_job, vnstock_ratios_job, corporate_events_job,
+          proprietary_flows_job, breakout_signals_job],
     name="data_bootstrap_sensor",
     minimum_interval_seconds=600,
     default_status=DefaultSensorStatus.RUNNING,
