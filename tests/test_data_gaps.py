@@ -415,14 +415,14 @@ def _run_sensor(empty_flags):
 
 
 def test_bootstrap_sensor_requests_only_empty_datasets():
-    out = _run_sensor([True, False, True, False, False, True, False, False])
+    out = _run_sensor([True, False, True, False, False, True, False, False, False, False])
     assert sorted(r.job_name for r in out) == ["ratio_history_job", "securities_shares_job", "vnstock_ratios_job"]
     assert all(r.run_key.endswith(date.today().isoformat()) for r in out)   # one retry per day
 
 
 def test_bootstrap_sensor_skips_when_everything_populated():
     from dagster import SkipReason
-    assert isinstance(_run_sensor([False] * 8), SkipReason)
+    assert isinstance(_run_sensor([False] * 10), SkipReason)
 
 
 def test_data_jobs_cover_all_active_securities_not_index_labels():
