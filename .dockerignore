@@ -13,5 +13,9 @@ outputs
 docs
 spec-html
 diagrams
+intent_model
+reports
+.codegraph
+.tmp_dagster_home_*
 *.pptx
 *.tex
