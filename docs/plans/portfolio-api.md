@@ -1,5 +1,7 @@
 # Plan — Hidden Portfolio API: sổ giao dịch + AI tư vấn mua/bán
 
+> **Trạng thái (2026-10-21):** đã tách sang app riêng `../vn-portfolio` (sổ giao dịch, TCBS, rủi ro, lệnh, UI). Router `/portfolio/*`, `portfolio/tcbs.py` và bảng `portfolio_transactions` đã gỡ (migration 043). ai-engineer chỉ còn advisor stateless `/advisor/*` (`api/advisor.py`). Plan dưới đây là lịch sử.
+
 ## Context
 The user wants a **hidden** API (not in OpenAPI docs, no auth, runs locally) that:
 1. Manages each user's portfolio: a cash ledger + buy/sell transactions → positions, average cost, P/L, cash balance.

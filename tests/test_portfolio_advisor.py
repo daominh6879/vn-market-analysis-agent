@@ -231,9 +231,9 @@ def _run(monkeypatch, *texts):
             calls.append(1)
             return _Resp(texts[min(len(calls), len(texts)) - 1])
 
-    monkeypatch.setattr(advisor, "gather_evidence", lambda uid: _evidence())
+    monkeypatch.setattr(advisor, "gather_evidence_for", lambda ps, cash, uid: _evidence())
     monkeypatch.setattr("llm.create_client", lambda: Client())
-    return advisor.advise("u1"), calls
+    return advisor.advise_for([], {"cash": 0}, "u1"), calls
 
 
 def test_advise_report_structure_and_validated_output(monkeypatch):

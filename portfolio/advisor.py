@@ -14,7 +14,7 @@ import re
 
 from portfolio import ledger
 from portfolio.evidence import (
-    BETA_HIGH, CASH_HIGH_PCT, CASH_LOW_PCT, HIGH_VOL_PCT, MAX_TICKER_WEIGHT, SECTOR_PREFERRED_MAX, gather_evidence,
+    BETA_HIGH, CASH_HIGH_PCT, CASH_LOW_PCT, HIGH_VOL_PCT, MAX_TICKER_WEIGHT, SECTOR_PREFERRED_MAX,
     gather_evidence_for,
 )
 
@@ -314,13 +314,11 @@ def _assemble(ev: dict, decided: dict, summ: dict) -> str:
     return "\n".join(out)
 
 
-def advise(user_id: str) -> dict:
-    """Full advice. Raises ValueError for an empty portfolio, RuntimeError if the LLM never returned usable JSON."""
-    return _advise(gather_evidence(user_id))
-
-
 def advise_for(positions: list[dict], cash: dict, user_id: str = "external") -> dict:
-    """advise() for positions/cash supplied by the caller (the separate portfolio app owns the ledger)."""
+    """Full advice for positions/cash supplied by the caller (the vn-portfolio app owns the ledger).
+
+    Raises ValueError for an empty portfolio, RuntimeError if the LLM never returned usable JSON.
+    """
     return _advise(gather_evidence_for(positions, cash, user_id))
 
 

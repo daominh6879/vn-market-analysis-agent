@@ -1,8 +1,8 @@
 """
 portfolio/evidence.py — everything the AI judge reads about a portfolio, no LLM.
 
-Per holding and per candidate: technicals, foreign flows, recent news (each article has a stable id so the judge
-can cite it). Plus market context and portfolio risk. Fundamentals are not gathered here yet.
+Per holding and per candidate: technicals, fundamentals, breakout signals, foreign flows, recent news (each article has a stable id so the judge
+can cite it). Plus market context and portfolio risk.
 """
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pandas as pd
 
-from portfolio import ledger
 
 # ── constants ─────────────────────────────────────────────────────────────────
 MAX_TICKER_WEIGHT = 0.25         # max share of NAV in one ticker
@@ -236,11 +235,6 @@ def compute_risk(positions: list[dict], cash: dict, betas: dict[str, float],
 
 # ── entry point ───────────────────────────────────────────────────────────────
 
-def gather_evidence(user_id: str) -> dict:
-    """Raises ValueError for an empty portfolio. No LLM call."""
-    return gather_evidence_for(ledger.get_positions(user_id), ledger.get_cash(user_id), user_id)
-
-
 def risk_for(positions: list[dict], cash: dict) -> dict:
     """compute_risk with betas and volatility percentiles read from the DB."""
     held = sorted(p["ticker"] for p in positions)
@@ -248,7 +242,7 @@ def risk_for(positions: list[dict], cash: dict) -> dict:
 
 
 def gather_evidence_for(positions: list[dict], cash: dict, user_id: str = "external") -> dict:
-    """Same as gather_evidence for positions/cash supplied by the caller (shape of ledger.get_positions/get_cash)."""
+    """Evidence for positions/cash supplied by the caller. Raises ValueError for an empty portfolio. No LLM call."""
     from agents.intents import breakout, closing_commentary, fundamentals, technical
 
     if not positions and cash["cash"] <= 0:

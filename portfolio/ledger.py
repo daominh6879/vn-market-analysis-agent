@@ -1,7 +1,7 @@
 """
-portfolio/ledger.py — cash ledger + positions derived from transactions.
+portfolio/ledger.py — pure ledger logic (replay, positions), fee/tax constants and market reference data.
 
-Pure logic (`replay`, `build_positions`) is separated from DB access so it can be unit-tested.
+The per-user transaction ledger lives in the separate vn-portfolio app; `reference()` serves it over /advisor.
 Prices in transactions are VND/share; ohlcv_daily stores nghìn đồng, so last prices are x1000.
 """
 from __future__ import annotations
@@ -162,106 +162,9 @@ def build_positions(holdings: dict[str, Holding], prices: dict[str, float],
 
 # ── DB access ─────────────────────────────────────────────────────────────────
 
-def _load_txns(cur, user_id: str) -> list[Txn]:
-    cur.execute(
-        "SELECT id, txn_date, kind, ticker, quantity, price, fee, tax, amount, note "
-        "FROM portfolio_transactions WHERE user_id = %s ORDER BY txn_date, id", (user_id,))
-    return [Txn(id=r[0], txn_date=r[1], kind=r[2], ticker=r[3], quantity=r[4],
-                price=float(r[5]) if r[5] is not None else None,
-                fee=float(r[6]), tax=float(r[7]), amount=float(r[8]), note=r[9])
-            for r in cur.fetchall()]
-
-
 def _calendar(cur) -> list[date]:
     cur.execute("SELECT date FROM market_index_daily WHERE index_code = 'VNINDEX' ORDER BY date")
     return [r[0] for r in cur.fetchall()]
-
-
-def _exchanges(cur, tickers: set[str]) -> dict[str, str]:
-    if not tickers:
-        return {}
-    cur.execute("SELECT ticker, exchange FROM securities WHERE ticker = ANY(%s)", (list(tickers),))
-    return dict(cur.fetchall())
-
-
-def add_transaction(user_id: str, txn_date: date, kind: str, ticker: str | None = None,
-                    quantity: int | None = None, price: float | None = None,
-                    fee: float | None = None, tax: float | None = None,
-                    amount: float | None = None, note: str = "", tenant_id: str = "default") -> int:
-    """Validate against the full ledger (replay) and insert. Returns the new id."""
-    from core.db import get_conn
-
-    if kind in ("buy", "sell"):
-        ticker = (ticker or "").upper()
-        if not ticker or not quantity or quantity <= 0 or not price or price <= 0:
-            raise LedgerError(f"{kind} requires ticker, positive quantity and price")
-        value = quantity * price
-        fee = value * fee_pct() if fee is None else fee
-        tax = (value * SELL_TAX_PCT if kind == "sell" else 0.0) if tax is None else tax
-    else:
-        ticker = quantity = price = None
-        fee = tax = 0.0
-    amt = signed_amount(kind, quantity, price, fee, tax, amount)
-    new = Txn(txn_date=txn_date, kind=kind, ticker=ticker, quantity=quantity, price=price,
-              fee=fee, tax=tax, amount=amt, note=note)
-
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            if ticker:
-                cur.execute("SELECT 1 FROM securities WHERE ticker = %s", (ticker,))
-                if not cur.fetchone():
-                    raise LedgerError(f"unknown ticker {ticker}")
-            ledger = _load_txns(cur, user_id) + [new]
-            replay(ledger, _calendar(cur), _exchanges(cur, {t.ticker for t in ledger if t.ticker}))
-            cur.execute(
-                "INSERT INTO portfolio_transactions "
-                "(user_id, tenant_id, txn_date, kind, ticker, quantity, price, fee, tax, amount, note) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
-                (user_id, tenant_id, txn_date, kind, ticker, quantity, price, fee, tax, amt, note))
-            return cur.fetchone()[0]
-
-
-def list_transactions(user_id: str) -> list[dict]:
-    from core.db import get_conn
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            txns = _load_txns(cur, user_id)
-    return [{**t.__dict__, "txn_date": t.txn_date.isoformat()} for t in txns]
-
-
-def delete_transaction(user_id: str, txn_id: int) -> None:
-    """Delete only if the remaining ledger stays valid (e.g. not a deposit that funds a buy)."""
-    from core.db import get_conn
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            ledger = _load_txns(cur, user_id)
-            if not any(t.id == txn_id for t in ledger):
-                raise LedgerError(f"transaction {txn_id} not found")
-            rest = [t for t in ledger if t.id != txn_id]
-            replay(rest, _calendar(cur), _exchanges(cur, {t.ticker for t in rest if t.ticker}))
-            cur.execute("DELETE FROM portfolio_transactions WHERE id = %s AND user_id = %s", (txn_id, user_id))
-
-
-def _state(user_id: str, as_of: date | None):
-    from core.db import get_conn
-    as_of = as_of or date.today()
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            txns = [t for t in _load_txns(cur, user_id) if t.txn_date <= as_of]
-            calendar = _calendar(cur)
-            tickers = {t.ticker for t in txns if t.ticker}
-            cash, holdings = replay(txns, calendar)
-            prices: dict[str, float] = {}
-            sectors: dict[str, str] = {}
-            if tickers:
-                cur.execute(
-                    "SELECT DISTINCT ON (ticker) ticker, close FROM ohlcv_daily "
-                    "WHERE ticker = ANY(%s) AND date <= %s ORDER BY ticker, date DESC",
-                    (list(tickers), as_of))
-                prices = {t: float(c) * _PRICE_UNIT for t, c in cur.fetchall()}
-                cur.execute("SELECT ticker, sector FROM securities WHERE ticker = ANY(%s)", (list(tickers),))
-                sectors = dict(cur.fetchall())
-    return txns, cash, holdings, prices, sectors, calendar, as_of
 
 
 def reference(tickers: list[str], as_of: date | None = None) -> dict:
@@ -287,30 +190,5 @@ def reference(tickers: list[str], as_of: date | None = None) -> dict:
         "exchanges": {t: e for t, (e, _) in meta.items()},
         "sectors": {t: s for t, (_, s) in meta.items()},
         "calendar": [d.isoformat() for d in calendar if d <= as_of],
-        "as_of": as_of.isoformat(),
-    }
-
-
-def get_positions(user_id: str, as_of: date | None = None) -> list[dict]:
-    _, _, holdings, prices, sectors, calendar, as_of = _state(user_id, as_of)
-    return build_positions(holdings, prices, sectors, calendar, as_of)
-
-
-def get_cash(user_id: str, as_of: date | None = None) -> dict:
-    """Cash balance, deposits, NAV and total return."""
-    txns, cash, holdings, prices, sectors, calendar, as_of = _state(user_id, as_of)
-    positions = build_positions(holdings, prices, sectors, calendar, as_of)
-    market_value = sum(p["market_value"] or 0 for p in positions)
-    deposited = sum(t.amount for t in txns if t.kind == "deposit")
-    withdrawn = -sum(t.amount for t in txns if t.kind == "withdraw")
-    net_deposited = deposited - withdrawn
-    nav = cash + market_value
-    return {
-        "cash": cash,
-        "total_deposited": deposited,
-        "total_withdrawn": withdrawn,
-        "market_value": market_value,
-        "nav": nav,
-        "total_return_pct": (nav / net_deposited - 1) * 100 if net_deposited > 0 else None,
         "as_of": as_of.isoformat(),
     }

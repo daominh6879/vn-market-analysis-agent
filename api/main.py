@@ -34,7 +34,6 @@ load_dotenv()
 from agents.checkpointer import expire_old_sessions
 from api.advisor import router as advisor_router
 from api.conversations import router as conversations_router
-from api.portfolio import router as portfolio_router
 from api.sessions import router as sessions_router
 from api.trace import router as trace_router
 
@@ -77,7 +76,6 @@ def create_app() -> FastAPI:
     _app.include_router(sessions_router)
     _app.include_router(conversations_router)
     _app.include_router(trace_router)
-    _app.include_router(portfolio_router)
     _app.include_router(advisor_router)
 
     @_app.get("/health", tags=["health"])

@@ -36,3 +36,10 @@ Kế hoạch: `docs/plans/portfolio-api.md`. Mọi số liệu dưới đây l�
 - Run #7 (`t1`, 2026-10-21): HTTP 200 sau 42 giây (trước đây ~25 giây), `llm_missing` rỗng. Cả 4 verdict đều dẫn số định giá/tăng trưởng (VD HPG "P/E 7.6x chiết khấu -56% so với ngành 17.2x"). DCM: target 38.352 = TP1 của tín hiệu breakout. DGW: stop AI 42.600 hợp lệ (run #6 phải dùng mặc định).
 - `POST /advisor/ask {user_id, message, conversation_id?}`: 1 lượt agent chat đầy đủ (`run_turn`) cho app vn-portfolio, hội thoại riêng `tenant_id=vn-portfolio`; tiếp tục hội thoại của user khác → 404. Kết quả chạy thật: xem `vn-portfolio/docs/notes/phase-d-e-f.md`.
 - Lệnh: `pytest -k "portfolio or advisor or evidence"` → 66 passed.
+
+## Phase G — dọn phần portfolio cũ (2026-10-21)
+- Kiểm tra trước khi xoá: `portfolio_transactions` có **0 dòng** (không còn dữ liệu cần import); sổ giao dịch thật nằm ở DB `portfolio` của vn-portfolio (`t1`: 4 giao dịch).
+- Đã gỡ: router `api/portfolio.py` + mount trong `api/main.py`, `portfolio/tcbs.py`, `tests/test_portfolio_tcbs.py`, `ledger.get_positions/get_cash/add/list/delete_transaction`, `evidence.gather_evidence(user_id)`, `advisor.advise(user_id)`. Còn giữ trong `ledger.py`: hàm thuần (`replay`, `build_positions`, `sessions_elapsed`, `signed_amount`), `fee_pct`/`SELL_TAX_PCT` (dùng bởi `signals/*`, `portfolio/backtest_rules.py`) và `reference()` cho `/advisor/reference`.
+- Migration `043_drop_portfolio_transactions.sql` → bảng đã xoá (`to_regclass` = null). Lưu ý `scripts/migrate.py` chạy lại mọi file SQL mỗi lần (039 tạo lại bảng rỗng, 043 xoá ngay sau) và còn chạy cả seed/MinIO/backfill — muốn chỉ áp schema thì dùng `--skip-securities --skip-minio --skip-market-data --skip-audit`.
+- Sau khi khởi động lại API: `GET :8031/portfolio/t1/positions` → 404; vn-portfolio `/portfolio/t1/positions` và `/cash` vẫn đúng (NAV 96.810.500).
+- Lệnh: `pytest tests/test_portfolio_ledger.py tests/test_portfolio_advisor.py tests/test_advisor_api.py` → 50 passed; `pytest tests/test_portfolio_evidence.py tests/test_backtest_rules.py tests/test_breakout_*.py` → 17 passed.

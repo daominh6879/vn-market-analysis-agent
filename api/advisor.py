@@ -28,7 +28,7 @@ router = APIRouter(prefix="/advisor", tags=["advisor"], include_in_schema=False,
 
 
 class Position(BaseModel):
-    """One open position, same shape as portfolio.ledger.get_positions."""
+    """One open position, same shape as portfolio.ledger.build_positions rows."""
     ticker: str
     quantity: int
     sellable_quantity: int
@@ -43,7 +43,7 @@ class Position(BaseModel):
 
 
 class Cash(BaseModel):
-    """Same shape as portfolio.ledger.get_cash."""
+    """Cash summary of the caller's ledger (vn-portfolio /cash)."""
     cash: float
     total_deposited: float = 0.0
     total_withdrawn: float = 0.0
