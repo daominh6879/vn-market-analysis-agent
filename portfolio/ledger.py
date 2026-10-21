@@ -264,6 +264,33 @@ def _state(user_id: str, as_of: date | None):
     return txns, cash, holdings, prices, sectors, calendar, as_of
 
 
+def reference(tickers: list[str], as_of: date | None = None) -> dict:
+    """Market reference data for a ledger kept elsewhere: last close (VND), exchange, sector, trading calendar."""
+    from core.db import get_conn
+    as_of = as_of or date.today()
+    tickers = sorted({t.upper() for t in tickers})
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            calendar = _calendar(cur)
+            prices: dict[str, float] = {}
+            meta: dict[str, tuple[str, str]] = {}
+            if tickers:
+                cur.execute(
+                    "SELECT DISTINCT ON (ticker) ticker, close FROM ohlcv_daily "
+                    "WHERE ticker = ANY(%s) AND date <= %s ORDER BY ticker, date DESC", (tickers, as_of))
+                prices = {t: float(c) * _PRICE_UNIT for t, c in cur.fetchall()}
+                cur.execute("SELECT ticker, exchange, sector FROM securities WHERE ticker = ANY(%s)", (tickers,))
+                meta = {t: (e, s) for t, e, s in cur.fetchall()}
+    return {
+        "known": sorted(meta),
+        "prices": prices,
+        "exchanges": {t: e for t, (e, _) in meta.items()},
+        "sectors": {t: s for t, (_, s) in meta.items()},
+        "calendar": [d.isoformat() for d in calendar if d <= as_of],
+        "as_of": as_of.isoformat(),
+    }
+
+
 def get_positions(user_id: str, as_of: date | None = None) -> list[dict]:
     _, _, holdings, prices, sectors, calendar, as_of = _state(user_id, as_of)
     return build_positions(holdings, prices, sectors, calendar, as_of)

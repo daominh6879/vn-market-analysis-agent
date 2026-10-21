@@ -1,0 +1,115 @@
+"""
+api/advisor.py — hidden, stateless advisor API for the separate portfolio app (vn-portfolio).
+
+The caller owns the ledger and sends positions + cash; this side only reads market data and runs the AI judge.
+Not in OpenAPI docs. Every call needs header X-Internal-Key == env ADVISOR_INTERNAL_KEY (fails closed when unset).
+"""
+from __future__ import annotations
+
+import hmac
+import os
+from datetime import date
+
+from fastapi import APIRouter, Depends, Header, HTTPException
+from pydantic import BaseModel
+
+from portfolio import advisor, evidence, ledger
+
+
+def _check_key(x_internal_key: str = Header(default="")) -> None:
+    expected = os.getenv("ADVISOR_INTERNAL_KEY", "")
+    if not expected:
+        raise HTTPException(503, "ADVISOR_INTERNAL_KEY is not configured")
+    if not hmac.compare_digest(x_internal_key, expected):
+        raise HTTPException(401, "invalid internal key")
+
+
+router = APIRouter(prefix="/advisor", tags=["advisor"], include_in_schema=False, dependencies=[Depends(_check_key)])
+
+
+class Position(BaseModel):
+    """One open position, same shape as portfolio.ledger.get_positions."""
+    ticker: str
+    quantity: int
+    sellable_quantity: int
+    avg_cost: float
+    last_price: float | None = None
+    market_value: float | None = None
+    unrealized_pnl: float | None = None
+    unrealized_pct: float | None = None
+    realized_pnl: float = 0.0
+    sector: str = "Unknown"
+    weight: float = 0.0
+
+
+class Cash(BaseModel):
+    """Same shape as portfolio.ledger.get_cash."""
+    cash: float
+    total_deposited: float = 0.0
+    total_withdrawn: float = 0.0
+    market_value: float = 0.0
+    nav: float
+    total_return_pct: float | None = None
+    as_of: str
+
+
+class PortfolioIn(BaseModel):
+    positions: list[Position]
+    cash: Cash
+    user_id: str = "external"        # only used as the report title
+
+
+class ReferenceIn(BaseModel):
+    tickers: list[str]
+    as_of: date | None = None
+
+
+def _plain(body: PortfolioIn) -> tuple[list[dict], dict]:
+    return [p.model_dump() for p in body.positions], body.cash.model_dump()
+
+
+@router.post("/reference")
+def reference(body: ReferenceIn):
+    return ledger.reference(body.tickers, body.as_of)
+
+
+@router.post("/risk")
+def risk(body: PortfolioIn):
+    return evidence.risk_for(*_plain(body))
+
+
+@router.post("/advise")
+def advise(body: PortfolioIn):
+    try:
+        return advisor.advise_for(*_plain(body), body.user_id)
+    except ValueError as e:                     # empty portfolio
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:                   # LLM returned no usable verdicts
+        raise HTTPException(503, str(e))
+
+
+ASK_TENANT = "vn-portfolio"          # keeps the portfolio app's chats apart from the main chat UI's
+
+
+class AskIn(BaseModel):
+    user_id: str
+    message: str
+    conversation_id: str | None = None   # None starts a new conversation
+
+
+@router.post("/ask")
+def ask(body: AskIn):
+    """One turn of the full agent graph (every intent) in a conversation owned by the portfolio app."""
+    from memory.conversation import create_conversation, get_conversation
+    from memory.turn_handler import run_turn
+
+    cid = body.conversation_id
+    if cid:
+        conv = get_conversation(cid)
+        if not conv or conv["user_id"] != body.user_id or conv["tenant_id"] != ASK_TENANT:
+            raise HTTPException(404, f"conversation {cid} not found")
+    else:
+        cid = create_conversation(body.user_id, ASK_TENANT)
+    reply = run_turn(conversation_id=cid, user_id=body.user_id, user_message=body.message,
+                     tenant_id=ASK_TENANT, is_first_turn=body.conversation_id is None)
+    return {"conversation_id": cid, "reply": reply}

@@ -70,6 +70,17 @@ def test_parse_drops_unknown_or_foreign_news_ids_and_clamps_confidence():
     assert out["BBB"]["cited_news_ids"] == [] and out["BBB"]["confidence"] == 1.0
 
 
+def test_parse_strips_inline_news_ids_from_text():
+    txt = llm_json([{"ticker": "AAA", "action": "HOLD", "cited_news_ids": [1],
+                     "reasons": ["Nội bộ bán 350.000 cp (id=1, id=2) tạo áp lực.", "(id=2)"],
+                     "risks": ["Giảm lãi suất (news_id: 1) ảnh hưởng NIM"]}],
+                   market="VNINDEX giảm, tin id=1 cho thấy áp lực.")
+    summ, out = parse_verdicts(txt, ["AAA"], [], V)
+    assert out["AAA"]["reasons"] == ["Nội bộ bán 350.000 cp tạo áp lực."]      # id-only reason dropped
+    assert out["AAA"]["risks"] == ["Giảm lãi suất ảnh hưởng NIM"]
+    assert summ["market"] == "VNINDEX giảm, tin cho thấy áp lực." and out["AAA"]["cited_news_ids"] == [1]
+
+
 def test_parse_garbage_returns_empty():
     assert parse_verdicts("không phải json", ["AAA"], [], V) == ({}, {})
     assert parse_verdicts("{broken", ["AAA"], [], V) == ({}, {})
@@ -140,6 +151,52 @@ def test_candidate_dropped_when_cash_too_small():
     assert r["new_ideas"] == []
 
 
+# ── stop / target levels ──────────────────────────────────────────────────────
+
+def test_parse_levels_only_for_buy_actions():
+    txt = llm_json([
+        {"ticker": "AAA", "action": "BUY_MORE", "reasons": ["x"], "stop_price": "18,500", "target_price": 24000,
+         "levels_basis": "hỗ trợ 18,500 (id=1), kháng cự 24,000"},
+        {"ticker": "BBB", "action": "HOLD", "reasons": ["x"], "stop_price": 15000, "target_price": 30000},
+        {"ticker": "CCC", "action": "BUY_NEW", "reasons": ["x"], "stop_price": "n/a", "target_price": None},
+    ])
+    _, out = parse_verdicts(txt, ["AAA", "BBB"], ["CCC"], V)
+    assert (out["AAA"]["stop_price"], out["AAA"]["target_price"]) == (18_500.0, 24_000.0)
+    assert out["AAA"]["levels_basis"] == "hỗ trợ 18,500, kháng cự 24,000"
+    assert out["BBB"]["stop_price"] is None and out["BBB"]["levels_basis"] is None
+    assert out["CCC"]["stop_price"] is None and out["CCC"]["target_price"] is None
+
+
+def test_valid_ai_levels_are_kept_on_buys():
+    v = {"AAA": verdict("AAA", "BUY_MORE", stop_price=18_500.0, target_price=24_000.0, levels_basis="hỗ trợ"),
+         "CCC": verdict("CCC", "BUY_NEW", stop_price=27_000.0, target_price=36_000.0, levels_basis="MA50")}
+    r = apply_limits(v, ev([pos("AAA")], [cand("CCC")]))
+    a, i = act(r, "AAA"), r["new_ideas"][0]
+    assert (a["stop_price"], a["target_price"], a["levels_source"]) == (18_500.0, 24_000.0, "ai")
+    assert (i["stop_price"], i["target_price"], i["levels_source"]) == (27_000.0, 36_000.0, "ai")
+
+
+@pytest.mark.parametrize("stop", [None, 19_800.0, 20_000.0, 13_000.0, 18.5])   # missing, <2%, at price, >30%, unit
+def test_invalid_ai_stop_falls_back_to_default(stop):
+    r = apply_limits({"AAA": verdict("AAA", "BUY_MORE", stop_price=stop, target_price=24_000.0)}, ev([pos("AAA")]))
+    a = act(r, "AAA")
+    assert a["stop_price"] == 18_600 and a["levels_source"] == "default" and a["target_price"] == 24_000.0
+    assert a["levels_basis"] is None                                 # the AI basis described the rejected stop
+
+
+@pytest.mark.parametrize("target", [19_000.0, 20_000.0, 50_000.0, 24.0])
+def test_invalid_ai_target_is_dropped(target):
+    r = apply_limits({"AAA": verdict("AAA", "BUY_MORE", stop_price=18_500.0, target_price=target)}, ev([pos("AAA")]))
+    assert act(r, "AAA")["target_price"] is None and act(r, "AAA")["stop_price"] == 18_500.0
+
+
+def test_non_buy_actions_and_downgraded_buys_have_no_levels():
+    r = apply_limits({"AAA": verdict("AAA", "HOLD", stop_price=18_500.0),
+                      "BBB": verdict("BBB", "BUY_MORE", stop_price=18_500.0)},
+                     ev([pos("AAA"), pos("BBB", pnl=-9)]))
+    assert "stop_price" not in act(r, "AAA") and "stop_price" not in act(r, "BBB")
+
+
 # ── advise (LLM stubbed) ──────────────────────────────────────────────────────
 
 class _Resp:
@@ -154,6 +211,7 @@ def _evidence():
             "BBB": [], "CCC": []}
     return {"user_id": "u1", "as_of": "2026-10-19", "positions": ps, "cash": cash, "candidates": [cand("CCC")],
             "market": "[THỊ TRƯỜNG] x", "market_news": [], "technical": {"AAA": "ta", "BBB": "tb", "CCC": "tc"},
+            "fundamentals": {"AAA": "fa"}, "signals": {"CCC": "sc"},
             "news": news, "foreign_flows": {"AAA": {"net_5d_bn": -3.0, "net_20d_bn": -9.0}},
             "risk": compute_risk(ps, cash, {})}
 
@@ -211,3 +269,9 @@ def test_no_parsable_json_raises(monkeypatch):
 def test_disclaimer_present(monkeypatch):
     out, _ = _run(monkeypatch, GOOD)
     assert "tham khảo" in out["report_md"].lower() or "không phải lời khuyên" in out["report_md"].lower()
+
+
+def test_prompt_includes_fundamentals_and_breakout_per_ticker():
+    p = advisor._prompt(_evidence())
+    held, cands = p.split("[MÃ ỨNG VIÊN MUA MỚI]")
+    assert "fa" in held.split("- BBB")[0] and "sc" in cands

@@ -238,10 +238,19 @@ def compute_risk(positions: list[dict], cash: dict, betas: dict[str, float],
 
 def gather_evidence(user_id: str) -> dict:
     """Raises ValueError for an empty portfolio. No LLM call."""
-    from agents.intents import closing_commentary, technical
+    return gather_evidence_for(ledger.get_positions(user_id), ledger.get_cash(user_id), user_id)
 
-    positions = ledger.get_positions(user_id)
-    cash = ledger.get_cash(user_id)
+
+def risk_for(positions: list[dict], cash: dict) -> dict:
+    """compute_risk with betas and volatility percentiles read from the DB."""
+    held = sorted(p["ticker"] for p in positions)
+    return compute_risk(positions, cash, _betas(held), _vol_percentiles(held, _universe_stats()))
+
+
+def gather_evidence_for(positions: list[dict], cash: dict, user_id: str = "external") -> dict:
+    """Same as gather_evidence for positions/cash supplied by the caller (shape of ledger.get_positions/get_cash)."""
+    from agents.intents import breakout, closing_commentary, fundamentals, technical
+
     if not positions and cash["cash"] <= 0:
         raise ValueError(f"portfolio of {user_id} is empty (no holdings, no cash)")
     held = sorted(p["ticker"] for p in positions)
@@ -256,26 +265,30 @@ def gather_evidence(user_id: str) -> dict:
     cand_tickers = [c["ticker"] for c in candidates]
     subjects = held + cand_tickers
 
-    def _tech(t: str) -> str:
+    def _safe(gather, label: str, t: str) -> str:
         try:
-            return technical.gather_data(t, "")
+            return gather(t, "")
         except Exception as exc:
-            return f"[KỸ THUẬT {t}] lỗi: {exc}"
+            return f"[{label} {t}] lỗi: {exc}"
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         market_f = pool.submit(closing_commentary.gather_data, None, "")
-        tech_f = {t: pool.submit(_tech, t) for t in subjects}
+        tech_f = {t: pool.submit(_safe, technical.gather_data, "KỸ THUẬT", t) for t in subjects}
+        fund_f = {t: pool.submit(_safe, fundamentals.gather_data, "CƠ BẢN", t) for t in subjects}
+        sig_f = {t: pool.submit(_safe, breakout.gather_data, "BREAKOUT", t) for t in subjects}
         try:
             market = market_f.result()
         except Exception as exc:
             market = f"[THỊ TRƯỜNG] không lấy được dữ liệu: {exc}"
         technical_text = {t: f.result() for t, f in tech_f.items()}
+        fundamentals_text = {t: f.result() for t, f in fund_f.items()}
+        signals_text = {t: f.result() for t, f in sig_f.items()}
 
     news = fetch_news(subjects)
     flows = {t: flows_all[t] for t in subjects if t in flows_all} or _foreign_net(subjects)
     return {
         "user_id": user_id, "as_of": cash["as_of"], "positions": positions, "cash": cash,
         "candidates": candidates, "market": market, "market_news": fetch_market_news(),
-        "technical": technical_text, "news": news, "foreign_flows": flows,
+        "technical": technical_text, "fundamentals": fundamentals_text, "signals": signals_text, "news": news, "foreign_flows": flows,
         "risk": compute_risk(positions, cash, _betas(held), _vol_percentiles(held, universe)),
     }

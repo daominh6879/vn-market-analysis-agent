@@ -15,12 +15,17 @@ import re
 from portfolio import ledger
 from portfolio.evidence import (
     BETA_HIGH, CASH_HIGH_PCT, CASH_LOW_PCT, HIGH_VOL_PCT, MAX_TICKER_WEIGHT, SECTOR_PREFERRED_MAX, gather_evidence,
+    gather_evidence_for,
 )
 
 # ── constants ─────────────────────────────────────────────────────────────────
 CUT_LOSS_PCT = -8.0              # BUY_MORE is blocked on a holding at or below this unrealized P/L (no averaging down)
 PER_TRADE_CASH_PCT = 0.10        # one buy uses at most this share of available cash
 TAKE_PROFIT_FRACTION = 0.5       # TAKE_PROFIT sells this share of the sellable quantity (lot-rounded)
+DEFAULT_STOP_PCT = 7.0           # buy without a valid AI stop: stop = price x (1 - 7%), levels_source "default"
+MIN_STOP_PCT = 2.0               # an AI stop must sit 2%..30% below the price (outside -> wrong unit or no real level)
+MAX_STOP_PCT = 30.0
+MAX_TARGET_MULT = 2.0            # an AI target must be above the price and at most 2x it
 LOT = ledger.LOT_SIZE
 HOLDING_ACTIONS = ("BUY_MORE", "HOLD", "TAKE_PROFIT", "CUT_LOSS")
 CANDIDATE_ACTIONS = ("BUY_NEW", "SKIP")
@@ -46,12 +51,15 @@ FLAG_VI = {
 # ── prompt ────────────────────────────────────────────────────────────────────
 
 _SYSTEM = (
-    "Bạn là chuyên viên tư vấn đầu tư chứng khoán Việt Nam. Bạn nhận dữ liệu thị trường, kỹ thuật, dòng tiền khối ngoại "
+    "Bạn là chuyên viên tư vấn đầu tư chứng khoán Việt Nam. Bạn nhận dữ liệu thị trường, kỹ thuật, cơ bản/định giá, tín hiệu "
+    "breakout, dòng tiền khối ngoại "
     "và tin tức của từng mã trong danh mục cùng vài mã ứng viên mua mới; nhiệm vụ của bạn là PHÁN ĐOÁN và đưa ra khuyến nghị "
     "cho từng mã. Chỉ dùng dữ liệu được cung cấp: không bịa tin tức, số liệu hay nguyên nhân. Mỗi lý do phải dẫn một con số "
     "trong dữ liệu hoặc một tin (ghi id vào cited_news_ids, KHÔNG viết 'id=' trong câu chữ). Mã không có tin trong dữ liệu thì không được nêu tin tức. "
-    "Cân nhắc cả xu hướng kỹ thuật, dòng tiền, tin tức và mức lãi/lỗ hiện tại; khi bằng chứng mâu thuẫn hay yếu, chọn GIỮ/BỎ QUA "
-    "và nói rõ vì sao. Không đề xuất khối lượng hay giá mục tiêu — hệ thống tự tính khối lượng. Đây là khuyến nghị chưa thực hiện, "
+    "Cân nhắc cả xu hướng kỹ thuật, định giá và tăng trưởng so với ngành, dòng tiền, tin tức và mức lãi/lỗ hiện tại; khi bằng chứng mâu thuẫn hay yếu, chọn GIỮ/BỎ QUA "
+    "và nói rõ vì sao. Không đề xuất khối lượng — hệ thống tự tính. Với BUY_MORE/BUY_NEW, đề xuất stop_price (dưới giá) và "
+    "target_price (trên giá) bằng VND cùng đơn vị với giá của mã, chỉ lấy từ mức có trong dữ liệu (hỗ trợ/kháng cự, MA, "
+    "Fibonacci, đáy/đỉnh gần đây, pivot/SL/TP của tín hiệu breakout) và ghi căn cứ vào levels_basis; không có căn cứ thì để null. Đây là khuyến nghị chưa thực hiện, "
     "không dùng thì quá khứ. Viết tiếng Việt tự nhiên, không chép tên biến. "
     "Chỉ trả về MỘT đối tượng JSON hợp lệ, không có văn bản nào khác, không bọc markdown."
 )
@@ -83,13 +91,15 @@ def _prompt(ev: dict) -> str:
                   + (f" — VƯỢT TRẦN {MAX_TICKER_WEIGHT:.0%} NAV ({p['market_value'] / ev['cash']['nav']:.1%}): "
                      "phải cân nhắc chốt lời/cắt lỗ bớt hoặc giải thích rõ vì sao vẫn giữ"
                      if ev["cash"]["nav"] and (p["market_value"] or 0) / ev["cash"]["nav"] > MAX_TICKER_WEIGHT else ""),
-                  ev["technical"].get(t, ""), _fmt_flow(ev["foreign_flows"].get(t)), _fmt_news(ev["news"].get(t, []))]
+                  ev["technical"].get(t, ""), ev["fundamentals"].get(t, ""), ev["signals"].get(t, ""),
+                  _fmt_flow(ev["foreign_flows"].get(t)), _fmt_news(ev["news"].get(t, []))]
     lines += ["", "[MÃ ỨNG VIÊN MUA MỚI] (action cho phép: BUY_NEW, SKIP)"]
     for c in ev["candidates"]:
         t = c["ticker"]
         lines += [f"- {t} ({c['sector']}): giá {c['price']:,.0f}, tăng {c['ret_20']:+.1%}/20 phiên, "
                   f"GTGD TB20 {c['avg_value_bn']:,.0f} tỷ, ngành đang chiếm {c['sector_nav_pct']:.0%} NAV",
-                  ev["technical"].get(t, ""), _fmt_flow(ev["foreign_flows"].get(t)), _fmt_news(ev["news"].get(t, []))]
+                  ev["technical"].get(t, ""), ev["fundamentals"].get(t, ""), ev["signals"].get(t, ""),
+                  _fmt_flow(ev["foreign_flows"].get(t)), _fmt_news(ev["news"].get(t, []))]
     if not ev["candidates"]:
         lines.append("(không có ứng viên)")
     lines += ["", "[RỦI RO DANH MỤC]",
@@ -102,7 +112,9 @@ def _prompt(ev: dict) -> str:
     schema = {
         "market": "2-3 câu về bối cảnh thị trường, dẫn số liệu/tin",
         "verdicts": [{"ticker": "MÃ", "action": "một action cho phép", "confidence": "0..1",
-                      "reasons": ["lý do có dẫn số liệu"], "risks": ["rủi ro chính"], "cited_news_ids": [0]}],
+                      "reasons": ["lý do có dẫn số liệu"], "risks": ["rủi ro chính"], "cited_news_ids": [0],
+                      "stop_price": "chỉ BUY_MORE/BUY_NEW: số VND hoặc null", "target_price": "số VND hoặc null",
+                      "levels_basis": "căn cứ của stop/target, dẫn số liệu; hoặc null"}],
         "ideas_summary": "2-3 câu về các ứng viên mua mới",
         "risk_summary": "2-3 câu về rủi ro danh mục",
     }
@@ -127,8 +139,25 @@ def _extract_json(text: str) -> dict | None:
     return obj if isinstance(obj, dict) else None
 
 
+_NEWS_ID_RE = re.compile(r"\s*\((?:\s*(?:news[_ ]?)?id\s*[=:]\s*\d+\s*,?)+\)|\s*\b(?:news[_ ]?)?id\s*[=:]\s*\d+", re.IGNORECASE)
+
+
+def _strip_ids(s: str) -> str:
+    """Drop inline news ids ("(id=171436, id=171437)") the model writes despite the prompt; citations are rendered
+    from cited_news_ids instead."""
+    return _NEWS_ID_RE.sub("", s).strip()
+
+
 def _clean_list(v) -> list[str]:
-    return [str(x).strip() for x in v if str(x).strip()] if isinstance(v, list) else []
+    return [s for s in (_strip_ids(str(x)) for x in v) if s] if isinstance(v, list) else []
+
+
+def _price(v) -> float | None:
+    try:
+        p = float(str(v).replace(",", "")) if v is not None else None
+    except ValueError:
+        return None
+    return p if p and p > 0 else None
 
 
 def parse_verdicts(text: str, holdings: list[str], candidates: list[str], valid_news: dict[str, set[int]]) -> tuple[dict, dict[str, dict]]:
@@ -152,9 +181,13 @@ def parse_verdicts(text: str, holdings: list[str], candidates: list[str], valid_
         except (TypeError, ValueError):
             conf = 0.5
         ids = [i for i in (v.get("cited_news_ids") or []) if isinstance(i, int) and i in valid_news.get(t, set())]
+        buy = action in ("BUY_MORE", "BUY_NEW")
         out[t] = {"ticker": t, "action": action, "confidence": conf, "reasons": reasons,
-                  "risks": _clean_list(v.get("risks")), "cited_news_ids": ids}
-    summaries = {k: str(obj.get(k) or "").strip() for k in ("market", "ideas_summary", "risk_summary")}
+                  "risks": _clean_list(v.get("risks")), "cited_news_ids": ids,
+                  "stop_price": _price(v.get("stop_price")) if buy else None,
+                  "target_price": _price(v.get("target_price")) if buy else None,
+                  "levels_basis": (_strip_ids(str(v.get("levels_basis") or "")) or None) if buy else None}
+    summaries = {k: _strip_ids(str(obj.get(k) or "")) for k in ("market", "ideas_summary", "risk_summary")}
     return summaries, out
 
 
@@ -165,6 +198,18 @@ def size_lots(budget: float, price: float) -> int:
     if budget <= 0 or price <= 0:
         return 0
     return int(math.floor(budget / (price * (1 + ledger.fee_pct())) / LOT)) * LOT
+
+
+def buy_levels(v: dict, price: float) -> dict:
+    """Validated stop/target for a buy. An AI stop outside 2%..30% below the price -> default stop (7% below);
+    a target not in (price, 2x price] -> none."""
+    stop, target = v.get("stop_price"), v.get("target_price")
+    ok_stop = stop is not None and price * (1 - MAX_STOP_PCT / 100) <= stop < price * (1 - MIN_STOP_PCT / 100)
+    ok_target = target is not None and price < target <= price * MAX_TARGET_MULT
+    return {"stop_price": stop if ok_stop else round(price * (1 - DEFAULT_STOP_PCT / 100)),
+            "target_price": target if ok_target else None,
+            "levels_source": "ai" if ok_stop else "default",
+            "levels_basis": v.get("levels_basis") if ok_stop else None}      # basis describes the AI stop
 
 
 def apply_limits(verdicts: dict[str, dict], ev: dict) -> dict:
@@ -195,7 +240,8 @@ def apply_limits(verdicts: dict[str, dict], ev: dict) -> dict:
                         "confidence": v["confidence"] if v else 0.0, "reasons": v["reasons"] if v else [],
                         "risks": v["risks"] if v else [], "cited_news_ids": v["cited_news_ids"] if v else [],
                         "limit_codes": codes, "unrealized_pct": pnl,
-                        "weight_pct": (p["market_value"] or 0) / nav * 100 if nav else 0.0})
+                        "weight_pct": (p["market_value"] or 0) / nav * 100 if nav else 0.0,
+                        **(buy_levels(v, price) if action == "BUY_MORE" else {})})
     for c in ev["candidates"]:
         v = verdicts.get(c["ticker"])
         if not v or v["action"] != "BUY_NEW":
@@ -206,7 +252,8 @@ def apply_limits(verdicts: dict[str, dict], ev: dict) -> dict:
         cash_left -= qty * c["price"] * (1 + ledger.fee_pct())
         ideas.append({"ticker": c["ticker"], "action": "BUY_NEW", "quantity": qty, "price_ref": c["price"],
                       "sector": c["sector"], "avg_value_bn": c["avg_value_bn"], "confidence": v["confidence"],
-                      "reasons": v["reasons"], "risks": v["risks"], "cited_news_ids": v["cited_news_ids"]})
+                      "reasons": v["reasons"], "risks": v["risks"], "cited_news_ids": v["cited_news_ids"],
+                      **buy_levels(v, c["price"])})
     return {"actions": actions, "new_ideas": ideas, "cash_after_pct": cash_left / nav * 100 if nav else 0.0}
 
 
@@ -228,6 +275,11 @@ def _bullets(item: dict, idx: dict[int, dict]) -> list[str]:
     out = [f"- **{item['ticker']}** — {ACTION_VI[item['action']]} (độ tin cậy {item['confidence']:.0%})"]
     out += [f"  - {r}" for r in item["reasons"]]
     out += [f"  - Rủi ro: {r}" for r in item["risks"]]
+    if item.get("stop_price"):
+        target = f", mục tiêu {item['target_price']:,.0f}" if item.get("target_price") else ", chưa có mục tiêu"
+        basis = (f" — {item['levels_basis']}" if item.get("levels_basis")
+                 else f" — stop mặc định {DEFAULT_STOP_PCT:g}% dưới giá" if item["levels_source"] == "default" else "")
+        out.append(f"  - Kế hoạch: cắt lỗ {item['stop_price']:,.0f}{target}{basis}")
     out += [f"  - Dẫn tin: [{a['title']}]({a['url']}) ({a['published_at']})" for a in _cited(item, idx)]
     out += [f"  - Giới hạn: {LIMIT_VI[c]}" for c in item.get("limit_codes", [])]
     return out
@@ -264,10 +316,18 @@ def _assemble(ev: dict, decided: dict, summ: dict) -> str:
 
 def advise(user_id: str) -> dict:
     """Full advice. Raises ValueError for an empty portfolio, RuntimeError if the LLM never returned usable JSON."""
+    return _advise(gather_evidence(user_id))
+
+
+def advise_for(positions: list[dict], cash: dict, user_id: str = "external") -> dict:
+    """advise() for positions/cash supplied by the caller (the separate portfolio app owns the ledger)."""
+    return _advise(gather_evidence_for(positions, cash, user_id))
+
+
+def _advise(ev: dict) -> dict:
     from agents.guardrails import disclaimer_for, scrub_internal
     from llm import Message, create_client
 
-    ev = gather_evidence(user_id)
     holdings = [p["ticker"] for p in ev["positions"]]
     cands = [c["ticker"] for c in ev["candidates"]]
     valid_news = {t: {a["id"] for a in ev["news"].get(t, [])} | {a["id"] for a in ev["market_news"]} for t in holdings + cands}
