@@ -413,7 +413,7 @@ from pipeline.assets_market_data import (
     securities_shares_job, stock_dividends_job, ratio_history_job, financials_quarterly_job, daily_snapshots_job,
     securities_shares_schedule, stock_dividends_schedule, stock_dividends_all_schedule,
     ratio_history_schedule, financials_quarterly_schedule, daily_snapshots_schedule,
-    data_bootstrap_sensor,
+    data_bootstrap_sensor, data_freshness_sensor,
 )
 from pipeline.assets_proprietary import (
     proprietary_flows_ingest, breakout_signals_daily, proprietary_flows_job, breakout_signals_job,
@@ -652,6 +652,6 @@ defs = Definitions(
                securities_shares_schedule, stock_dividends_schedule, stock_dividends_all_schedule,
                ratio_history_schedule, financials_quarterly_schedule, daily_snapshots_schedule,
                proprietary_flows_schedule, breakout_signals_schedule],
-    sensors=[minio_new_pdf_sensor, data_bootstrap_sensor],
+    sensors=[minio_new_pdf_sensor, data_bootstrap_sensor, data_freshness_sensor],
     asset_checks=[gated_mid_beats_ungated],
 )

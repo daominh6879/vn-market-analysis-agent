@@ -14,7 +14,8 @@ the next day instead of looping.
 """
 
 import sys
-from datetime import date
+import time
+from datetime import date, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
@@ -24,11 +25,13 @@ from dotenv import load_dotenv
 load_dotenv(ROOT / ".env")
 
 from dagster import (
-    AssetExecutionContext, Config, DefaultSensorStatus, DefaultScheduleStatus, RetryPolicy,
-    RunRequest, ScheduleDefinition, SkipReason, asset, define_asset_job, sensor,
+    AssetExecutionContext, Config, DagsterRunStatus, DefaultSensorStatus, DefaultScheduleStatus, RetryPolicy,
+    RunRequest, RunsFilter, ScheduleDefinition, SkipReason, asset, define_asset_job, sensor,
 )
 
-from pipeline.assets_market_brief import corporate_events_job
+from pipeline.assets_index import market_index_ingest_job
+from pipeline.assets_market_brief import corporate_events_job, foreign_flows_job
+from pipeline.assets_ohlcv import ohlcv_ingest_job
 from pipeline.assets_proprietary import breakout_signals_job, proprietary_flows_job
 from pipeline.assets_vnstock import vnstock_financials_job, vnstock_ratios_job
 
@@ -285,3 +288,64 @@ def data_bootstrap_sensor(context):
     except (Exception, SystemExit) as exc:
         return SkipReason(f"bootstrap check failed: {exc}")
     return requests or SkipReason("all market-data datasets already populated")
+
+
+# ── Freshness sensor: re-run the ingest of a daily dataset that misses the last finished session ──
+# Covers failed, cancelled or partial runs and missed schedules while the daemon was down (portfolio/freshness.py
+# decides what is stale). One request per job per hour while stale; vn-portfolio alerts if Dagster itself is down.
+
+_IN_PROGRESS = [DagsterRunStatus.QUEUED, DagsterRunStatus.NOT_STARTED, DagsterRunStatus.STARTING, DagsterRunStatus.STARTED]
+_STUCK_AFTER_S = 3600            # an "in progress" run older than this belongs to a killed process; ignore it
+
+
+def _freshness_run_config(job: str, latest: str | None, expected: date) -> dict:
+    gap = (expected - date.fromisoformat(latest)).days if latest else 365
+    if job == "ohlcv_ingest_job":
+        return {"ops": {"ohlcv_daily_ingest": {"config": {"days_back": min(max(gap + 3, 5), 365)}}}}
+    if job == "market_index_ingest_job":
+        return {"ops": {"market_index_daily_ingest": {"config": {"days": max(gap + 5, 30)}}}}
+    return {}
+
+
+def freshness_requests(status: dict, today: date, slot: str) -> list[RunRequest]:
+    """Run requests for the stale datasets of a portfolio.freshness status. `slot` (e.g. the hour) goes into the run key
+    so a dataset that stays stale is retried once per slot. Pure."""
+    expected = date.fromisoformat(status["expected_session"])
+    configs: dict[str, dict] = {}
+    for label, d in status["datasets"].items():
+        if d["ok"]:
+            continue
+        # foreign_flows_job reads the live price board (today only); past sessions come with the OHLCV ingest (Fireant)
+        job = "ohlcv_ingest_job" if label == "foreign_flows" and expected < today else d["job"]
+        configs.setdefault(job, _freshness_run_config(job, d["latest"], expected))
+    return [RunRequest(run_key=f"freshness-{job}-{expected}-{slot}", job_name=job, run_config=cfg,
+                       tags={"freshness": expected.isoformat()}) for job, cfg in configs.items()]
+
+
+def _in_progress(instance, job: str) -> bool:
+    recs = instance.get_run_records(filters=RunsFilter(job_name=job, statuses=_IN_PROGRESS), limit=5)
+    return any(time.time() - r.create_timestamp.timestamp() < _STUCK_AFTER_S for r in recs)
+
+
+@sensor(
+    jobs=[ohlcv_ingest_job, market_index_ingest_job, foreign_flows_job],
+    name="data_freshness_sensor",
+    minimum_interval_seconds=900,
+    default_status=DefaultSensorStatus.RUNNING,
+    description="Re-runs the ingest of ohlcv_daily / market_index_daily / foreign_flows when they miss or only partly cover "
+                "the last finished session (hourly while stale).",
+)
+def data_freshness_sensor(context):
+    from portfolio.freshness import VN_TZ, check
+
+    try:
+        status = check()
+    except (Exception, SystemExit) as exc:
+        return SkipReason(f"freshness check failed: {exc}")
+    if status["fresh"]:
+        return SkipReason(f"daily data complete for {status['expected_session']}")
+    now = datetime.now(VN_TZ)
+    requests = [r for r in freshness_requests(status, now.date(), now.strftime("%Y%m%d%H"))
+                if not _in_progress(context.instance, r.job_name)]
+    context.log.warning("stale: " + "; ".join(status["problems"]))
+    return requests or SkipReason("stale, re-run already in progress: " + "; ".join(status["problems"]))

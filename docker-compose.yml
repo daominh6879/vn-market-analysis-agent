@@ -68,6 +68,39 @@ services:
       - redis
     restart: unless-stopped
 
+  # Dagster: schedules + sensors (daemon) and UI (webserver), one image, storage in Postgres db `dagster`
+  # (create once: docker exec postgres createdb -U admin dagster). See infra/dagster/dagster.yaml.
+  dagster-daemon: &dagster
+    build:
+      context: .
+      dockerfile: Dockerfile.dagster
+    image: ai-engineer-dagster
+    container_name: dagster-daemon
+    command: ["dagster-daemon", "run", "-f", "pipeline/assets.py", "-d", "/app"]
+    env_file: .env
+    environment:
+      DAGSTER_HOME: /opt/dagster/home      # .env has the host path for `dagster dev`
+      POSTGRES_HOST: postgres
+      QDRANT_HOST: qdrant
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: http://minio:9000
+      OLLAMA_BASE_URL: ${DOCKER_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - postgres
+      - qdrant
+      - redis
+      - minio
+    restart: unless-stopped
+
+  dagster-webserver:
+    <<: *dagster
+    container_name: dagster-webserver
+    command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-f", "pipeline/assets.py", "-d", "/app"]
+    ports:
+      - "127.0.0.1:3000:3000"
+
   ui:
     build: ./ui/react
     container_name: ui

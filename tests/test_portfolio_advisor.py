@@ -106,6 +106,28 @@ def test_take_profit_sells_half_in_lots():
     assert act(r, "AAA")["quantity"] == 100
 
 
+def test_reduce_sells_half_in_lots_even_at_a_loss():
+    r = apply_limits({"AAA": verdict("AAA", "REDUCE")}, ev([pos("AAA", qty=1000, sellable=800, pnl=-5)]))
+    assert act(r, "AAA")["action"] == "REDUCE" and act(r, "AAA")["quantity"] == 400
+    r = apply_limits({"AAA": verdict("AAA", "REDUCE")}, ev([pos("AAA", sellable=0)]))
+    assert act(r, "AAA")["action"] == "HOLD" and "t2_not_sellable" in act(r, "AAA")["limit_codes"]
+
+
+def test_reduce_is_a_holding_action_only():
+    text = llm_json([{"ticker": "AAA", "action": "REDUCE", "confidence": 0.6, "reasons": ["giá dưới MA200"]},
+                     {"ticker": "CCC", "action": "REDUCE", "confidence": 0.6, "reasons": ["x"]}])
+    _, out = parse_verdicts(text, ["AAA"], ["CCC"], V)
+    assert out["AAA"]["action"] == "REDUCE" and "CCC" not in out
+
+
+def test_prompt_says_cost_basis_is_no_reason_to_hold_and_marks_watchlist():
+    e = _evidence()
+    e["candidates"] = [{**cand("CCC"), "watch": True}]
+    p = advisor._prompt(e)
+    assert "REDUCE" in p and "DANH SÁCH QUAN TÂM" in p
+    assert "KHÔNG phải lý do để giữ" in advisor._SYSTEM
+
+
 def test_sell_with_nothing_sellable_downgrades_to_hold():
     r = apply_limits({"AAA": verdict("AAA", "CUT_LOSS")}, ev([pos("AAA", sellable=0)]))
     a = act(r, "AAA")
@@ -231,7 +253,7 @@ def _run(monkeypatch, *texts):
             calls.append(1)
             return _Resp(texts[min(len(calls), len(texts)) - 1])
 
-    monkeypatch.setattr(advisor, "gather_evidence_for", lambda ps, cash, uid: _evidence())
+    monkeypatch.setattr(advisor, "gather_evidence_for", lambda ps, cash, uid, watchlist: _evidence())
     monkeypatch.setattr("llm.create_client", lambda: Client())
     return advisor.advise_for([], {"cash": 0}, "u1"), calls
 
@@ -275,3 +297,39 @@ def test_prompt_includes_fundamentals_and_breakout_per_ticker():
     p = advisor._prompt(_evidence())
     held, cands = p.split("[MÃ ỨNG VIÊN MUA MỚI]")
     assert "fa" in held.split("- BBB")[0] and "sc" in cands
+
+
+def test_parse_strips_vietnamese_inline_news_refs():
+    txt = llm_json([{"ticker": "AAA", "action": "HOLD", "cited_news_ids": [1],
+                     "reasons": ["Có khuyến nghị mua mục tiêu 118,100 đồng (tin 272483).", "MB giảm lãi suất (tin 1, 2) hỗ trợ."]}])
+    _, out = parse_verdicts(txt, ["AAA"], [], V)
+    assert out["AAA"]["reasons"] == ["Có khuyến nghị mua mục tiêu 118,100 đồng.", "MB giảm lãi suất hỗ trợ."]
+
+
+def test_cited_news_deduplicated_by_title():
+    idx = {1: {"title": "HPG: báo cáo giao dịch", "url": "a", "published_at": "d"},
+           2: {"title": "HPG: báo cáo giao dịch", "url": "b", "published_at": "d"},
+           3: {"title": "khác", "url": "c", "published_at": "d"}}
+    assert [a["id"] for a in advisor._cited({"cited_news_ids": [1, 2, 3]}, idx)] == [1, 3]
+
+
+def test_prompt_and_report_state_data_and_price_sessions(monkeypatch):
+    e = {**_evidence(), "data_session": "2026-10-21", "price_session": "2026-10-22"}
+    p = advisor._prompt(e)
+    assert "phiên đã đóng 2026-10-21" in p and "tính đến phiên 2026-10-22" in p
+    assert "Mọi số liệu tính đến phiên 2026-10-21." in advisor._prompt({**e, "price_session": "2026-10-21"})
+    monkeypatch.setattr(advisor, "gather_evidence_for", lambda ps, cash, uid, watchlist: e)
+    monkeypatch.setattr("llm.create_client", lambda: type("C", (), {"generate": lambda self, *a, **k: _Resp(GOOD)})())
+    out = advisor.advise_for([], {"cash": 0}, "u1")
+    assert "Dữ liệu thị trường: phiên 2026-10-21 · giá các mã: phiên 2026-10-22" in out["report_md"]
+    assert out["data_session"] == "2026-10-21" and out["price_session"] == "2026-10-22"
+
+
+def test_report_without_holdings_has_no_none_line(monkeypatch):
+    e = _evidence()
+    cash = {"cash": NAV, "nav": NAV, "total_return_pct": 0.0}
+    e.update(positions=[], cash=cash, risk=compute_risk([], cash, {}))
+    monkeypatch.setattr(advisor, "gather_evidence_for", lambda ps, cash, uid, watchlist: e)
+    monkeypatch.setattr("llm.create_client", lambda: type("C", (), {"generate": lambda self, *a, **k: _Resp(GOOD)})())
+    md = advisor.advise_for([], {"cash": 0}, "u1")["report_md"]
+    assert "None" not in md and "Chưa nắm giữ cổ phiếu nào" in md

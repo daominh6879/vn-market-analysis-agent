@@ -36,13 +36,14 @@ def test_unconfigured_key_fails_closed(client, monkeypatch):
 def test_advise_passes_positions_and_cash_through(client, monkeypatch):
     seen = {}
 
-    def fake(positions, cash, user_id):
-        seen.update(positions=positions, cash=cash, user_id=user_id)
+    def fake(positions, cash, user_id, watchlist):
+        seen.update(positions=positions, cash=cash, user_id=user_id, watchlist=watchlist)
         return {"report_md": "ok", "actions": [], "new_ideas": [], "risk": {}, "as_of": cash["as_of"], "llm_missing": []}
 
     monkeypatch.setattr(api_advisor.advisor, "advise_for", fake)
-    r = client.post("/advisor/advise", json={**BODY, "user_id": "t1"}, headers={"X-Internal-Key": KEY})
+    r = client.post("/advisor/advise", json={**BODY, "user_id": "t1", "watchlist": ["FPT"]}, headers={"X-Internal-Key": KEY})
     assert r.status_code == 200 and r.json()["as_of"] == "2026-10-20" and seen["user_id"] == "t1"
+    assert seen["watchlist"] == ["FPT"]
     assert seen["positions"][0]["ticker"] == "HPG" and seen["positions"][0]["realized_pnl"] == 0.0
     assert seen["cash"]["nav"] == 100_000_000.0
 
@@ -99,3 +100,27 @@ def test_ask_creates_then_continues_own_conversation(client, monkeypatch):
     assert r.status_code == 200 and turns[1]["is_first_turn"] is False
     r = client.post("/advisor/ask", json={"user_id": "other", "message": "x", "conversation_id": "c1"}, headers=h)
     assert r.status_code == 404 and len(turns) == 2      # someone else's conversation is not continued
+
+
+def test_advise_stale_data_is_503_with_code_and_freshness_endpoint(client, monkeypatch):
+    from portfolio import freshness
+    status = {"expected_session": "2026-10-21", "fresh": False, "datasets": {},
+              "problems": ["ohlcv_daily phiên 2026-10-21 chỉ có 270/391 dòng (cần ≥ 90%)"]}
+
+    def stale(*_):
+        raise freshness.StaleDataError(status)
+
+    h = {"X-Internal-Key": KEY}
+    monkeypatch.setattr(api_advisor.advisor, "advise_for", stale)
+    r = client.post("/advisor/advise", json=BODY, headers=h)
+    assert r.status_code == 503 and r.json()["detail"].startswith("stale_data: dữ liệu thị trường chưa cập nhật: ohlcv_daily")
+    monkeypatch.setattr(api_advisor.freshness, "check", lambda: status)
+    assert client.post("/advisor/freshness", headers=h).json() == status
+    assert client.post("/advisor/freshness").status_code == 401
+
+
+def test_market_stats_delegates(client, monkeypatch):
+    monkeypatch.setattr(api_advisor.evidence, "market_stats", lambda tickers: {"tickers": {t: {} for t in tickers}})
+    r = client.post("/advisor/market-stats", json={"tickers": ["HPG"]}, headers={"X-Internal-Key": KEY})
+    assert r.status_code == 200 and r.json() == {"tickers": {"HPG": {}}}
+    assert client.post("/advisor/market-stats", json={"tickers": ["HPG"]}).status_code == 401

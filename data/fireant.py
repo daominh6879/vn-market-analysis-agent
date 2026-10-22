@@ -100,7 +100,7 @@ def fetch_ticker_news(ticker: str, max_articles: int = 10) -> list[dict]:
     Fetch news articles for a ticker from FireAnt.
 
     Uses GET /symbols/{ticker}/posts?type=1 (news only, not social posts).
-    Returns list[dict] with keys: title, url, source, published_at, description.
+    Returns list[dict] with keys: title, url (FireAnt article page), post_id, source, published_at, description.
     Compatible with cafef_rss.fetch_ticker_news() output format.
     """
     try:
@@ -168,10 +168,13 @@ def fetch_ticker_news(ticker: str, max_articles: int = 10) -> list[dict]:
         pub_iso = date_raw if date_raw else datetime.now(timezone.utc).isoformat()
 
         description = post.get("description") or ""
+        post_id = post.get("postID")
 
         articles.append({
             "title":        title,
-            "url":          source_url,  # source homepage (article URL not exposed by API)
+            # API has no article link; the FireAnt page is /bai-viet/<any slug>/<postID>
+            "url":          f"https://fireant.vn/bai-viet/tin/{post_id}" if post_id else source_url,
+            "post_id":      post_id,
             "source":       source_name,
             "published_at": pub_iso,
             "description":  description,

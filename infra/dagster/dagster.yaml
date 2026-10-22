@@ -1,0 +1,20 @@
+# Dagster instance for the dagster-daemon / dagster-webserver containers (docker-compose.yml), copied to $DAGSTER_HOME.
+# Run/event/schedule storage in Postgres (database `dagster`, same server as ragdb): two processes share it safely.
+storage:
+  postgres:
+    postgres_db:
+      username: {env: POSTGRES_USER}
+      password: {env: POSTGRES_PASSWORD}
+      hostname: {env: POSTGRES_HOST}
+      db_name: dagster
+      port: 5432
+
+# A run whose process died stays STARTED forever (seen 21/10: c5e40587). Fail runs stuck starting or running too long,
+# so data_freshness_sensor can launch a new one.
+run_monitoring:
+  enabled: true
+  start_timeout_seconds: 300
+  max_runtime_seconds: 14400
+
+telemetry:
+  enabled: false

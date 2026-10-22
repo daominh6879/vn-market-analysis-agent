@@ -13,7 +13,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
-from portfolio import advisor, evidence, ledger
+from portfolio import advisor, evidence, freshness, ledger
 
 
 def _check_key(x_internal_key: str = Header(default="")) -> None:
@@ -57,6 +57,7 @@ class PortfolioIn(BaseModel):
     positions: list[Position]
     cash: Cash
     user_id: str = "external"        # only used as the report title
+    watchlist: list[str] = []        # /advise only: judged as new-idea candidates first
 
 
 class ReferenceIn(BaseModel):
@@ -78,12 +79,30 @@ def risk(body: PortfolioIn):
     return evidence.risk_for(*_plain(body))
 
 
+class TickersIn(BaseModel):
+    tickers: list[str]
+
+
+@router.post("/market-stats")
+def market_stats(body: TickersIn):
+    """Volatility, MA50 trend, liquidity, foreign flows per ticker + VNINDEX vs MA50 — inputs for target weights."""
+    return evidence.market_stats(body.tickers)
+
+
+@router.post("/freshness")
+def data_freshness():
+    """{expected_session, fresh, datasets, problems, checked_at} — polled by vn-portfolio to alert on stale data."""
+    return freshness.check()
+
+
 @router.post("/advise")
 def advise(body: PortfolioIn):
     try:
-        return advisor.advise_for(*_plain(body), body.user_id)
+        return advisor.advise_for(*_plain(body), body.user_id, body.watchlist)
     except ValueError as e:                     # empty portfolio
         raise HTTPException(400, str(e))
+    except freshness.StaleDataError as e:       # no advice on data that misses the last finished session
+        raise HTTPException(503, f"stale_data: {e}")
     except RuntimeError as e:                   # LLM returned no usable verdicts
         raise HTTPException(503, str(e))
 

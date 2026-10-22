@@ -17,6 +17,7 @@ MAX_TICKER_WEIGHT = 0.25         # max share of NAV in one ticker
 SECTOR_PREFERRED_MAX = 0.30      # candidates prefer sectors under this NAV share; also the sector risk flag
 MIN_AVG_VALUE_BN = 5.0           # liquidity floor for candidates: 20-session average traded value, tỷ đồng
 CANDIDATE_COUNT = 5
+WATCHLIST_MAX = 5                # watchlist tickers judged per advice run (before the ranked candidates)
 CANDIDATE_RET20_RANGE = (0.0, 0.25)   # skip falling or already overheated names
 NEWS_SNIPPET_CHARS = 400
 BETA_SESSIONS = 120
@@ -189,6 +190,21 @@ def rank_candidates(universe: pd.DataFrame, flows: dict[str, dict], held: set[st
     return rows[:CANDIDATE_COUNT]
 
 
+def watch_candidates(universe: pd.DataFrame, flows: dict[str, dict], watchlist: list[str], held: set[str],
+                     sector_nav_pct: dict[str, float]) -> list[dict]:
+    """The user's watchlist as candidates (watch=True), without rank_candidates' filters: the user picked them.
+    Held tickers and tickers missing from the universe (inactive / < 15 sessions of data) are skipped. Pure."""
+    rows = []
+    for t in dict.fromkeys(str(t).upper() for t in watchlist):
+        if t in held or universe.empty or t not in universe.index:
+            continue
+        r = universe.loc[t]
+        rows.append({"ticker": t, "sector": r["sector"], "price": float(r["price"]), "avg_value_bn": float(r["avg_value_bn"]),
+                     "ret_20": float(r["ret_20"]), "foreign": flows.get(t), "sector_nav_pct": sector_nav_pct.get(r["sector"], 0.0),
+                     "watch": True})
+    return rows[:WATCHLIST_MAX]
+
+
 # ── risk ──────────────────────────────────────────────────────────────────────
 
 def compute_risk(positions: list[dict], cash: dict, betas: dict[str, float],
@@ -233,6 +249,45 @@ def compute_risk(positions: list[dict], cash: dict, betas: dict[str, float],
     return risk
 
 
+# ── one price per ticker ──────────────────────────────────────────────────────
+
+def _quote(ticker: str) -> tuple[float, str] | None:
+    """(last close VND, its session date) from the same DB-first/live-fallback OHLCV source technical.gather_data uses,
+    so the price line and the technical block of a ticker show the same price."""
+    from tools.price import get_historical_ohlcv
+    r = get_historical_ohlcv(ticker, days=5)
+    if r.status != "ok" or r.data is None or r.data.empty:
+        return None
+    last = r.data.iloc[-1]
+    return float(last["close"]), str(last["time"])[:10]
+
+
+def _quotes(tickers: list[str]) -> dict[str, tuple[float, str]]:
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        got = dict(zip(tickers, pool.map(_quote, tickers)))
+    return {t: q for t, q in got.items() if q}
+
+
+def reprice(positions: list[dict], cash: dict, prices: dict[str, float]) -> tuple[list[dict], dict]:
+    """Positions/cash revalued at `prices` (VND); a ticker without a price keeps the caller's. Pure."""
+    out = []
+    for p in positions:
+        price = prices.get(p["ticker"])
+        if price is None:
+            out.append(dict(p))
+            continue
+        value, cost = p["quantity"] * price, p["quantity"] * p["avg_cost"]
+        out.append({**p, "last_price": price, "market_value": value, "unrealized_pnl": value - cost,
+                    "unrealized_pct": (value / cost - 1) * 100 if cost else None})
+    mv = sum(p["market_value"] or 0 for p in out)
+    for p in out:
+        p["weight"] = (p["market_value"] or 0) / mv if mv else 0.0
+    nav = cash["cash"] + mv
+    net = cash.get("total_deposited", 0.0) - cash.get("total_withdrawn", 0.0)
+    return out, {**cash, "market_value": mv, "nav": nav,
+                 "total_return_pct": (nav / net - 1) * 100 if net > 0 else cash.get("total_return_pct")}
+
+
 # ── entry point ───────────────────────────────────────────────────────────────
 
 def risk_for(positions: list[dict], cash: dict) -> dict:
@@ -241,13 +296,21 @@ def risk_for(positions: list[dict], cash: dict) -> dict:
     return compute_risk(positions, cash, _betas(held), _vol_percentiles(held, _universe_stats()))
 
 
-def gather_evidence_for(positions: list[dict], cash: dict, user_id: str = "external") -> dict:
-    """Evidence for positions/cash supplied by the caller. Raises ValueError for an empty portfolio. No LLM call."""
+def gather_evidence_for(positions: list[dict], cash: dict, user_id: str = "external",
+                        watchlist: list[str] | None = None) -> dict:
+    """Evidence for positions/cash supplied by the caller; watchlist tickers come first among the candidates.
+    Holdings and candidates are priced from the same OHLCV source as their technical block (positions/NAV revalued).
+    Raises ValueError for an empty portfolio, freshness.StaleDataError when the daily data misses the last finished
+    session. No LLM call."""
     from agents.intents import breakout, closing_commentary, fundamentals, technical
+    from portfolio.freshness import require_fresh
 
     if not positions and cash["cash"] <= 0:
         raise ValueError(f"portfolio of {user_id} is empty (no holdings, no cash)")
+    data_session = require_fresh()["expected_session"]
     held = sorted(p["ticker"] for p in positions)
+    quotes = _quotes(held)
+    positions, cash = reprice(positions, cash, {t: q[0] for t, q in quotes.items()})
 
     sector_nav_pct: dict[str, float] = {}
     for p in positions:
@@ -255,9 +318,13 @@ def gather_evidence_for(positions: list[dict], cash: dict, user_id: str = "exter
 
     universe = _universe_stats()
     flows_all = _foreign_net(sorted(universe.index)) if not universe.empty else {}
-    candidates = rank_candidates(universe, flows_all, set(held), sector_nav_pct)
+    watch = watch_candidates(universe, flows_all, watchlist or [], set(held), sector_nav_pct)
+    ranked = rank_candidates(universe, flows_all, set(held) | {c["ticker"] for c in watch}, sector_nav_pct)
+    candidates = watch + ranked[:max(0, CANDIDATE_COUNT - len(watch))]      # watchlist takes ranked slots: same prompt size
     cand_tickers = [c["ticker"] for c in candidates]
     subjects = held + cand_tickers
+    quotes.update(_quotes(cand_tickers))
+    candidates = [{**c, "price": quotes[c["ticker"]][0]} if c["ticker"] in quotes else c for c in candidates]
 
     def _safe(gather, label: str, t: str) -> str:
         try:
@@ -281,8 +348,72 @@ def gather_evidence_for(positions: list[dict], cash: dict, user_id: str = "exter
     news = fetch_news(subjects)
     flows = {t: flows_all[t] for t in subjects if t in flows_all} or _foreign_net(subjects)
     return {
-        "user_id": user_id, "as_of": cash["as_of"], "positions": positions, "cash": cash,
+        "user_id": user_id, "as_of": cash["as_of"], "data_session": data_session,
+        "price_session": max((q[1] for q in quotes.values()), default=data_session), "positions": positions, "cash": cash,
         "candidates": candidates, "market": market, "market_news": fetch_market_news(),
         "technical": technical_text, "fundamentals": fundamentals_text, "signals": signals_text, "news": news, "foreign_flows": flows,
         "risk": compute_risk(positions, cash, _betas(held), _vol_percentiles(held, universe)),
     }
+
+
+# ── market stats for target-weight suggestions (vn-portfolio /targets/suggest) ─────────────────────────────────────
+STATS_SESSIONS = 60              # daily-return volatility window
+MA_SESSIONS = 50
+MIN_RETURNS = 40                 # a ticker with fewer daily returns in the window gets no stats
+
+
+def ticker_stats(close: pd.DataFrame, value_bn: pd.DataFrame) -> dict[str, dict]:
+    """close: date x ticker closes (nghìn đồng); value_bn: date x ticker traded value (tỷ đồng). Pure.
+    -> {ticker: {price (VND), vol_60 (daily-return std), ma50 (VND), above_ma50, avg_value_bn (20 sessions)}}."""
+    rets = close.pct_change(fill_method=None).tail(STATS_SESSIONS)
+    out = {}
+    for t in close.columns:
+        r, c = rets[t].dropna(), close[t].dropna()
+        if len(r) < MIN_RETURNS or len(c) < MA_SESSIONS:
+            continue
+        price, ma = float(c.iloc[-1]) * 1000, float(c.tail(MA_SESSIONS).mean()) * 1000
+        v = value_bn[t].dropna().tail(20) if t in value_bn else pd.Series(dtype=float)
+        out[t] = {"price": price, "vol_60": float(r.std()), "ma50": ma, "above_ma50": price >= ma,
+                  "avg_value_bn": float(v.mean()) if len(v) else None}
+    return out
+
+
+def index_trend(closes: pd.Series) -> dict:
+    """VNINDEX close vs its MA50 (closes oldest first). Pure."""
+    c = closes.dropna()
+    if len(c) < MA_SESSIONS:
+        return {"close": float(c.iloc[-1]) if len(c) else None, "ma50": None, "above_ma50": None}
+    close, ma = float(c.iloc[-1]), float(c.tail(MA_SESSIONS).mean())
+    return {"close": close, "ma50": ma, "above_ma50": close >= ma}
+
+
+def market_stats(tickers: list[str]) -> dict:
+    """{as_of, index: {close, ma50, above_ma50}, tickers: {t: {price, vol_60, ma50, above_ma50, avg_value_bn, sector,
+    foreign_net_20d_bn}}} — the numbers vn-portfolio sizes target weights from. Unknown tickers are left out."""
+    from core.db import get_conn
+    tickers = sorted({t.upper() for t in tickers})
+    with get_conn() as conn:
+        px = pd.read_sql_query(
+            "SELECT ticker, date, close, volume FROM ohlcv_daily WHERE ticker = ANY(%(t)s) AND date >= "
+            "(SELECT (MAX(date) - %(d)s * INTERVAL '1 day')::date FROM ohlcv_daily)", conn,
+            params={"t": tickers, "d": int(STATS_SESSIONS * 1.7)})
+        idx = pd.read_sql_query("SELECT date, close FROM market_index_daily WHERE index_code = 'VNINDEX' "
+                                "ORDER BY date DESC LIMIT %(n)s", conn, params={"n": MA_SESSIONS})
+        sectors = pd.read_sql_query("SELECT ticker, sector FROM securities WHERE ticker = ANY(%(t)s)", conn,
+                                    params={"t": tickers}).set_index("ticker")["sector"]
+    stats: dict[str, dict] = {}
+    as_of = None
+    if not px.empty:
+        px["date"] = pd.to_datetime(px["date"])
+        close = px.pivot_table(index="date", columns="ticker", values="close").astype(float).sort_index()
+        value = (px.assign(v=px["close"].astype(float) * px["volume"].astype(float) / 1e6)
+                 .pivot_table(index="date", columns="ticker", values="v").sort_index())
+        stats = ticker_stats(close, value)
+        as_of = close.index[-1].date().isoformat()
+    flows = _foreign_net(sorted(stats))
+    for t, s in stats.items():
+        s["sector"] = sectors.get(t) or "Unknown"
+        s["foreign_net_20d_bn"] = flows.get(t, {}).get("net_20d_bn")
+    trend = index_trend(idx.sort_values("date")["close"].astype(float)) if not idx.empty else \
+        {"close": None, "ma50": None, "above_ma50": None}
+    return {"as_of": as_of, "index": trend, "tickers": stats}

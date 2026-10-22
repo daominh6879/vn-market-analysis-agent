@@ -59,3 +59,15 @@ Dự phòng khi VCI IQ lỗi: ngày 2026-10-14 `iq.vietcap.com.vn` nhận kết 
 - `tests/test_minio_pipeline.py` và `tests/test_pipeline.py::test_new_pdf_indexed` lỗi do MinIO; test router/memory/e2e dùng LLM thật lỗi do DeepSeek `402 Insufficient Balance` (xem BLOCKED.md).
 
 Repro: `pytest tests -m "not live" --ignore=tests/test_fetch_live.py`
+
+## Khối ngoại HOSE chậm → circuit breaker (2026-10-21)
+- Triệu chứng: run `ohlcv_ingest_job` bù tick 18:30 chạy 30–75 giây/mã (432 mã → ước tính vài giờ). Các run trước (12–16/10) mất 12–20 phút cho cả lượt.
+- Đo riêng 1 mã: giá (`vn.prices.history`) 0,6–2 giây; khối ngoại (`vn.market.foreign`) HPG 22 giây, VCB 121 giây. Log: `hose failed: transport error ReadTimeout` rồi `fallback: cafef answered after hose failed`. Endpoint HOSE timeout 20 giây × 4 lần thử (retries=3) + backoff.
+- Không đổi thứ tự sang CafeF trước: so HOSE với CafeF (FPT 06–21/10), CafeF làm tròn lô 100 (thiếu lô lẻ, lệch vài trăm cp/ngày) và thiếu một phần giao dịch thoả thuận — HOSE cộng `bigLot*`; ngày 14/10 CafeF thiếu 235.031 cp ở cả mua lẫn bán, có ngày ròng lệch tới 3,5 tỷ.
+- Sửa trong `../vnmarket`:
+  - `_core.py`: circuit breaker trong `Fallback` — nguồn có ≥ 3 lỗi liên tiếp (`Health` status `down`) bị bỏ qua `Config.breaker_cooldown` = 600 giây, sau đó gọi thử 1 lần; endpoint cuối trong `Fallback` không bao giờ bị bỏ qua; `breaker_cooldown=0` tắt.
+  - `sources/hose.py`: `foreign` timeout 10 giây (mặc định 20).
+  - `pytest tests/test_core.py` → 25 passed (2 test mới).
+- Đo thật 12 mã liên tiếp: 8 mã đầu 26–62 giây/mã (đến khi HOSE đủ 3 lỗi liên tiếp), sau đó 0,7–1,0 giây/mã. Run mới `c5e40587`: 291 mã trong 20 phút 17 giây (21:18:02–21:38:19, ~4,2 giây/mã gồm `time.sleep(1.1)`), 1 mã lỗi (`FC1` — chứng chỉ quỹ, không nguồn nào có nến). Sau run: `ohlcv_daily` có 267 mã ngày 20/10, 270 mã ngày 21/10; HPG 21/10 = 21,15.
+- Run bị dừng ở mã thứ 291 vì Claude Code tắt tiến trình nền `dagster dev` khi máy thiếu RAM — không phải lỗi của job. Các mã còn lại cập nhật ở run kế tiếp.
+- Docker: image API dùng `vendor/vnmarket` → cần đồng bộ lại từ `../vnmarket/src/vnmarket` khi build.

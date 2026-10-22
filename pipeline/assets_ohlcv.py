@@ -28,6 +28,9 @@ _VN30_FALLBACK: list[str] = [
 ]
 
 
+_MAX_FAILED_SHARE = 0.1          # more failed tickers than this share fails the run
+
+
 def _load_hose_tickers_from_db() -> list[str]:
     """Query securities table for HOSE tickers. Returns empty list on error."""
     try:
@@ -100,6 +103,8 @@ def ohlcv_daily_ingest(context: AssetExecutionContext, config: OhlcvIngestConfig
         context.log.warning(f"Failed tickers: {failed}")
 
     context.log.info(f"ohlcv_daily_ingest done: {total_rows} rows, {len(failed)} failed")
+    if len(failed) > _MAX_FAILED_SHARE * len(ticker_list):     # partial load -> fail so RetryPolicy / alerts fire
+        raise RuntimeError(f"ohlcv_daily_ingest: {len(failed)}/{len(ticker_list)} tickers failed")
     return {"total_rows": total_rows, "tickers": ticker_list, "failed": failed}
 
 

@@ -62,10 +62,17 @@ def fireant_news(context: AssetExecutionContext) -> dict:
                     posts = fetch_ticker_news(ticker, max_articles=20)
                     for p in posts:
                         title = p.get("title", "").strip()
-                        if not title:
+                        if not title or not p.get("post_id"):
                             continue
-                        # Use title hash as dedup key (no article URL exposed by FireAnt)
-                        url_key = f"https://fireant.vn/news/{hashlib.md5(title.encode()).hexdigest()}"
+                        url_key = p["url"]
+                        # Rows ingested before article URLs were known used a fake title-hash key:
+                        # point that row at the real article instead of inserting a duplicate.
+                        legacy_key = f"https://fireant.vn/news/{hashlib.md5(title.encode()).hexdigest()}"
+                        cur.execute(
+                            "UPDATE news_articles SET url = %s WHERE url = %s "
+                            "AND NOT EXISTS (SELECT 1 FROM news_articles WHERE url = %s)",
+                            (url_key, legacy_key, url_key),
+                        )
                         body = p.get("description", "") or title
                         source = f"fireant:{p.get('source', 'fireant')}"
                         pub = p.get("published_at", "")

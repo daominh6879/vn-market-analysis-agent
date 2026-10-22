@@ -6,7 +6,8 @@ from datetime import datetime
 import pandas as pd
 import pytest
 
-from portfolio.evidence import compute_risk, group_news, rank_candidates
+from portfolio.evidence import (compute_risk, group_news, index_trend, rank_candidates, reprice, ticker_stats,
+                                watch_candidates)
 
 D = datetime(2026, 10, 18, 9, 0)
 
@@ -55,6 +56,14 @@ def test_rank_candidates_empty_universe():
     assert rank_candidates(pd.DataFrame(), {}, set(), {}) == []
 
 
+def test_watch_candidates_skip_filters_but_not_held_or_unknown():
+    u = universe(FALL=(0.02, -0.10, 1, 10_000, "Bank"), HELD=(0.02, 0.05, 50, 10_000, "Bank"))
+    out = watch_candidates(u, {}, ["fall", "FALL", "HELD", "NOPE"], {"HELD"}, {"Bank": 0.2})
+    assert [c["ticker"] for c in out] == ["FALL"]
+    assert out[0]["watch"] is True and out[0]["foreign"] is None and out[0]["sector_nav_pct"] == 0.2
+    assert watch_candidates(pd.DataFrame(), {}, ["FALL"], set(), {}) == []
+
+
 def _pos(ticker, qty, price=20_000.0, sector="Bank"):
     return {"ticker": ticker, "market_value": qty * price, "sector": sector}
 
@@ -78,3 +87,37 @@ def test_high_vol_flag_only_for_top_decile_holdings():
     r = compute_risk([_pos("AAA", 1000), _pos("BBB", 1000)], cash, {}, vols)
     assert r["flags"].count("vol_high") == 1 and [h["ticker"] for h in r["high_vol"]] == ["AAA"]
     assert compute_risk([_pos("AAA", 1000)], cash, {})["high_vol"] == []
+
+
+def test_reprice_revalues_positions_weights_nav_and_return():
+    ps = [{"ticker": "HPG", "quantity": 500, "avg_cost": 27_040.5, "last_price": 20_550.0, "market_value": 10_275_000.0,
+           "unrealized_pct": -24.0, "weight": 0.65},
+          {"ticker": "VCB", "quantity": 100, "avg_cost": 60_090.0, "last_price": 56_200.0, "market_value": 5_620_000.0,
+           "unrealized_pct": -6.5, "weight": 0.35}]
+    cash = {"cash": 80_915_500.0, "nav": 96_810_500.0, "total_deposited": 100_000_000.0, "total_withdrawn": 0.0,
+            "market_value": 15_895_000.0, "total_return_pct": -3.19, "as_of": "2026-10-21"}
+    out, c = reprice(ps, cash, {"HPG": 21_150.0})
+    assert out[0]["last_price"] == 21_150.0 and out[0]["market_value"] == 10_575_000.0
+    assert out[0]["unrealized_pct"] == pytest.approx((21_150 / 27_040.5 - 1) * 100)          # -21.8%, not -24%
+    assert out[1]["last_price"] == 56_200.0                                                  # no quote: caller's price
+    assert c["market_value"] == 16_195_000.0 and c["nav"] == 97_110_500.0
+    assert c["total_return_pct"] == pytest.approx(-2.8895) and c["as_of"] == "2026-10-21"
+    assert sum(p["weight"] for p in out) == pytest.approx(1.0) and ps[0]["last_price"] == 20_550.0   # input untouched
+
+
+def test_ticker_stats_volatility_ma50_liquidity_and_short_history_left_out():
+    dates = pd.date_range("2026-07-01", periods=61, freq="B")
+    calm = [20.0 + (0.1 if i % 2 == 0 else 0.0) for i in range(61)]      # tiny swings, ends above its mean
+    wild = [20.0 * (1.1 if i % 2 else 1.0) for i in range(60)] + [18.0]   # 10% swings, ends below MA50
+    close = pd.DataFrame({"CALM": calm, "WILD": wild, "NEW": [None] * 40 + [10.0] * 21}, index=dates)
+    value = pd.DataFrame({"CALM": [5.0] * 61, "WILD": [50.0] * 61, "NEW": [1.0] * 61}, index=dates)
+    out = ticker_stats(close, value)
+    assert set(out) == {"CALM", "WILD"}
+    assert out["WILD"]["vol_60"] > 10 * out["CALM"]["vol_60"]
+    assert out["CALM"]["price"] == pytest.approx(20_100) and out["CALM"]["above_ma50"] is True
+    assert out["WILD"]["above_ma50"] is False and out["WILD"]["avg_value_bn"] == pytest.approx(50.0)
+
+
+def test_index_trend_needs_50_sessions():
+    assert index_trend(pd.Series([1000.0] * 49 + [900.0]))["above_ma50"] is False
+    assert index_trend(pd.Series([1000.0] * 10))["ma50"] is None

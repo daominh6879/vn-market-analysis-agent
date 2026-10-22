@@ -1,0 +1,18 @@
+FROM python:3.14-slim
+WORKDIR /app
+# CPU-only torch (default Linux wheel bundles ~4GB of CUDA libs, unused here)
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+COPY requirements.txt .
+# Same package set as Dockerfile.api plus dagster (vnmarket is vendored; pandas-ta installed --no-deps, see Dockerfile.api)
+RUN grep -viE "^(-e \.\./vnmarket|chainlit|streamlit|ragas|datasets|chromadb|pandas-ta|langchain-chroma|langchain-google-vertexai)" requirements.txt > req-docker.txt \
+ && pip install --no-cache-dir -r req-docker.txt && rm req-docker.txt \
+ && pip install --no-cache-dir numba llvmlite && pip install --no-cache-dir --pre --no-deps pandas-ta \
+ && pip install --no-cache-dir httpx pandas certifi seaborn openpyxl psutil tenacity pytz importlib-metadata \
+ && pip install --no-cache-dir "psycopg[binary]"
+# dagster-postgres storage connects through psycopg 3 (the app code uses psycopg2-binary)
+COPY . .
+ENV PYTHONPATH=/app/vendor DAGSTER_HOME=/opt/dagster/home
+# env comes from compose env_file; a copied .env would be loaded by the dagster CLI over it (host DAGSTER_HOME, localhost hosts)
+RUN rm -f .env && mkdir -p $DAGSTER_HOME && cp infra/dagster/dagster.yaml $DAGSTER_HOME/
+EXPOSE 3000
+CMD ["dagster-daemon", "run", "-f", "pipeline/assets.py", "-d", "/app"]
