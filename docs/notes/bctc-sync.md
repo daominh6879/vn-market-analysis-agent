@@ -95,6 +95,20 @@ Vấn đề thấy trong dữ liệu đã nạp:
 
 Còn lại: OCR GAS có số sai rõ ràng (`B7.190,620.643.636` ở dòng tổng tài sản, chưa đối chiếu PDF); chưa đối chiếu số liệu 12 mã còn lại với PDF; chưa chạy bootstrap toàn bộ 431 mã.
 
+## Chạy thêm 15 mã (27/10/2026, run `195c73d4`)
+BID, CTG, VPB, HDB, VIC, KDH, NVL, VJC, VND, HCM, DGC, GVR, REE, PNJ, BSR: SUCCESS sau 1521 s, `{'synced': 15, 'failed': 0, 'with_notes': 0}`. Không còn lỗi 404; không cần lùi năm hoặc đổi loại báo cáo. **101 s mỗi mã** (gồm OCR và embed); 402 mã còn lại × 101 s ≈ 11 giờ nếu mọi mã thành công. Hiện 29 mã trong `bctc_structural`.
+
+Các PDF cần dựng lại bản ảnh trước khi OCR (`text_layer_problem`): "no diacritics" cho BID, HDB, NVL, GVR, REE (cùng SAB, ACB đã gặp trước đó); "stray text only" cho BSR (cùng GAS). Tức khoảng 1/3 số mã có lớp chữ ẩn không dùng được, nên bước này cần thiết cho bootstrap.
+
+Kiểm tra nhất quán số liệu (heuristic thô: lấy số đầu tiên trên dòng "Tổng (cộng) tài sản" và dòng "Tổng (cộng) nguồn vốn" / "nợ phải trả và vốn chủ sở hữu", hai số phải bằng nhau), 29 mã:
+- khớp: 18 (HPG, VCB, MWG, SAB, ACB, MSN, FPT, VNM, BID, VPB, VIC, KDH, NVL, VJC, HCM, DGC, REE, BSR);
+- **lệch chữ số (OCR đọc sai):** PLX `…742…` vs `…712…`, CTG `2735488878` vs `2735388878`, PNJ `…815635…` vs `…818638…` (cùng một tổng, hai chỗ đọc khác nhau). Đây là lỗi thật, ít nhất 3/29 mã;
+- không kết luận được: MBB, TCB (lệch có thể do dòng "Tổng tài sản" của bảng thuyết minh theo ngành), GVR (một số bị cắt), VHM (đã biết, không có dòng tổng tài sản);
+- không thấy dòng nguồn vốn để so: SSI, GAS, HDB; VND dòng tổng tài sản là `000000000` (rác OCR).
+Phép kiểm tra chỉ thấy lỗi ở hai dòng tổng; lỗi ở các dòng khác không được phát hiện, nên tỉ lệ lỗi chữ số thực tế cao hơn.
+
+Ảnh hưởng: số liệu đi qua `sql_query` (DB vnstock) chứ không qua OCR; `ask_report` dành cho câu hỏi định tính (router: rủi ro, chiến lược, chính sách). Số trong câu trả lời của `ask_report` có thể sai chữ số với một phần mã.
+
 ## Cách chạy lại
 ```
 docker exec dagster-daemon sh -c 'cd /app && dagster job launch -f pipeline/assets.py -d /app -j bctc_sync_job -c /tmp/run.yaml'
