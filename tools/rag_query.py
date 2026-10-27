@@ -13,6 +13,7 @@ Examples:
 from __future__ import annotations
 
 import os
+import re
 import threading
 
 import httpx
@@ -87,7 +88,19 @@ def _retrieve(
     top_k: int | None = None,
     hybrid: bool = True,
 ) -> list[str]:
-    """Vector search, fused (RRF) with an accent/space-insensitive lexical ranking.
+    """Texts of the retrieved chunks (see _retrieve_hits)."""
+    return [text for text, _ in _retrieve_hits(question, tickers, sector, year, top_k, hybrid)]
+
+
+def _retrieve_hits(
+    question: str,
+    tickers: list[str] | None = None,
+    sector: str | None = None,
+    year: str | None = None,
+    top_k: int | None = None,
+    hybrid: bool = True,
+) -> list[tuple[str, dict]]:
+    """(text, payload) of the retrieved chunks. Vector search, fused (RRF) with an accent/space-insensitive lexical ranking.
 
     Scanned BCTC tables lose spaces and diacritics in OCR, which sinks the right chunk in pure vector search.
     With a payload filter every matching chunk is scored lexically; without one, only the vector candidates are.
@@ -103,10 +116,11 @@ def _retrieve(
         limit=max(top_k, VECTOR_POOL) if hybrid else top_k,
     ).points
     if not hybrid:
-        return [p.payload.get("text", "") for p in pts if p.payload and p.payload.get("text")]
+        return [(p.payload["text"], p.payload) for p in pts if p.payload and p.payload.get("text")]
 
     grams = query_ngrams(question, drop={fold(t) for t in tickers or []})
-    pool = {p.id: p.payload.get("text", "") for p in pts if p.payload}
+    payloads = {p.id: p.payload for p in pts if p.payload}
+    pool = {pid: pl.get("text", "") for pid, pl in payloads.items()}
     if q_filter is not None and grams:
         scanned, offset = 0, None
         while scanned < SCAN_LIMIT:
@@ -115,6 +129,7 @@ def _retrieve(
             )
             for p in batch:
                 if p.payload:
+                    payloads.setdefault(p.id, p.payload)
                     pool.setdefault(p.id, p.payload.get("text", ""))
             scanned += len(batch)
             if offset is None:
@@ -123,7 +138,23 @@ def _retrieve(
     primary = {pid for pid, sc in scores.items() if sc > 0 and is_primary_statement(pool[pid])}
     fused = hybrid_rank([p.id for p in pts], scores, boost_ids=primary, lexical_weight=LEXICAL_WEIGHT,
                         anchors=VECTOR_ANCHORS)
-    return [pool[pid] for pid in fused[:top_k] if pool.get(pid)]
+    return [(pool[pid], payloads[pid]) for pid in fused[:top_k] if pool.get(pid)]
+
+
+_BIG_NUMBER = re.compile(r"\d{1,3}(?:[.,]\d{3})+")
+
+
+def quality_caution(payloads: list[dict], answer: str) -> str:
+    """Caution to append when the answer quotes figures from a BCTC whose OCR failed the balance-sheet check.
+
+    Only `mismatch` documents count (total assets != total capital: a digit was misread somewhere); `unverified` ones are
+    too common to warn about. No caution for an answer without large figures (policy questions).
+    """
+    flagged = sorted({p["ticker"] for p in payloads if p.get("quality") == "mismatch" and p.get("ticker")})
+    if not flagged or not _BIG_NUMBER.search(answer):
+        return ""
+    return (f"\n\n⚠ Lưu ý: số liệu của {', '.join(flagged)} lấy từ BCTC scan đã OCR; kiểm tra nội bộ cho thấy tổng tài sản và "
+            "tổng nguồn vốn trong tài liệu không khớp nhau, nên có thể có chữ số bị đọc sai. Nên đối chiếu với báo cáo gốc.")
 
 
 def _llm_answer(question: str, contexts: list[str]) -> str:
@@ -178,7 +209,8 @@ def ask_report(
                 ),
             )
 
-        contexts = _retrieve(question, tickers=tickers, sector=sector, year=year)
+        hits = _retrieve_hits(question, tickers=tickers, sector=sector, year=year)
+        contexts = [text for text, _ in hits]
         if not contexts:
             filter_desc = ""
             if tickers:
@@ -192,11 +224,13 @@ def ask_report(
             )
 
         answer = _llm_answer(question, contexts)
+        caution = quality_caution([payload for _, payload in hits], answer)
         filter_info = f"tickers={tickers}" if tickers else (f"sector={sector}" if sector else "no filter")
         return ToolResult(
             status="ok",
-            data=answer,
-            message=f"Trả lời từ {BCTC_COLLECTION} ({filter_info}, {len(contexts)} chunks).",
+            data=answer + caution,
+            message=f"Trả lời từ {BCTC_COLLECTION} ({filter_info}, {len(contexts)} chunks)."
+                    + (" Có cảnh báo OCR: tổng tài sản ≠ tổng nguồn vốn trong tài liệu nguồn." if caution else ""),
         )
 
     except httpx.HTTPError as exc:
