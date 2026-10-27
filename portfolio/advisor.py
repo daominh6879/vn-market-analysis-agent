@@ -355,6 +355,39 @@ def _assemble(ev: dict, decided: dict, summ: dict) -> str:
     return "\n".join(out)
 
 
+_NUM_RE = re.compile(r"\d{1,3}(?:[,.]\d{3})+(?:\.\d+)?|\d{4,}(?:\.\d+)?")
+LEVEL_MATCH_PCT = 0.3            # an AI level "comes from the data" when a number in the evidence is within 0.3% of it
+
+
+def _numbers(text: str) -> list[float]:
+    """VND figures in an evidence/basis text ("33,447", "75.800", "70100")."""
+    out = []
+    for s in _NUM_RE.findall(text or ""):
+        if "," in s:                                    # comma thousands, optional dot decimals
+            s = s.replace(",", "")
+        elif "." in s and len(s.split(".")[-1]) == 3:   # dot thousands (Vietnamese style)
+            s = s.replace(".", "")
+        try:
+            out.append(float(s))
+        except ValueError:
+            pass
+    return out
+
+
+def levels_check(item: dict, evidence_text: str) -> dict:
+    """Flags for an AI stop/target (report only — they change nothing): does each level appear in the ticker's evidence
+    (the prompt says levels must come from the data), does levels_basis name the levels it explains, and the R:R the
+    levels imply. Pure."""
+    price, stop, target = item.get("price_ref"), item.get("stop_price"), item.get("target_price")
+    found, basis = _numbers(evidence_text), _numbers(item.get("levels_basis") or "")
+
+    def near(v, nums):
+        return v is not None and any(abs(n - v) <= v * LEVEL_MATCH_PCT / 100 for n in nums)
+    return {"stop_in_evidence": near(stop, found), "target_in_evidence": near(target, found) if target else None,
+            "basis_names_levels": near(stop, basis) and (target is None or near(target, basis)),
+            "rr": round((target - price) / (price - stop), 2) if target and price and stop and price > stop else None}
+
+
 def evidence_record(ev: dict) -> dict:
     """What the LLM was shown, per ticker (the prompt's blocks, flows, news with dates) plus the market text and news —
     returned with the advice so the caller can audit a verdict against its input later. Pure."""
@@ -401,6 +434,9 @@ def _advise(ev: dict) -> dict:
     idx = _news_index(ev)
     for item in decided["actions"] + decided["new_ideas"] + decided["skipped_ideas"]:
         item["cited_news"] = _cited(item, idx)
+        if item.get("levels_source") == "ai":
+            t = item["ticker"]
+            item["levels_check"] = levels_check(item, "\n".join(ev[k].get(t, "") for k in ("technical", "signals", "fundamentals")))
     return {"report_md": report, "actions": decided["actions"], "new_ideas": decided["new_ideas"],
             "skipped_ideas": decided["skipped_ideas"],
             "risk": ev["risk"], "as_of": ev["as_of"], "data_session": ev.get("data_session"),

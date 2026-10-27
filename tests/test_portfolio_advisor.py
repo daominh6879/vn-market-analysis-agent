@@ -283,6 +283,18 @@ def test_advise_report_structure_and_validated_output(monkeypatch):
     assert out["skipped_ideas"] == []
 
 
+def test_levels_check_flags_levels_not_in_the_evidence():
+    ev_text = "Hỗ trợ: 33,447, 32,467\nKháng cự: 34,083, 34,279\nMA(50) = 32,566"
+    item = {"price_ref": 33_550.0, "stop_price": 32_467.0, "target_price": 34_279.0,
+            "levels_basis": "Stop dưới hỗ trợ 32.467, target tại kháng cự 34,279"}
+    assert advisor.levels_check(item, ev_text) == {"stop_in_evidence": True, "target_in_evidence": True,
+                                                   "basis_names_levels": True, "rr": 0.67}
+    made_up = {**item, "stop_price": 31_000.0, "target_price": 36_000.0, "levels_basis": "hỗ trợ mạnh"}
+    c = advisor.levels_check(made_up, ev_text)
+    assert c["stop_in_evidence"] is False and c["target_in_evidence"] is False and c["basis_names_levels"] is False
+    assert advisor.levels_check({**item, "target_price": None}, ev_text)["target_in_evidence"] is None
+
+
 def test_advise_returns_the_evidence_the_llm_saw(monkeypatch):
     out, _ = _run(monkeypatch, GOOD)
     e = out["evidence"]
