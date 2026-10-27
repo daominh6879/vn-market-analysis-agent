@@ -37,33 +37,48 @@ def news_per_ticker() -> int:
 
 # ── news ──────────────────────────────────────────────────────────────────────
 
+def _article(row: tuple) -> dict:
+    """(id, url, title, body, source, published_at, ...) -> the article dict the advisor shows and cites."""
+    id_, url, title, body, source, published_at = row[:6]
+    return {"id": id_, "url": url, "title": title, "source": source,
+            "published_at": published_at.date().isoformat() if hasattr(published_at, "date") else str(published_at)[:10],
+            "snippet": " ".join((body or "").split())[:NEWS_SNIPPET_CHARS]}
+
+
 def group_news(rows: list[tuple], tickers: list[str], per_ticker: int) -> dict[str, list[dict]]:
     """rows = (id, url, title, body, source, published_at, tickers) newest first -> {ticker: [article...]}.
     Every requested ticker gets a key (empty list when there is no news) so the judge is told explicitly."""
     out: dict[str, list[dict]] = {t: [] for t in tickers}
-    for id_, url, title, body, source, published_at, tks in rows:
-        art = {"id": id_, "url": url, "title": title, "source": source,
-               "published_at": published_at.date().isoformat() if hasattr(published_at, "date") else str(published_at)[:10],
-               "snippet": " ".join((body or "").split())[:NEWS_SNIPPET_CHARS]}
+    for row in rows:
+        art, tks = _article(row), row[6]
         for t in tks or []:
             if t in out and len(out[t]) < per_ticker:
                 out[t].append(art)
     return out
 
 
-def fetch_news(tickers: list[str], days: int | None = None, per_ticker: int | None = None) -> dict[str, list[dict]]:
+def fetch_news(tickers: list[str], days: int | None = None,
+               per_ticker: int | None = None) -> dict[str, dict[str, list[dict]]]:
+    """{ticker: {"ticker": [...], "sector": [...], "related": [...]}} over every recent article, tagged or not
+    (news_relevance: the ticker's own news, its sector's news, news from sectors that move it)."""
     from core.db import get_conn
+    from portfolio.news_relevance import select_news
     days, per_ticker = days or news_days(), per_ticker or news_per_ticker()
     if not tickers:
         return {}
     with get_conn() as conn:
         with conn.cursor() as cur:
+            cur.execute("SELECT ticker, sector, tags, name_aliases FROM securities WHERE ticker = ANY(%s)", (tickers,))
+            meta = {t: {"sector": s, "tags": tg or [], "aliases": al or []} for t, s, tg, al in cur.fetchall()}
             cur.execute(
-                "SELECT id, url, title, body, source, published_at, tickers FROM news_articles "
-                "WHERE published_at >= NOW() - %s * INTERVAL '1 day' AND tickers && %s "
-                "ORDER BY published_at DESC", (days, tickers))
+                "SELECT id, url, title, left(body, %s), source, published_at, tickers FROM news_articles "
+                "WHERE published_at >= NOW() - %s * INTERVAL '1 day' ORDER BY published_at DESC, id DESC",
+                (NEWS_SNIPPET_CHARS * 2, days))
             rows = cur.fetchall()
-    return group_news(rows, tickers, per_ticker)
+    articles = [{**_article(r), "tickers": r[6] or []} for r in rows]
+    groups = select_news(articles, {t: meta.get(t, {}) for t in tickers}, per_ticker)
+    return {t: {k: [{f: v for f, v in a.items() if f != "tickers"} for a in arts] for k, arts in g.items()}
+            for t, g in groups.items()}
 
 
 def fetch_market_news(limit: int = 6, days: int | None = None) -> list[dict]:
@@ -345,13 +360,15 @@ def gather_evidence_for(positions: list[dict], cash: dict, user_id: str = "exter
         fundamentals_text = {t: f.result() for t, f in fund_f.items()}
         signals_text = {t: f.result() for t, f in sig_f.items()}
 
-    news = fetch_news(subjects)
+    groups = fetch_news(subjects)
+    news = {t: g["ticker"] for t, g in groups.items()}
+    context_news = {t: g["sector"] + g["related"] for t, g in groups.items()}
     flows = {t: flows_all[t] for t in subjects if t in flows_all} or _foreign_net(subjects)
     return {
         "user_id": user_id, "as_of": cash["as_of"], "data_session": data_session,
         "price_session": max((q[1] for q in quotes.values()), default=data_session), "positions": positions, "cash": cash,
         "candidates": candidates, "market": market, "market_news": fetch_market_news(),
-        "technical": technical_text, "fundamentals": fundamentals_text, "signals": signals_text, "news": news, "foreign_flows": flows,
+        "technical": technical_text, "fundamentals": fundamentals_text, "signals": signals_text, "news": news, "context_news": context_news, "foreign_flows": flows,
         "risk": compute_risk(positions, cash, _betas(held), _vol_percentiles(held, universe)),
     }
 

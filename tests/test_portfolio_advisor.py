@@ -306,6 +306,27 @@ def test_advise_returns_the_evidence_the_llm_saw(monkeypatch):
     json.dumps(out)                                     # stored as jsonb by the caller
 
 
+def test_sector_and_related_news_are_shown_with_their_channel_and_citable(monkeypatch):
+    ctx = [{"id": 8, "url": "http://n/8", "title": "Ngân hàng hết room tín dụng", "source": "cafef",
+            "published_at": "2026-10-26", "snippet": "s", "kind": "related", "group": "tín dụng (NHNN) → cho vay"},
+           {"id": 9, "url": "http://n/9", "title": "Lợi nhuận ngân hàng quý III", "source": "cafef",
+            "published_at": "2026-10-26", "snippet": "s", "kind": "sector", "group": "ngân hàng"}]
+    ev = {**_evidence(), "context_news": {"AAA": ctx}}
+    prompt = advisor._prompt(ev)
+    assert "Tin ngành (ngân hàng):" in prompt and "[kênh: tín dụng (NHNN) → cho vay] Ngân hàng hết room" in prompt
+    cites = llm_json([{**json.loads(GOOD)["verdicts"][0], "cited_news_ids": [7, 8, 9]}, *json.loads(GOOD)["verdicts"][1:]])
+    monkeypatch.setattr(advisor, "gather_evidence_for", lambda ps, cash, uid, watchlist: ev)
+
+    class Client:
+        def generate(self, *a, **k):
+            return _Resp(cites)
+    monkeypatch.setattr("llm.create_client", lambda: Client())
+    out = advisor.advise_for([], {"cash": 0}, "u1")
+    assert [a["id"] for a in out["actions"][0]["cited_news"]] == [7, 8, 9]
+    assert out["evidence"]["tickers"]["AAA"]["context_news"][0]["group"] == "tín dụng (NHNN) → cho vay"
+    assert out["evidence"]["tickers"]["BBB"]["context_news"] == []
+
+
 def test_retry_once_when_a_ticker_is_missing_then_succeeds(monkeypatch):
     partial = llm_json([json.loads(GOOD)["verdicts"][0]])
     out, calls = _run(monkeypatch, partial, GOOD)

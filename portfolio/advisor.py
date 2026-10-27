@@ -59,6 +59,9 @@ _SYSTEM = (
     "và tin tức của từng mã trong danh mục cùng vài mã ứng viên mua mới; nhiệm vụ của bạn là PHÁN ĐOÁN và đưa ra khuyến nghị "
     "cho từng mã. Chỉ dùng dữ liệu được cung cấp: không bịa tin tức, số liệu hay nguyên nhân. Mỗi lý do phải dẫn một con số "
     "trong dữ liệu hoặc một tin (ghi id vào cited_news_ids, KHÔNG viết 'id=' trong câu chữ). Mã không có tin trong dữ liệu thì không được nêu tin tức. "
+    "Mỗi mã có tin của mã, tin ngành và tin ngành liên quan/vĩ mô: đánh giá mã dựa trên cả ba. Tin ngành và tin ngành "
+    "liên quan không phải tin của doanh nghiệp: khi dẫn phải nói rõ nó tác động tới mã qua kênh nào (ví dụ giá khí → chi "
+    "phí đầu vào) và theo chiều nào. "
     "Cân nhắc xu hướng kỹ thuật, định giá và tăng trưởng so với ngành, dòng tiền và tin tức. Với mã đang nắm giữ, đánh giá như "
     "thể đang quyết định mua mới ở giá hiện tại: giá vốn và mức lãi/lỗ hiện tại KHÔNG phải lý do để giữ (không chờ gỡ lỗ, không "
     "chờ giá chạm stop mới bán). Phần lớn bằng chứng xấu (ví dụ giá dưới MA50 và MA200, khối ngoại bán ròng kéo dài, tin tiêu cực, "
@@ -73,11 +76,24 @@ _SYSTEM = (
 )
 
 
-def _fmt_news(articles: list[dict]) -> str:
-    if not articles:
-        return "  Tin tức: KHÔNG CÓ tin trong khoảng thời gian xét."
-    return "  Tin tức:\n" + "\n".join(
-        f"  - [id={a['id']}] {a['published_at']} ({a['source']}) {a['title']} — {a['snippet']}" for a in articles)
+def _fmt_news(articles: list[dict], context: list[dict] | None = None) -> str:
+    def line(a: dict) -> str:
+        return f"  - [id={a['id']}] {a['published_at']} ({a['source']}) {a['title']} — {a['snippet']}"
+    out = ("  Tin của mã:\n" + "\n".join(line(a) for a in articles) if articles
+           else "  Tin của mã: KHÔNG CÓ tin trong khoảng thời gian xét.")
+    sector = [a for a in context or [] if a["kind"] == "sector"]
+    related = [a for a in context or [] if a["kind"] == "related"]
+    if sector:
+        out += f"\n  Tin ngành ({sector[0]['group']}):\n" + "\n".join(line(a) for a in sector)
+    if related:
+        out += "\n  Tin ngành liên quan / vĩ mô tác động tới mã:\n" + "\n".join(
+            f"  - [id={a['id']}] {a['published_at']} ({a['source']}) [kênh: {a['group']}] {a['title']} — {a['snippet']}"
+            for a in related)
+    return out
+
+
+def _context(ev: dict, t: str) -> list[dict]:
+    return ev.get("context_news", {}).get(t, [])
 
 
 def _fmt_flow(f: dict | None) -> str:
@@ -111,7 +127,7 @@ def _prompt(ev: dict) -> str:
                      "phải cân nhắc chốt lời/cắt lỗ bớt hoặc giải thích rõ vì sao vẫn giữ"
                      if ev["cash"]["nav"] and (p["market_value"] or 0) / ev["cash"]["nav"] > MAX_TICKER_WEIGHT else ""),
                   ev["technical"].get(t, ""), ev["fundamentals"].get(t, ""), ev["signals"].get(t, ""),
-                  _fmt_flow(ev["foreign_flows"].get(t)), _fmt_news(ev["news"].get(t, []))]
+                  _fmt_flow(ev["foreign_flows"].get(t)), _fmt_news(ev["news"].get(t, []), _context(ev, t))]
     lines += ["", "[MÃ ỨNG VIÊN MUA MỚI] (action cho phép: BUY_NEW, SKIP)"]
     for c in ev["candidates"]:
         t = c["ticker"]
@@ -119,7 +135,7 @@ def _prompt(ev: dict) -> str:
                   f"GTGD TB20 {c['avg_value_bn']:,.0f} tỷ, ngành đang chiếm {c['sector_nav_pct']:.0%} NAV"
                   + (" — mã trong DANH SÁCH QUAN TÂM của người dùng (chưa qua bộ lọc ứng viên)" if c.get("watch") else ""),
                   ev["technical"].get(t, ""), ev["fundamentals"].get(t, ""), ev["signals"].get(t, ""),
-                  _fmt_flow(ev["foreign_flows"].get(t)), _fmt_news(ev["news"].get(t, []))]
+                  _fmt_flow(ev["foreign_flows"].get(t)), _fmt_news(ev["news"].get(t, []), _context(ev, t))]
     if not ev["candidates"]:
         lines.append("(không có ứng viên)")
     lines += ["", "[RỦI RO DANH MỤC]",
@@ -287,7 +303,7 @@ def apply_limits(verdicts: dict[str, dict], ev: dict) -> dict:
 
 def _news_index(ev: dict) -> dict[int, dict]:
     idx = {a["id"]: a for a in ev["market_news"]}
-    for arts in ev["news"].values():
+    for arts in [*ev["news"].values(), *ev.get("context_news", {}).values()]:
         idx.update({a["id"]: a for a in arts})
     return idx
 
@@ -392,7 +408,8 @@ def evidence_record(ev: dict) -> dict:
     """What the LLM was shown, per ticker (the prompt's blocks, flows, news with dates) plus the market text and news —
     returned with the advice so the caller can audit a verdict against its input later. Pure."""
     def arts(articles: list[dict]) -> list[dict]:
-        return [{k: a.get(k) for k in ("id", "published_at", "source", "title", "url", "snippet")} for a in articles]
+        return [{k: a[k] for k in ("id", "published_at", "source", "title", "url", "snippet", "kind", "group") if k in a}
+                for a in articles]
     subjects = [p["ticker"] for p in ev["positions"]] + [c["ticker"] for c in ev["candidates"]]
     return {"data_session": ev.get("data_session"), "price_session": ev.get("price_session"),
             "market": ev["market"], "market_news": arts(ev["market_news"]),
@@ -400,7 +417,8 @@ def evidence_record(ev: dict) -> dict:
                            for c in ev["candidates"]],
             "tickers": {t: {"technical": ev["technical"].get(t, ""), "fundamentals": ev["fundamentals"].get(t, ""),
                             "signals": ev["signals"].get(t, ""), "foreign_flows": ev["foreign_flows"].get(t),
-                            "news": arts(ev["news"].get(t, []))} for t in subjects}}
+                            "news": arts(ev["news"].get(t, [])), "context_news": arts(_context(ev, t))}
+                  for t in subjects}}
 
 
 def advise_for(positions: list[dict], cash: dict, user_id: str = "external", watchlist: list[str] | None = None) -> dict:
@@ -418,7 +436,8 @@ def _advise(ev: dict) -> dict:
 
     holdings = [p["ticker"] for p in ev["positions"]]
     cands = [c["ticker"] for c in ev["candidates"]]
-    valid_news = {t: {a["id"] for a in ev["news"].get(t, [])} | {a["id"] for a in ev["market_news"]} for t in holdings + cands}
+    valid_news = {t: {a["id"] for a in ev["news"].get(t, []) + _context(ev, t)} | {a["id"] for a in ev["market_news"]}
+                  for t in holdings + cands}
     client, prompt = create_client(), _prompt(ev)
     summ, verdicts = {}, {}
     for _attempt in range(2):                      # retry once when the JSON is unparsable or misses a ticker
