@@ -61,7 +61,7 @@ _SYSTEM = (
     "trong dữ liệu hoặc một tin (ghi id vào cited_news_ids, KHÔNG viết 'id=' trong câu chữ). Mã không có tin trong dữ liệu thì không được nêu tin tức. "
     "Mỗi mã có tin của mã, tin ngành và tin ngành liên quan/vĩ mô: đánh giá mã dựa trên cả ba. Tin ngành và tin ngành "
     "liên quan không phải tin của doanh nghiệp: khi dẫn phải nói rõ nó tác động tới mã qua kênh nào (ví dụ giá khí → chi "
-    "phí đầu vào) và theo chiều nào. "
+    "phí đầu vào) và theo chiều nào; dòng 'tác động' là đánh giá sơ bộ, tự kiểm tra lại với đoạn trích. "
     "Cân nhắc xu hướng kỹ thuật, định giá và tăng trưởng so với ngành, dòng tiền và tin tức. Với mã đang nắm giữ, đánh giá như "
     "thể đang quyết định mua mới ở giá hiện tại: giá vốn và mức lãi/lỗ hiện tại KHÔNG phải lý do để giữ (không chờ gỡ lỗ, không "
     "chờ giá chạm stop mới bán). Phần lớn bằng chứng xấu (ví dụ giá dưới MA50 và MA200, khối ngoại bán ròng kéo dài, tin tiêu cực, "
@@ -78,7 +78,8 @@ _SYSTEM = (
 
 def _fmt_news(articles: list[dict], context: list[dict] | None = None) -> str:
     def line(a: dict) -> str:
-        return f"  - [id={a['id']}] {a['published_at']} ({a['source']}) {a['title']} — {a['snippet']}"
+        impact = f" (tác động: {a['impact']})" if a.get("impact") else ""
+        return f"  - [id={a['id']}] {a['published_at']} ({a['source']}) {a['title']} — {a['snippet']}{impact}"
     out = ("  Tin của mã:\n" + "\n".join(line(a) for a in articles) if articles
            else "  Tin của mã: KHÔNG CÓ tin trong khoảng thời gian xét.")
     sector = [a for a in context or [] if a["kind"] == "sector"]
@@ -88,7 +89,7 @@ def _fmt_news(articles: list[dict], context: list[dict] | None = None) -> str:
     if related:
         out += "\n  Tin ngành liên quan / vĩ mô tác động tới mã:\n" + "\n".join(
             f"  - [id={a['id']}] {a['published_at']} ({a['source']}) [kênh: {a['group']}] {a['title']} — {a['snippet']}"
-            for a in related)
+            + (f" (tác động: {a['impact']})" if a.get("impact") else "") for a in related)
     return out
 
 
@@ -408,11 +409,12 @@ def evidence_record(ev: dict) -> dict:
     """What the LLM was shown, per ticker (the prompt's blocks, flows, news with dates) plus the market text and news —
     returned with the advice so the caller can audit a verdict against its input later. Pure."""
     def arts(articles: list[dict]) -> list[dict]:
-        return [{k: a[k] for k in ("id", "published_at", "source", "title", "url", "snippet", "kind", "group") if k in a}
+        return [{k: a[k] for k in ("id", "published_at", "source", "title", "url", "snippet", "kind", "group", "score",
+                                   "impact") if k in a}
                 for a in articles]
     subjects = [p["ticker"] for p in ev["positions"]] + [c["ticker"] for c in ev["candidates"]]
     return {"data_session": ev.get("data_session"), "price_session": ev.get("price_session"),
-            "market": ev["market"], "market_news": arts(ev["market_news"]),
+            "market": ev["market"], "market_news": arts(ev["market_news"]), "news_scoring": ev.get("news_scoring"),
             "candidates": [{k: c.get(k) for k in ("ticker", "price", "ret_20", "avg_value_bn", "sector_nav_pct", "watch")}
                            for c in ev["candidates"]],
             "tickers": {t: {"technical": ev["technical"].get(t, ""), "fundamentals": ev["fundamentals"].get(t, ""),

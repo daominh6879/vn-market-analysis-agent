@@ -58,27 +58,33 @@ def group_news(rows: list[tuple], tickers: list[str], per_ticker: int) -> dict[s
 
 
 def fetch_news(tickers: list[str], days: int | None = None,
-               per_ticker: int | None = None) -> dict[str, dict[str, list[dict]]]:
-    """{ticker: {"ticker": [...], "sector": [...], "related": [...]}} over every recent article, tagged or not
-    (news_relevance: the ticker's own news, its sector's news, news from sectors that move it)."""
+               per_ticker: int | None = None) -> tuple[dict[str, dict[str, list[dict]]], dict]:
+    """({ticker: {"ticker": [...], "sector": [...], "related": [...]}}, scoring status) over every recent article,
+    tagged or not. news_relevance picks the ticker's own news and keyword-matched pools of sector / related-sector
+    news; news_scorer has the LLM keep the pool articles that actually move the company (keyword cut on failure)."""
     from core.db import get_conn
-    from portfolio.news_relevance import select_news
+    from portfolio.news_relevance import POOL_PER_CHANNEL, POOL_PER_GROUP, select_news
+    from portfolio.news_scorer import score_news
     days, per_ticker = days or news_days(), per_ticker or news_per_ticker()
     if not tickers:
-        return {}
+        return {}, {"scored": False, "pairs": 0, "kept": None, "error": None}
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT ticker, sector, tags, name_aliases FROM securities WHERE ticker = ANY(%s)", (tickers,))
-            meta = {t: {"sector": s, "tags": tg or [], "aliases": al or []} for t, s, tg, al in cur.fetchall()}
+            cur.execute("SELECT ticker, sector, tags, name_aliases, company_name FROM securities WHERE ticker = ANY(%s)",
+                        (tickers,))
+            meta = {t: {"sector": s, "tags": tg or [], "aliases": al or [], "company_name": n}
+                    for t, s, tg, al, n in cur.fetchall()}
             cur.execute(
                 "SELECT id, url, title, left(body, %s), source, published_at, tickers FROM news_articles "
                 "WHERE published_at >= NOW() - %s * INTERVAL '1 day' ORDER BY published_at DESC, id DESC",
                 (NEWS_SNIPPET_CHARS * 2, days))
             rows = cur.fetchall()
     articles = [{**_article(r), "tickers": r[6] or []} for r in rows]
-    groups = select_news(articles, {t: meta.get(t, {}) for t in tickers}, per_ticker)
-    return {t: {k: [{f: v for f, v in a.items() if f != "tickers"} for a in arts] for k, arts in g.items()}
-            for t, g in groups.items()}
+    meta = {t: meta.get(t, {}) for t in tickers}
+    pools = select_news(articles, meta, per_ticker, POOL_PER_GROUP, POOL_PER_GROUP, POOL_PER_CHANNEL)
+    pools = {t: {k: [{f: v for f, v in a.items() if f != "tickers"} for a in arts] for k, arts in g.items()}
+             for t, g in pools.items()}
+    return score_news(pools, meta)
 
 
 def fetch_market_news(limit: int = 6, days: int | None = None) -> list[dict]:
@@ -360,7 +366,7 @@ def gather_evidence_for(positions: list[dict], cash: dict, user_id: str = "exter
         fundamentals_text = {t: f.result() for t, f in fund_f.items()}
         signals_text = {t: f.result() for t, f in sig_f.items()}
 
-    groups = fetch_news(subjects)
+    groups, news_scoring = fetch_news(subjects)
     news = {t: g["ticker"] for t, g in groups.items()}
     context_news = {t: g["sector"] + g["related"] for t, g in groups.items()}
     flows = {t: flows_all[t] for t in subjects if t in flows_all} or _foreign_net(subjects)
@@ -368,7 +374,8 @@ def gather_evidence_for(positions: list[dict], cash: dict, user_id: str = "exter
         "user_id": user_id, "as_of": cash["as_of"], "data_session": data_session,
         "price_session": max((q[1] for q in quotes.values()), default=data_session), "positions": positions, "cash": cash,
         "candidates": candidates, "market": market, "market_news": fetch_market_news(),
-        "technical": technical_text, "fundamentals": fundamentals_text, "signals": signals_text, "news": news, "context_news": context_news, "foreign_flows": flows,
+        "technical": technical_text, "fundamentals": fundamentals_text, "signals": signals_text, "news": news, "context_news": context_news, "news_scoring": news_scoring,
+        "foreign_flows": flows,
         "risk": compute_risk(positions, cash, _betas(held), _vol_percentiles(held, universe)),
     }
 
