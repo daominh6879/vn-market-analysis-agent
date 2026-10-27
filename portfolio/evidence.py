@@ -57,17 +57,75 @@ def group_news(rows: list[tuple], tickers: list[str], per_ticker: int) -> dict[s
     return out
 
 
+def price_reaction(close: pd.Series, index: pd.Series, published: str) -> dict | None:
+    """How far the ticker (and VNINDEX) moved from the last close before the article's day to the latest close — so
+    the judge can tell news the price has already moved on from news it has not. None without a close before it."""
+    close, index = close.dropna(), index.dropna()
+    before = close[close.index < pd.Timestamp(published)]
+    if before.empty or close.empty:
+        return None
+    base = before.index[-1]
+    ib = index[index.index <= base]
+    return {"ret_pct": round((close.iloc[-1] / before.iloc[-1] - 1) * 100, 1),
+            "vnindex_pct": round((index.iloc[-1] / ib.iloc[-1] - 1) * 100, 1) if not ib.empty and not index.empty else None,
+            "sessions": int((close.index > base).sum())}
+
+
+def _closes(cur, tickers: list[str], days: int) -> tuple[pd.DataFrame, pd.Series]:
+    cur.execute("SELECT date, ticker, close FROM ohlcv_daily WHERE ticker = ANY(%s) AND date >= CURRENT_DATE - %s",
+                (tickers, days + 10))
+    px = pd.DataFrame(cur.fetchall(), columns=["date", "ticker", "close"])
+    cur.execute("SELECT date, close FROM market_index_daily WHERE index_code = 'VNINDEX' AND date >= CURRENT_DATE - %s",
+                (days + 10,))
+    idx = pd.DataFrame(cur.fetchall(), columns=["date", "close"])
+    wide = (px.assign(date=pd.to_datetime(px["date"]), close=px["close"].astype(float))
+            .pivot_table(index="date", columns="ticker", values="close", aggfunc="last").sort_index()) if len(px) else pd.DataFrame()
+    index = (idx.assign(date=pd.to_datetime(idx["date"])).set_index("date")["close"].astype(float).sort_index()
+             if len(idx) else pd.Series(dtype=float))
+    return wide, index
+
+
+def _scorer_model() -> str | None:
+    from portfolio.news_scorer import model_name
+    return model_name() or os.getenv(f"{os.getenv('LLM_PROVIDER', 'deepseek').upper()}_MODEL")
+
+
+def load_scores(cur, pairs: set[tuple[str, int]]) -> dict[tuple[str, int], dict]:
+    if not pairs:
+        return {}
+    cur.execute("SELECT ticker, article_id, score, direction, magnitude, impact FROM news_impact_scores "
+                "WHERE article_id = ANY(%s)", (sorted({i for _, i in pairs}),))
+    return {(t, i): {"score": s, "direction": d, "magnitude": m, "impact": im}
+            for t, i, s, d, m, im in cur.fetchall() if (t, i) in pairs}
+
+
+def save_scores(conn, scores: dict[tuple[str, int], dict], kinds: dict[tuple[str, int], tuple[str, str | None]],
+                origin: str) -> None:
+    """First judgement wins (ON CONFLICT DO NOTHING): the stored score is what was knowable when first seen."""
+    if not scores:
+        return
+    model = _scorer_model()
+    with conn.cursor() as cur:
+        cur.executemany(
+            "INSERT INTO news_impact_scores (article_id, ticker, kind, channel, score, direction, magnitude, impact, "
+            "model, origin) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+            [(i, t, *kinds.get((t, i), ("ticker", None)), s["score"], s["direction"], s["magnitude"], s["impact"],
+              model, origin) for (t, i), s in scores.items()])
+    conn.commit()
+
+
 def fetch_news(tickers: list[str], days: int | None = None,
                per_ticker: int | None = None) -> tuple[dict[str, dict[str, list[dict]]], dict]:
     """({ticker: {"ticker": [...], "sector": [...], "related": [...]}}, scoring status) over every recent article,
     tagged or not. news_relevance picks the ticker's own news and keyword-matched pools of sector / related-sector
-    news; news_scorer has the LLM keep the pool articles that actually move the company (keyword cut on failure)."""
+    news; news_scorer has the LLM judge each pair (relevance, direction, size; reused from news_impact_scores when
+    already judged) and keep the pool articles that move the company; each article gets the price move since it."""
     from core.db import get_conn
     from portfolio.news_relevance import POOL_PER_CHANNEL, POOL_PER_GROUP, select_news
     from portfolio.news_scorer import score_news
     days, per_ticker = days or news_days(), per_ticker or news_per_ticker()
     if not tickers:
-        return {}, {"scored": False, "pairs": 0, "kept": None, "error": None}
+        return {}, {"scored": False, "pairs": 0, "cached": 0, "kept": None, "error": None}
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT ticker, sector, tags, name_aliases, company_name FROM securities WHERE ticker = ANY(%s)",
@@ -79,12 +137,29 @@ def fetch_news(tickers: list[str], days: int | None = None,
                 "WHERE published_at >= NOW() - %s * INTERVAL '1 day' ORDER BY published_at DESC, id DESC",
                 (NEWS_SNIPPET_CHARS * 2, days))
             rows = cur.fetchall()
-    articles = [{**_article(r), "tickers": r[6] or []} for r in rows]
-    meta = {t: meta.get(t, {}) for t in tickers}
-    pools = select_news(articles, meta, per_ticker, POOL_PER_GROUP, POOL_PER_GROUP, POOL_PER_CHANNEL)
-    pools = {t: {k: [{f: v for f, v in a.items() if f != "tickers"} for a in arts] for k, arts in g.items()}
-             for t, g in pools.items()}
-    return score_news(pools, meta)
+            articles = [{**_article(r), "tickers": r[6] or []} for r in rows]
+            meta = {t: meta.get(t, {}) for t in tickers}
+            pools = select_news(articles, meta, per_ticker, POOL_PER_GROUP, POOL_PER_GROUP, POOL_PER_CHANNEL)
+            pools = {t: {k: [{f: v for f, v in a.items() if f != "tickers"} for a in arts] for k, arts in g.items()}
+                     for t, g in pools.items()}
+            kinds = {(t, a["id"]): (a["kind"], a.get("group")) for t, g in pools.items() for arts in g.values() for a in arts}
+            try:
+                cached = load_scores(cur, set(kinds))
+            except Exception:                      # table missing (migration 045 not applied): score without a cache
+                conn.rollback()
+                cached = {}
+            closes, index = _closes(cur, tickers, days)
+        groups, status, new = score_news(pools, meta, cached=cached)
+        try:
+            save_scores(conn, new, kinds, "advice")
+        except Exception as exc:
+            conn.rollback()
+            status["save_error"] = f"{type(exc).__name__}: {exc}"[:200]
+
+    def react(t: str, a: dict) -> dict:
+        since = price_reaction(closes[t], index, a["published_at"]) if t in closes else None
+        return {**a, "since": since} if since else a
+    return {t: {k: [react(t, a) for a in arts] for k, arts in g.items()} for t, g in groups.items()}, status
 
 
 def fetch_market_news(limit: int = 6, days: int | None = None) -> list[dict]:

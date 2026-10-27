@@ -327,6 +327,15 @@ def test_sector_and_related_news_are_shown_with_their_channel_and_citable(monkey
     assert out["evidence"]["tickers"]["BBB"]["context_news"] == []
 
 
+def test_news_line_shows_the_preliminary_judgement_and_the_price_move_since():
+    a = {"id": 5, "published_at": "2026-10-23", "source": "cafef", "title": "DCM lãi lớn", "snippet": "s",
+         "direction": 1, "magnitude": 3, "impact": "lợi nhuận tăng",
+         "since": {"ret_pct": 7.8, "vnindex_pct": 3.0, "sessions": 3}}
+    assert ("DCM lãi lớn — s (đánh giá sơ bộ: tích cực, lớn — lợi nhuận tăng; giá từ trước tin: +7.8%, VNINDEX +3.0%, "
+            "3 phiên)") in advisor._fmt_news([a])
+    assert advisor._fmt_news([{**a, "direction": None, "since": None}]).endswith("DCM lãi lớn — s")
+
+
 def test_retry_once_when_a_ticker_is_missing_then_succeeds(monkeypatch):
     partial = llm_json([json.loads(GOOD)["verdicts"][0]])
     out, calls = _run(monkeypatch, partial, GOOD)

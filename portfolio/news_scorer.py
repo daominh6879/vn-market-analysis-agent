@@ -1,37 +1,51 @@
 """
-portfolio/news_scorer.py — one LLM pass that keeps the sector / related articles that actually move each ticker.
+portfolio/news_scorer.py — one LLM pass that judges what each article means for each ticker.
 
-news_relevance matches titles on keywords, so its sector / related groups hold anything that mentions the topic
-("Chứng khoán Mỹ tăng… giá dầu đi xuống" for DCM's gas-price channel). Here the LLM reads each candidate (title +
-snippet) against the company's profile (sector, its impact channels) and scores it:
-3 = direct, material impact on this company's earnings / price; 2 = real but indirect or small; 1 = loosely related;
-0 = not related. Articles scoring >= SCORE_MIN are kept, best first, KEEP_PER_GROUP per group, each with a one-line
-`impact` (channel and direction for this company). Ticker news is never scored or dropped.
+news_relevance matches titles on keywords, so its sector / related pools hold anything that mentions the topic
+("Chứng khoán Mỹ tăng… giá dầu đi xuống" for DCM's gas-price channel). Here the LLM reads each (ticker, article) pair
+(title + snippet) against the company's profile (sector, its impact channels) and returns
+- score: 3 = direct, material impact on this company; 2 = real but indirect or small; 1 = loosely related; 0 = none;
+- direction: 1 positive / -1 negative / 0 neutral or unclear, for this company;
+- magnitude: 1 small / 2 medium / 3 large;
+- impact: one line naming the channel and the direction.
+Sector / related articles scoring >= SCORE_MIN are kept, best first, KEEP_PER_GROUP per group. Ticker news is scored
+too (direction, for the advisor and the event study) but never dropped.
 
-On any failure (LLM error, unparsable output, PORTFOLIO_NEWS_SCORER=0) the keyword groups are cut to their usual size
-instead, so the advice never loses its news because of this pass. `status` says which happened.
+Scores already stored (news_impact_scores, `cached`) are reused, so a pair is judged once — at the time it was first
+seen — and repeated advice runs see the same judgement. On any failure (LLM error, unparsable output,
+PORTFOLIO_NEWS_SCORER=0) the keyword pools are cut to their usual size instead; `status` says which happened.
 """
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 from portfolio.news_relevance import (RELATED_NEWS_PER_CHANNEL, RELATED_NEWS_PER_TICKER, SECTOR_NEWS_PER_TICKER,
                                       channels_for)
 
 SCORE_MIN = 2
 KEEP_PER_GROUP = {"sector": SECTOR_NEWS_PER_TICKER, "related": RELATED_NEWS_PER_TICKER}
-MAX_OUTPUT_TOKENS = 6000
+MAX_OUTPUT_TOKENS = 8000
+BATCH_PAIRS = 40                 # pairs per LLM call: ~120 pairs in one call overran the output and the JSON was cut
+WORKERS = 4
 IMPACT_CHARS = 200
+SCORE_FIELDS = ("score", "direction", "magnitude", "impact")
 
 _SYSTEM = (
-    "Bạn là chuyên viên phân tích ngành chứng khoán Việt Nam. Với mỗi cặp (mã, tin) được đưa, chấm mức tin đó tác động "
-    "tới CHÍNH doanh nghiệp này (lợi nhuận, giá bán, chi phí, nhu cầu, rủi ro), dựa vào hồ sơ doanh nghiệp và các kênh "
-    "tác động đã cho: 3 = tác động trực tiếp, đáng kể; 2 = có tác động thật nhưng gián tiếp hoặc nhỏ; 1 = chỉ liên quan "
-    "lỏng (cùng chủ đề, không ảnh hưởng gì tới doanh nghiệp này); 0 = không liên quan. Tin về một doanh nghiệp khác cùng "
-    "ngành chỉ được 2-3 khi nó nói lên xu hướng chung của ngành (giá bán, nhu cầu, chính sách) hoặc là đối thủ trực tiếp. "
-    "Chỉ dùng tiêu đề và đoạn trích; không bịa số liệu. impact: một câu ngắn tiếng Việt, nêu kênh và chiều tác động lên "
-    "doanh nghiệp (tích cực / tiêu cực / chưa rõ). Chỉ trả về MỘT đối tượng JSON: "
-    '{"items": [{"t": "MÃ", "id": 123, "score": 0, "impact": "..."}]}, đủ mọi cặp được hỏi, không có văn bản nào khác.'
+    "Bạn là chuyên viên phân tích ngành chứng khoán Việt Nam. Với mỗi cặp (mã, tin) được đưa, đánh giá tin đó có ý nghĩa "
+    "gì với CHÍNH doanh nghiệp này (lợi nhuận, giá bán, chi phí, nhu cầu, rủi ro), dựa vào hồ sơ doanh nghiệp và các kênh "
+    "tác động đã cho.\n"
+    "score: 3 = tác động trực tiếp, đáng kể; 2 = có tác động thật nhưng gián tiếp hoặc nhỏ; 1 = chỉ liên quan lỏng (cùng "
+    "chủ đề, không ảnh hưởng gì tới doanh nghiệp này); 0 = không liên quan. Tin về một doanh nghiệp khác cùng ngành chỉ "
+    "được 2-3 khi nó nói lên xu hướng chung của ngành (giá bán, nhu cầu, chính sách) hoặc là đối thủ trực tiếp. Thông báo "
+    "hành chính thường lệ (họp, chốt quyền, giải trình nhỏ) là 0-1.\n"
+    "direction: 1 = tích cực cho doanh nghiệp, -1 = tiêu cực, 0 = trung tính hoặc chưa rõ chiều. Đánh giá theo nội dung "
+    "tin so với tình trạng bình thường của doanh nghiệp, không theo giọng văn của bài; không rõ thì để 0.\n"
+    "magnitude: 1 = nhỏ, 2 = vừa, 3 = lớn (so với quy mô lợi nhuận của doanh nghiệp).\n"
+    "impact: một câu ngắn tiếng Việt, nêu kênh và chiều tác động lên doanh nghiệp.\n"
+    "Chỉ dùng tiêu đề và đoạn trích; không bịa số liệu. Chỉ trả về MỘT đối tượng JSON: "
+    '{"items": [{"t": "MÃ", "id": 123, "score": 0, "direction": 0, "magnitude": 1, "impact": "..."}]}, đủ mọi cặp được '
+    "hỏi, không có văn bản nào khác."
 )
 
 
@@ -39,57 +53,74 @@ def enabled() -> bool:
     return os.getenv("PORTFOLIO_NEWS_SCORER", "1") != "0"
 
 
-def _model() -> str | None:
+def model_name() -> str | None:
     return os.getenv("PORTFOLIO_NEWS_SCORER_MODEL") or None
 
 
-def build_prompt(groups: dict[str, dict[str, list[dict]]], meta: dict[str, dict]) -> str:
+def _items(g: dict[str, list[dict]]) -> list[dict]:
+    return g["ticker"] + g["sector"] + g["related"]
+
+
+def _label(a: dict) -> str:
+    return {"ticker": "tin của mã", "sector": "tin ngành"}.get(a.get("kind", "ticker"), f"kênh: {a.get('group')}")
+
+
+def build_prompt(pairs: dict[str, list[dict]], meta: dict[str, dict]) -> str:
+    """pairs = {ticker: [article...]} still to score."""
     lines = []
-    for t, g in groups.items():
-        items = g["sector"] + g["related"]
+    for t, items in pairs.items():
         if not items:
             continue
         m = meta.get(t, {})
         chans = "; ".join(channels_for(t, m.get("sector"), m.get("tags") or [])) or "(chưa khai báo)"
         lines += [f"## {t} — {m.get('company_name') or t} (ngành {m.get('sector') or 'chưa rõ'})", f"Kênh tác động: {chans}"]
-        lines += [f"- id={a['id']} [{'tin ngành' if a['kind'] == 'sector' else 'kênh: ' + a['group']}] {a['published_at']} "
-                  f"{a['title']} — {a['snippet'][:300]}" for a in items]
+        lines += [f"- id={a['id']} [{_label(a)}] {a['published_at']} {a['title']} — {(a.get('snippet') or '')[:300]}"
+                  for a in items]
         lines.append("")
     return "\n".join(lines)
 
 
-def parse_scores(text: str, groups: dict[str, dict[str, list[dict]]]) -> dict[tuple[str, int], dict]:
-    """{(ticker, id): {score, impact}} for pairs that were asked; out-of-range scores and unknown pairs dropped."""
+def _int(v, lo: int, hi: int) -> int | None:
+    try:
+        i = int(v)
+    except (TypeError, ValueError):
+        return None
+    return i if lo <= i <= hi else None
+
+
+def parse_scores(text: str, asked: set[tuple[str, int]]) -> dict[tuple[str, int], dict]:
+    """{(ticker, id): {score, direction, magnitude, impact}} for asked pairs; a pair needs a valid score."""
     from portfolio.advisor import _extract_json
-    obj = _extract_json(text) or {}
-    asked = {(t, a["id"]) for t, g in groups.items() for a in g["sector"] + g["related"]}
     out: dict[tuple[str, int], dict] = {}
-    for it in obj.get("items") or []:
+    for it in (_extract_json(text) or {}).get("items") or []:
         if not isinstance(it, dict):
             continue
-        try:
-            key, score = (str(it.get("t", "")).upper(), int(it.get("id"))), int(it.get("score"))
-        except (TypeError, ValueError):
-            continue
-        if key in asked and 0 <= score <= 3:
-            out[key] = {"score": score, "impact": " ".join(str(it.get("impact") or "").split())[:IMPACT_CHARS]}
+        key = (str(it.get("t", "")).upper(), _int(it.get("id"), 0, 2**31))
+        score = _int(it.get("score"), 0, 3)
+        if key in asked and score is not None:
+            out[key] = {"score": score, "direction": _int(it.get("direction"), -1, 1) or 0,
+                        "magnitude": _int(it.get("magnitude"), 1, 3),
+                        "impact": " ".join(str(it.get("impact") or "").split())[:IMPACT_CHARS]}
     return out
 
 
 def apply_scores(groups: dict[str, dict[str, list[dict]]], scores: dict[tuple[str, int], dict]) -> dict:
-    """Keep scored >= SCORE_MIN, highest score first (newest first within a score), KEEP_PER_GROUP per group."""
+    """Ticker news: all kept, scores attached when known. Sector / related: scored >= SCORE_MIN, highest score first
+    (newest first within a score), KEEP_PER_GROUP per group."""
+    def with_score(t: str, a: dict) -> dict:
+        s = scores.get((t, a["id"]))
+        return {**a, **{k: s[k] for k in SCORE_FIELDS}} if s else a
     out = {}
     for t, g in groups.items():
-        out[t] = {"ticker": g["ticker"]}
+        out[t] = {"ticker": [with_score(t, a) for a in g["ticker"]]}
         for k in ("sector", "related"):
-            kept = [{**a, **scores[(t, a["id"])]} for a in g[k]
-                    if (t, a["id"]) in scores and scores[(t, a["id"])]["score"] >= SCORE_MIN]
+            kept = [with_score(t, a) for a in g[k] if scores.get((t, a["id"]), {}).get("score", -1) >= SCORE_MIN]
             out[t][k] = sorted(kept, key=lambda a: -a["score"])[:KEEP_PER_GROUP[k]]       # stable: newest first per score
     return out
 
 
 def cut_to_size(groups: dict[str, dict[str, list[dict]]]) -> dict:
-    """The keyword groups at their usual size (no LLM): newest first, RELATED_NEWS_PER_CHANNEL per channel."""
+    """The keyword pools at their usual size (no LLM): newest first, RELATED_NEWS_PER_CHANNEL per channel."""
     out = {}
     for t, g in groups.items():
         related: list[dict] = []
@@ -101,25 +132,54 @@ def cut_to_size(groups: dict[str, dict[str, list[dict]]]) -> dict:
     return out
 
 
-def score_news(groups: dict[str, dict[str, list[dict]]], meta: dict[str, dict], client=None) -> tuple[dict, dict]:
-    """-> (groups, status). status = {scored: bool, pairs, kept, error}."""
-    pairs = sum(len(g["sector"]) + len(g["related"]) for g in groups.values())
-    status = {"scored": False, "pairs": pairs, "kept": None, "error": None}
-    if not pairs or not enabled():
-        return cut_to_size(groups), status
-    try:
-        from llm import Message, create_client
-        client = client or create_client()
-        resp = client.generate([Message(role="user", content=build_prompt(groups, meta))], model=_model(),
-                               max_tokens=MAX_OUTPUT_TOKENS, temperature=0, system=_SYSTEM)
-        scores = parse_scores(resp.text, groups)
-    except Exception as exc:                       # never lose the advice's news over this pass
-        status["error"] = f"{type(exc).__name__}: {exc}"[:300]
-        return cut_to_size(groups), status
-    if len(scores) < pairs / 2:
-        status["error"] = f"scored {len(scores)}/{pairs} pairs"
-        return cut_to_size(groups), status
-    out = apply_scores(groups, scores)
-    status.update(scored=True, kept=sum(len(g["sector"]) + len(g["related"]) for g in out.values()))
-    return out, status
+def score_pairs(pairs: dict[str, list[dict]], meta: dict[str, dict], client=None) -> dict[tuple[str, int], dict]:
+    """One LLM call over {ticker: [article...]} -> parsed scores (raises on LLM error)."""
+    from llm import Message, create_client
+    client = client or create_client()
+    resp = client.generate([Message(role="user", content=build_prompt(pairs, meta))], model=model_name(),
+                           max_tokens=MAX_OUTPUT_TOKENS, temperature=0, system=_SYSTEM)
+    return parse_scores(resp.text, {(t, a["id"]) for t, items in pairs.items() for a in items})
 
+
+def batches(todo: dict[str, list[dict]], size: int = BATCH_PAIRS) -> list[dict[str, list[dict]]]:
+    out: list[dict[str, list[dict]]] = [{}]
+    for t, items in todo.items():
+        for a in items:
+            if sum(len(v) for v in out[-1].values()) >= size:
+                out.append({})
+            out[-1].setdefault(t, []).append(a)
+    return [b for b in out if b]
+
+
+def score_news(groups: dict[str, dict[str, list[dict]]], meta: dict[str, dict], client=None,
+               cached: dict[tuple[str, int], dict] | None = None) -> tuple[dict, dict, dict]:
+    """-> (groups, status, new scores to store). status = {scored, pairs, cached, kept, error}. Unscored pairs go out
+    in BATCH_PAIRS-sized LLM calls in parallel; a failed batch leaves its pairs unscored (an error when fewer than
+    half of the new pairs come back)."""
+    cached = cached or {}
+    todo = {t: [a for a in _items(g) if (t, a["id"]) not in cached] for t, g in groups.items()}
+    n_pairs, n_todo = sum(len(_items(g)) for g in groups.values()), sum(len(v) for v in todo.values())
+    status = {"scored": False, "pairs": n_pairs, "cached": n_pairs - n_todo, "kept": None, "error": None}
+    if not n_pairs or not enabled():
+        return cut_to_size(groups), status, {}
+    new: dict[tuple[str, int], dict] = {}
+    if n_todo:
+        errors: list[str] = []
+
+        def run(batch: dict[str, list[dict]]) -> dict:
+            try:
+                return score_pairs(batch, meta, client)
+            except Exception as exc:               # never lose the advice's news over this pass
+                errors.append(f"{type(exc).__name__}: {exc}"[:200])
+                return {}
+        with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+            for part in pool.map(run, batches(todo)):
+                new.update(part)
+        if len(new) < n_todo / 2:
+            status["error"] = (errors[0] if errors else "") + f" (scored {len(new)}/{n_todo} pairs)"
+            return cut_to_size(groups), status, {}
+        if errors:
+            status["error"] = f"{len(errors)} batch(es) failed: {errors[0]}"
+    out = apply_scores(groups, {**cached, **new})
+    status.update(scored=True, kept=sum(len(g["sector"]) + len(g["related"]) for g in out.values()))
+    return out, status, new

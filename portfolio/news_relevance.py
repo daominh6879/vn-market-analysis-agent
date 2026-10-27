@@ -251,7 +251,7 @@ def select_news(articles: list[dict], meta: dict[str, dict], per_ticker: int,
             g, sector, tags = out[t], m.get("sector"), m.get("tags") or []
             if is_ticker_news(t, m.get("aliases") or [], a["title"], a.get("tickers") or []):
                 if len(g["ticker"]) < per_ticker:
-                    g["ticker"].append(a)
+                    g["ticker"].append({**a, "kind": "ticker"})
                     seen[t].add(key)
                 continue
             if len(g["sector"]) < sector_per_ticker and (label := match(SECTOR_TERMS, t, sector, tags, a["title"])):

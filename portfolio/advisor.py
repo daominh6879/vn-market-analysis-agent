@@ -61,7 +61,9 @@ _SYSTEM = (
     "trong dữ liệu hoặc một tin (ghi id vào cited_news_ids, KHÔNG viết 'id=' trong câu chữ). Mã không có tin trong dữ liệu thì không được nêu tin tức. "
     "Mỗi mã có tin của mã, tin ngành và tin ngành liên quan/vĩ mô: đánh giá mã dựa trên cả ba. Tin ngành và tin ngành "
     "liên quan không phải tin của doanh nghiệp: khi dẫn phải nói rõ nó tác động tới mã qua kênh nào (ví dụ giá khí → chi "
-    "phí đầu vào) và theo chiều nào; dòng 'tác động' là đánh giá sơ bộ, tự kiểm tra lại với đoạn trích. "
+    "phí đầu vào) và theo chiều nào. 'Đánh giá sơ bộ' (chiều, độ lớn) của từng tin do một bước máy chấm, có thể sai: tự kiểm "
+    "tra lại với đoạn trích. 'Giá từ trước tin' là mức giá mã đã đi kể từ phiên trước ngày đăng tin: tin tốt mà giá đã tăng "
+    "mạnh (hoặc tin xấu mà giá đã giảm mạnh) thường đã được phản ánh vào giá, không phải lý do mới để mua (bán). "
     "Cân nhắc xu hướng kỹ thuật, định giá và tăng trưởng so với ngành, dòng tiền và tin tức. Với mã đang nắm giữ, đánh giá như "
     "thể đang quyết định mua mới ở giá hiện tại: giá vốn và mức lãi/lỗ hiện tại KHÔNG phải lý do để giữ (không chờ gỡ lỗ, không "
     "chờ giá chạm stop mới bán). Phần lớn bằng chứng xấu (ví dụ giá dưới MA50 và MA200, khối ngoại bán ròng kéo dài, tin tiêu cực, "
@@ -76,10 +78,26 @@ _SYSTEM = (
 )
 
 
+DIRECTION_VI = {1: "tích cực", -1: "tiêu cực", 0: "trung tính/chưa rõ"}
+MAGNITUDE_VI = {1: "nhỏ", 2: "vừa", 3: "lớn"}
+
+
+def _news_tail(a: dict) -> str:
+    """The scorer's preliminary judgement and the price move since the article, after its snippet."""
+    parts = []
+    if a.get("direction") is not None:
+        size = f", {MAGNITUDE_VI[a['magnitude']]}" if a.get("magnitude") in MAGNITUDE_VI else ""
+        parts.append(f"đánh giá sơ bộ: {DIRECTION_VI.get(a['direction'], 'chưa rõ')}{size}"
+                     + (f" — {a['impact']}" if a.get("impact") else ""))
+    if s := a.get("since"):
+        idx = f", VNINDEX {s['vnindex_pct']:+.1f}%" if s.get("vnindex_pct") is not None else ""
+        parts.append(f"giá từ trước tin: {s['ret_pct']:+.1f}%{idx}, {s['sessions']} phiên")
+    return f" ({'; '.join(parts)})" if parts else ""
+
+
 def _fmt_news(articles: list[dict], context: list[dict] | None = None) -> str:
-    def line(a: dict) -> str:
-        impact = f" (tác động: {a['impact']})" if a.get("impact") else ""
-        return f"  - [id={a['id']}] {a['published_at']} ({a['source']}) {a['title']} — {a['snippet']}{impact}"
+    def line(a: dict, prefix: str = "") -> str:
+        return f"  - [id={a['id']}] {a['published_at']} ({a['source']}) {prefix}{a['title']} — {a['snippet']}{_news_tail(a)}"
     out = ("  Tin của mã:\n" + "\n".join(line(a) for a in articles) if articles
            else "  Tin của mã: KHÔNG CÓ tin trong khoảng thời gian xét.")
     sector = [a for a in context or [] if a["kind"] == "sector"]
@@ -88,8 +106,7 @@ def _fmt_news(articles: list[dict], context: list[dict] | None = None) -> str:
         out += f"\n  Tin ngành ({sector[0]['group']}):\n" + "\n".join(line(a) for a in sector)
     if related:
         out += "\n  Tin ngành liên quan / vĩ mô tác động tới mã:\n" + "\n".join(
-            f"  - [id={a['id']}] {a['published_at']} ({a['source']}) [kênh: {a['group']}] {a['title']} — {a['snippet']}"
-            + (f" (tác động: {a['impact']})" if a.get("impact") else "") for a in related)
+            line(a, f"[kênh: {a['group']}] ") for a in related)
     return out
 
 
@@ -410,7 +427,7 @@ def evidence_record(ev: dict) -> dict:
     returned with the advice so the caller can audit a verdict against its input later. Pure."""
     def arts(articles: list[dict]) -> list[dict]:
         return [{k: a[k] for k in ("id", "published_at", "source", "title", "url", "snippet", "kind", "group", "score",
-                                   "impact") if k in a}
+                                   "direction", "magnitude", "impact", "since") if k in a}
                 for a in articles]
     subjects = [p["ticker"] for p in ev["positions"]] + [c["ticker"] for c in ev["candidates"]]
     return {"data_session": ev.get("data_session"), "price_session": ev.get("price_session"),

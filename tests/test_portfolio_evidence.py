@@ -6,8 +6,8 @@ from datetime import datetime
 import pandas as pd
 import pytest
 
-from portfolio.evidence import (compute_risk, group_news, index_trend, rank_candidates, reprice, ticker_stats,
-                                watch_candidates)
+from portfolio.evidence import (compute_risk, group_news, index_trend, price_reaction, rank_candidates, reprice,
+                                ticker_stats, watch_candidates)
 
 D = datetime(2026, 10, 18, 9, 0)
 
@@ -26,6 +26,14 @@ def test_group_news_caps_per_ticker_truncates_snippet_and_ignores_other_tickers(
     out = group_news(rows, ["AAA"], per_ticker=3)
     assert [a["id"] for a in out["AAA"]] == [0, 1, 2] and "ZZZ" not in out
     assert len(out["AAA"][0]["snippet"]) <= 400 and out["AAA"][0]["published_at"] == "2026-10-18"
+
+
+def test_price_reaction_from_the_close_before_the_article_day_to_the_latest():
+    days = pd.to_datetime(["2026-10-21", "2026-10-22", "2026-10-23", "2026-10-26", "2026-10-27"])
+    close = pd.Series([100.0, 102.0, 105.0, 108.0, 110.0], index=days)
+    index = pd.Series([1000.0, 1000.0, 1010.0, 1020.0, 1030.0], index=days)
+    assert price_reaction(close, index, "2026-10-23") == {"ret_pct": 7.8, "vnindex_pct": 3.0, "sessions": 3}
+    assert price_reaction(close, index, "2026-10-21") is None                     # no close before the article
 
 
 def universe(**rows):

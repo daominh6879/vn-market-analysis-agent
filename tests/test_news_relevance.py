@@ -86,7 +86,7 @@ def test_a_ticker_with_its_own_channels_uses_them_instead_of_its_sectors():
 def pool():
     a = lambda i, kind, group="g": {"id": i, "title": f"t{i}", "snippet": "s", "published_at": "2026-10-27",
                                     "kind": kind, "group": group}
-    return {"DCM": {"ticker": [{"id": 1, "title": "DCM lãi"}],
+    return {"DCM": {"ticker": [a(1, "ticker")],
                     "sector": [a(10, "sector"), a(11, "sector"), a(12, "sector")],
                     "related": [a(20, "related", "khí"), a(21, "related", "khí"), a(22, "related", "khí")]}}
 
@@ -103,22 +103,44 @@ class FakeClient:
 
 
 def scored(items):
-    return json.dumps({"items": [{"t": "DCM", "id": i, "score": s, "impact": f"i{i}"} for i, s in items]})
+    return json.dumps({"items": [{"t": "DCM", "id": i, "score": sc, "direction": d, "magnitude": 2, "impact": f"i{i}"}
+                                 for i, sc, d in items]})
 
 
-def test_scorer_keeps_material_articles_best_first_and_never_touches_ticker_news():
-    c = FakeClient(scored([(10, 1), (11, 3), (12, 2), (20, 0), (21, 2), (22, 3), (99, 3)]))
-    out, st = news_scorer.score_news(pool(), {"DCM": {"sector": "Hóa chất", "tags": ["phân bón"]}}, client=c)
-    assert [a["id"] for a in out["DCM"]["sector"]] == [11, 12] and out["DCM"]["sector"][0]["impact"] == "i11"
-    assert [a["id"] for a in out["DCM"]["related"]] == [22, 21] and out["DCM"]["ticker"] == [{"id": 1, "title": "DCM lãi"}]
-    assert st == {"scored": True, "pairs": 6, "kept": 4, "error": None}
+def test_scorer_keeps_material_articles_best_first_and_scores_but_never_drops_ticker_news():
+    c = FakeClient(scored([(1, 1, 1), (10, 1, 0), (11, 3, -1), (12, 2, 1), (20, 0, 0), (21, 2, 1), (22, 3, -1),
+                           (99, 3, 1)]))
+    out, st, new = news_scorer.score_news(pool(), {"DCM": {"sector": "Hóa chất", "tags": ["phân bón"]}}, client=c)
+    assert [a["id"] for a in out["DCM"]["sector"]] == [11, 12] and out["DCM"]["sector"][0]["direction"] == -1
+    assert [a["id"] for a in out["DCM"]["related"]] == [22, 21]
+    assert out["DCM"]["ticker"][0]["id"] == 1 and out["DCM"]["ticker"][0]["direction"] == 1     # score 1, still kept
+    assert st == {"scored": True, "pairs": 7, "cached": 0, "kept": 4, "error": None} and len(new) == 7
     prompt = c.calls[0][0][0].content
-    assert "Kênh tác động: giá khí đầu vào" in prompt and "id=20 [kênh: khí]" in prompt and c.calls[0][1]["temperature"] == 0
+    assert "Kênh tác động: giá khí đầu vào" in prompt and "id=20 [kênh: khí]" in prompt and "id=1 [tin của mã]" in prompt
+    assert c.calls[0][1]["temperature"] == 0
+
+
+def test_scorer_reuses_stored_scores_and_asks_only_for_new_pairs():
+    cached = {("DCM", i): {"score": 3, "direction": 1, "magnitude": 1, "impact": "old"} for i in (1, 10, 11, 12, 20, 21)}
+    c = FakeClient(scored([(22, 2, -1)]))
+    out, st, new = news_scorer.score_news(pool(), {"DCM": {}}, client=c, cached=cached)
+    assert "id=22" in c.calls[0][0][0].content and "id=10" not in c.calls[0][0][0].content
+    assert list(new) == [("DCM", 22)] and st["cached"] == 6 and out["DCM"]["sector"][0]["impact"] == "old"
+    c2 = FakeClient(exc=AssertionError("must not be called"))
+    _, st2, new2 = news_scorer.score_news(pool(), {"DCM": {}}, client=c2, cached={**cached, ("DCM", 22): cached[("DCM", 1)]})
+    assert st2["scored"] is True and new2 == {} and c2.calls == []
 
 
 def test_scorer_falls_back_to_the_keyword_cut_on_error_or_unusable_output():
-    for c in (FakeClient(exc=RuntimeError("down")), FakeClient("không phải json"), FakeClient(scored([(10, 3)]))):
-        out, st = news_scorer.score_news(pool(), {"DCM": {}}, client=c)
-        assert st["scored"] is False and st["error"]
+    for c in (FakeClient(exc=RuntimeError("down")), FakeClient("không phải json"), FakeClient(scored([(10, 3, 1)]))):
+        out, st, new = news_scorer.score_news(pool(), {"DCM": {}}, client=c)
+        assert st["scored"] is False and st["error"] and new == {}
         assert [a["id"] for a in out["DCM"]["sector"]] == [10, 11, 12]
         assert [a["id"] for a in out["DCM"]["related"]] == [20, 21]               # 2 per channel
+
+
+def test_batches_split_pairs_across_calls_and_keep_tickers_together():
+    todo = {"AAA": [{"id": i} for i in range(5)], "BBB": [{"id": 10 + i} for i in range(3)]}
+    b = news_scorer.batches(todo, size=4)
+    assert [{t: [a["id"] for a in v] for t, v in x.items()} for x in b] == [
+        {"AAA": [0, 1, 2, 3]}, {"AAA": [4], "BBB": [10, 11, 12]}]
