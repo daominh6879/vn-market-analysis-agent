@@ -395,8 +395,8 @@ def _run_sensor(empty_flags):
         def execute(self, sql, params=None):
             self._i += 1
 
-        def fetchone(self):
-            return (empty_flags[self._i],)
+        def fetchone(self):     # checks past the given flags (added later in _BOOTSTRAP_CHECKS) are populated
+            return (empty_flags[self._i] if self._i < len(empty_flags) else False,)
 
     class _Conn:
         def cursor(self):
