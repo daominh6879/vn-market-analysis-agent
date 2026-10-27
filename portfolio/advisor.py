@@ -263,20 +263,24 @@ def apply_limits(verdicts: dict[str, dict], ev: dict) -> dict:
                         "limit_codes": codes, "unrealized_pct": pnl,
                         "weight_pct": (p["market_value"] or 0) / nav * 100 if nav else 0.0,
                         **(buy_levels(v, price) if action == "BUY_MORE" else {})})
+    skipped = []
     for c in ev["candidates"]:
         v = verdicts.get(c["ticker"])
-        if not v or v["action"] != "BUY_NEW":
-            continue
-        qty = size_lots(min(cash_left * PER_TRADE_CASH_PCT, MAX_TICKER_WEIGHT * nav), c["price"])
-        if qty == 0:
+        base = {"ticker": c["ticker"], "price_ref": c["price"], "sector": c["sector"], "avg_value_bn": c["avg_value_bn"],
+                "ret_20": c.get("ret_20"), "watch": bool(c.get("watch")),
+                "confidence": v["confidence"] if v else 0.0, "reasons": v["reasons"] if v else [],
+                "risks": v["risks"] if v else [], "cited_news_ids": v["cited_news_ids"] if v else []}
+        qty = size_lots(min(cash_left * PER_TRADE_CASH_PCT, MAX_TICKER_WEIGHT * nav), c["price"]) \
+            if v and v["action"] == "BUY_NEW" else 0
+        if qty == 0:        # kept so the caller can score what the AI passed on, not only what it picked
+            code = "invalid_llm_output" if not v else "ai_skip" if v["action"] != "BUY_NEW" else "no_cash_or_weight_cap"
+            skipped.append({**base, "action": "SKIP", "skip_code": code,
+                            **(buy_levels(v, c["price"]) if v and v["action"] == "BUY_NEW" else {})})
             continue
         cash_left -= qty * c["price"] * (1 + ledger.fee_pct())
-        ideas.append({"ticker": c["ticker"], "action": "BUY_NEW", "quantity": qty, "price_ref": c["price"],
-                      "sector": c["sector"], "avg_value_bn": c["avg_value_bn"], "watch": bool(c.get("watch")),
-                      "confidence": v["confidence"],
-                      "reasons": v["reasons"], "risks": v["risks"], "cited_news_ids": v["cited_news_ids"],
-                      **buy_levels(v, c["price"])})
-    return {"actions": actions, "new_ideas": ideas, "cash_after_pct": cash_left / nav * 100 if nav else 0.0}
+        ideas.append({**base, "action": "BUY_NEW", "quantity": qty, **buy_levels(v, c["price"])})
+    return {"actions": actions, "new_ideas": ideas, "skipped_ideas": skipped,
+            "cash_after_pct": cash_left / nav * 100 if nav else 0.0}
 
 
 # ── report ────────────────────────────────────────────────────────────────────
@@ -351,6 +355,21 @@ def _assemble(ev: dict, decided: dict, summ: dict) -> str:
     return "\n".join(out)
 
 
+def evidence_record(ev: dict) -> dict:
+    """What the LLM was shown, per ticker (the prompt's blocks, flows, news with dates) plus the market text and news —
+    returned with the advice so the caller can audit a verdict against its input later. Pure."""
+    def arts(articles: list[dict]) -> list[dict]:
+        return [{k: a.get(k) for k in ("id", "published_at", "source", "title", "url", "snippet")} for a in articles]
+    subjects = [p["ticker"] for p in ev["positions"]] + [c["ticker"] for c in ev["candidates"]]
+    return {"data_session": ev.get("data_session"), "price_session": ev.get("price_session"),
+            "market": ev["market"], "market_news": arts(ev["market_news"]),
+            "candidates": [{k: c.get(k) for k in ("ticker", "price", "ret_20", "avg_value_bn", "sector_nav_pct", "watch")}
+                           for c in ev["candidates"]],
+            "tickers": {t: {"technical": ev["technical"].get(t, ""), "fundamentals": ev["fundamentals"].get(t, ""),
+                            "signals": ev["signals"].get(t, ""), "foreign_flows": ev["foreign_flows"].get(t),
+                            "news": arts(ev["news"].get(t, []))} for t in subjects}}
+
+
 def advise_for(positions: list[dict], cash: dict, user_id: str = "external", watchlist: list[str] | None = None) -> dict:
     """Full advice for positions/cash supplied by the caller (the vn-portfolio app owns the ledger). Watchlist tickers
     are judged as new-idea candidates first.
@@ -380,9 +399,10 @@ def _advise(ev: dict) -> dict:
     decided = apply_limits(verdicts, ev)
     report = scrub_internal(_assemble(ev, decided, summ) + "\n\n" + disclaimer_for({"advice"}))
     idx = _news_index(ev)
-    for item in decided["actions"] + decided["new_ideas"]:
+    for item in decided["actions"] + decided["new_ideas"] + decided["skipped_ideas"]:
         item["cited_news"] = _cited(item, idx)
     return {"report_md": report, "actions": decided["actions"], "new_ideas": decided["new_ideas"],
+            "skipped_ideas": decided["skipped_ideas"],
             "risk": ev["risk"], "as_of": ev["as_of"], "data_session": ev.get("data_session"),
             "price_session": ev.get("price_session"),
-            "llm_missing": [t for t in holdings + cands if t not in verdicts]}
+            "llm_missing": [t for t in holdings + cands if t not in verdicts], "evidence": evidence_record(ev)}

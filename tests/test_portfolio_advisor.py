@@ -171,6 +171,18 @@ def test_candidates_sized_skip_ignored_and_cash_consumed_across_buys():
 def test_candidate_dropped_when_cash_too_small():
     r = apply_limits({"CCC": verdict("CCC", "BUY_NEW")}, ev([], [cand("CCC", price=500_000.0)], cash=1_000_000.0))
     assert r["new_ideas"] == []
+    s = r["skipped_ideas"][0]
+    assert (s["ticker"], s["action"], s["skip_code"]) == ("CCC", "SKIP", "no_cash_or_weight_cap") and "stop_price" in s
+
+
+def test_candidates_not_bought_are_kept_with_the_reason():
+    e = ev([], [cand("CCC"), cand("DDD"), cand("EEE")])
+    r = apply_limits({"CCC": verdict("CCC", "BUY_NEW"), "DDD": verdict("DDD", "SKIP", reasons=["dưới MA50"])}, e)
+    assert [i["ticker"] for i in r["new_ideas"]] == ["CCC"]
+    skipped = {s["ticker"]: s for s in r["skipped_ideas"]}
+    assert skipped["DDD"]["skip_code"] == "ai_skip" and skipped["DDD"]["reasons"] == ["dưới MA50"]
+    assert skipped["DDD"]["price_ref"] == 30_000.0 and skipped["DDD"]["ret_20"] == 0.05 and "stop_price" not in skipped["DDD"]
+    assert skipped["EEE"]["skip_code"] == "invalid_llm_output" and skipped["EEE"]["confidence"] == 0.0
 
 
 # ── stop / target levels ──────────────────────────────────────────────────────
@@ -268,6 +280,18 @@ def test_advise_report_structure_and_validated_output(monkeypatch):
     assert out["actions"][0]["cited_news"][0]["id"] == 7 and len(out["actions"][0]["cited_news"]) == 1   # id 123 dropped
     assert out["actions"][1]["cited_news"] == []                                                          # BBB has no news
     assert out["new_ideas"][0]["ticker"] == "CCC" and out["llm_missing"] == [] and len(calls) == 1
+    assert out["skipped_ideas"] == []
+
+
+def test_advise_returns_the_evidence_the_llm_saw(monkeypatch):
+    out, _ = _run(monkeypatch, GOOD)
+    e = out["evidence"]
+    assert set(e["tickers"]) == {"AAA", "BBB", "CCC"} and e["market"] == "[THỊ TRƯỜNG] x"
+    assert e["tickers"]["AAA"]["technical"] == "ta" and e["tickers"]["AAA"]["fundamentals"] == "fa"
+    assert e["tickers"]["AAA"]["foreign_flows"] == {"net_5d_bn": -3.0, "net_20d_bn": -9.0}
+    assert e["tickers"]["AAA"]["news"][0]["id"] == 7 and e["tickers"]["AAA"]["news"][0]["published_at"] == "2026-10-18"
+    assert e["tickers"]["BBB"]["news"] == [] and e["candidates"][0]["ticker"] == "CCC"
+    json.dumps(out)                                     # stored as jsonb by the caller
 
 
 def test_retry_once_when_a_ticker_is_missing_then_succeeds(monkeypatch):
