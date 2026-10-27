@@ -52,16 +52,37 @@ Run Dagster `7896bbc8` (HPG, đã đồng bộ): SUCCESS, `{'synced': 0, 'up_to_
 
 | | ctx (gold trong context) | ans số liệu | ans chính sách | ans đối chứng âm | câu rỗng |
 |---|---|---|---|---|---|
-| vector (top_k=5) | 8/14 | 15/30 | 9/12 | 3/3 | 0 |
-| hybrid (top_k=6, 3 anchor) | 14/14 | 30/30 | 12/12 | 3/3 | 0 |
+| vector (top_k=5) | 8/14 | 15/30 | 6/12 | 3/3 | 0 |
+| hybrid (top_k=7, 3 anchor) | 14/14 | 29/30 | 10/12 | 3/3 | 0 |
 
-Hybrid bản đầu (top_k=5, không anchor) có ctx 13/14 và chính sách 6/12 (vector 8/12 ở lần đo đó). Hai lỗi, đã điều tra:
+Số chính sách của vector dao động 6/12–9/12 giữa các lần chạy, hybrid 10/12–12/12. Các câu hybrid trượt đều có chunk vàng trong context: câu trả lời đúng nhưng thiếu một fact bắt buộc (ví dụ không nhắc "một năm" hay "nghĩa vụ").
+
+Hybrid bản đầu (top_k=5, không anchor) có ctx 13/14 và chính sách 6/12 (vector 8/12 ở lần đo đó). Các lỗi đã điều tra:
 - `vcb_provisioning_policy` (3/3 → 0/3): câu hỏi rộng nên hàng chục chunk khớp "dự phòng rủi ro tín dụng" gần như bằng nhau (điểm 155–171, chunk vàng "dự phòng rủi ro chung 0,75%" chỉ 59); phần thưởng lexical của đám đông đẩy chunk vector xếp hạng 3 ra khỏi top 5. IDF theo n-gram và giảm trọng số lexical đều không sửa được. Không có thống kê phía câu hỏi nào tách được hai nhóm (số chunk khớp ≥70% điểm tốt nhất: `vcb_equity` 10, `vcb_trading_securities` 19, `vcb_provisioning_policy` 6). Sửa: `hybrid_rank(anchors=3)` luôn giữ 3 kết quả vector đầu, `HYBRID_TOP_K=6`. Với top_k=5, anchor chỉ đổi lỗi này sang `vcb_trading_securities`; từ top_k=6 với 3 anchor đạt 14/14 và giữ nguyên ở 7, 8.
 - `hpg_unearned_revenue` (hybrid 1/3): chunk chính sách có trong context nhưng LLM trả số dư "Mã số 318". Nguyên nhân là quy tắc `_SYSTEM` "ưu tiên số báo cáo chính" quá rộng; giới hạn lại chỉ áp dụng khi câu hỏi hỏi con số, và câu hỏi chính sách/"như thế nào" thì trả nội dung thuyết minh. Sau đó 3/3.
+
+- `HYBRID_TOP_K`: lúc đầu chọn 6 (14/14), nhưng sau khi sync lại với nhãn ngữ cảnh mới (đổi văn bản được embed) `vcb_trading_securities` rơi khỏi top 6 → 13/14 (chunk vàng xếp hạng 6 theo vector, hạng 15 theo chữ trong 15 chunk gần bằng nhau). Đo lại bằng `--no-answer` trên index hiện tại: top_k=6 → 13/14; top_k=7/8/10 với 3 anchor → 14/14; ở index trước k=6..8 đều 14/14. Chọn 7 là mức nhỏ nhất đúng ở cả hai trạng thái. Đây là ca biên, nhạy với thay đổi nhỏ của embedding.
 
 Lưu ý khi đọc kết quả: top_k, số anchor và câu chữ prompt được chọn trên chính 14 câu này nên 14/14 là số trên tập tinh chỉnh, không phải ước lượng độc lập; mẫu nhỏ (2 mã, 3 lần chạy). Cùng một ca vector dao động 2/3 ↔ 3/3 giữa hai lần chạy (`hpg_unearned_revenue`), nên chênh 1 lần gọi không đáng tin. Cần thêm câu hỏi (mã khác, báo cáo kết quả kinh doanh/lưu chuyển tiền tệ) trước khi coi là ổn định.
 
 Chạy: `docker cp evals/eval_ask_report.py dagster-daemon:/app/evals/ && docker exec dagster-daemon python evals/eval_ask_report.py --runs 3` (thêm `--no-answer` để chỉ đo retrieval, không gọi LLM).
+
+## Chạy thử 10 mã qua Dagster (27/10/2026, run `0d51d902`)
+`bctc_sync_job` với ACB, MBB, TCB, MWG, VHM, SSI, GAS, PLX, SAB, MSN: SUCCESS sau 480 s, `{'synced': 6, 'failed': 4}`.
+
+| Mã | Kết quả |
+|---|---|
+| MBB, TCB, MWG, VHM, PLX, SAB | đã nạp: 336, 306, 102, 713, 246, 218 chunk |
+| ACB, SSI, GAS, MSN | `404 NOT FOUND` ở link PDF CafeF trả về |
+
+Tổng đã thử 14 mã: 8 nạp được, 6 lỗi 404 (FPT, VNM, ACB, SSI, GAS, MSN). Mẫu do tôi chọn, không ngẫu nhiên. Toàn universe có 431 mã active; hiện có 8 tài liệu trong `bctc_structural`. Thời gian: khoảng 80 s mỗi mã nạp được (gồm OCR) nên một lần bootstrap đầy đủ có thể kéo dài hàng giờ; đây là ước lượng từ mẫu nhỏ, chưa đo.
+
+Vấn đề thấy trong dữ liệu đã nạp:
+- **Nhãn ngữ cảnh sai (đã sửa; sync lại 8 mã, run `9e98762e`, 601 s, 8/8):** MBB 137/336 chunk nhãn "Báo cáo của Ban điều hành", VHM 222/713 chunk nhãn "lưu chuyển tiền tệ", SAB 18 chunk nhãn "báo cáo kiểm toán". Nguyên nhân: (a) tiêu đề chung chung (báo cáo của Ban điều hành/kiểm toán) trở thành nhãn thay vì xoá nhãn; (b) `_title_of` khớp chuỗi con nên dòng "THÔNG TIN BỔ SUNG VỀ BÁO CÁO LƯU CHUYỂN TIỀN TỆ" trong thuyết minh bị coi là tiêu đề báo cáo; (c) tiêu đề MBB (`BAO CAO TINH Hi NH TAI CHiNH Rl~NG tc;1i ngay…`) và số mẫu `B02/TCTD` (không có chữ "Mẫu") không được nhận ra. Sau sửa: tiêu đề phải đứng đầu dòng (hoặc sau tên công ty), kiểm tra chữ hoa trên 28 chữ cái đầu, tiêu đề lạ xoá nhãn, hàng có 2 ngày `dd/mm/yyyy` được nhận là hàng cột. Nhãn lệch còn lại của MBB: 10 chunk chỉ có nhãn cột (có ngày kỳ báo cáo).
+- **Văn bản MBB hỏng từ gốc:** mã hoá font sai nên "Tiền mặt" thành `Ti~nm~t`, "Dự phòng rủi ro" thành `Dl,l'ph6ng rui ro`. Truy vấn chữ trên MBB sẽ kém; chưa xử lý.
+- **MBB năm 2024:** payload `year` = '2024' (các mã khác 2025), nên lọc `year='2025'` sẽ không thấy MBB. Chưa xác định CafeF chưa có BCTC 2025 của MBB hay nguyên nhân khác.
+- **VHM:** không tìm thấy dòng "Tổng tài sản" có số trong 713 chunk (các mã khác đều có). Chưa điều tra.
+- Chưa đối chiếu số liệu của 6 mã mới với PDF.
 
 ## Cách chạy lại
 ```

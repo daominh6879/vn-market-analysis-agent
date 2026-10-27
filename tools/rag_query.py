@@ -26,7 +26,7 @@ from tools.result import ToolResult
 OLLAMA_URL  = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "bge-m3")
 TOP_K       = 5       # vector-only retrieval
-HYBRID_TOP_K = 6      # hybrid returns one more: lexical hits are added without displacing the vector anchors
+HYBRID_TOP_K = 7      # hybrid returns two more: lexical hits are added without displacing the vector anchors
 VECTOR_ANCHORS = 3    # vector hits that always stay in the hybrid result
 VECTOR_POOL = 40      # vector candidates fused with the lexical ranking
 LEXICAL_WEIGHT = 2.0  # the best text match is worth this many top vector ranks (vector ranks of OCR'd tables are noisy)
