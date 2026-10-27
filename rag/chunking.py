@@ -97,7 +97,10 @@ _CANON_TITLES = (
     ("kiemtoandoclap", "BÁO CÁO KIỂM TOÁN ĐỘC LẬP"),
 )
 # "Mẫu số B 09-DN" / "Mẫu B02/TCTD" is printed on every page of a statement and survives OCR better than its title
-_FORM_RE = re.compile(r"mau(?:so)?b(0\d)(dn|tctd)")
+_FORM_RE = re.compile(r"(?:mau(?:so)?)?b(0\d)(dn|tctd)")
+# what may precede a statement name in a running page header: nothing, or the company's name
+_COMPANY_WORDS = ("congty", "nganhang", "tapdoan", "ctcp", "tctd")
+_DATE_RE = re.compile(r"\d{2}/\d{2}/\d{4}")
 _FORM_TITLES = {
     "dn": {"01": "BẢNG CÂN ĐỐI KẾ TOÁN", "02": "BÁO CÁO KẾT QUẢ HOẠT ĐỘNG KINH DOANH",
            "03": "BÁO CÁO LƯU CHUYỂN TIỀN TỆ", "09": "THUYẾT MINH BÁO CÁO TÀI CHÍNH"},
@@ -107,7 +110,11 @@ _FORM_TITLES = {
 
 
 def _title_of(line: str) -> str | None:
-    """Statement title of a heading / running page-header line, tolerant of OCR damage; None for anything else."""
+    """Canonical statement name of a heading / running page-header line, tolerant of OCR damage; else None.
+
+    A real title is the whole heading, optionally preceded by the company name. "Thông tin bổ sung về báo cáo lưu
+    chuyển tiền tệ" or "Các khoản mục ngoài bảng cân đối kế toán" are notes sub-headings that merely mention a statement.
+    """
     from rag.lexical import fold
 
     plain = line.strip().strip("#*_ ").strip()
@@ -115,15 +122,29 @@ def _title_of(line: str) -> str | None:
         return None
     f = fold(plain)
     form = _FORM_RE.search(f)
-    if form and form.group(1) in _FORM_TITLES[form.group(2)]:
+    if form and form.start() <= 6 and form.group(1) in _FORM_TITLES[form.group(2)]:
         return _FORM_TITLES[form.group(2)][form.group(1)]
-    letters = [c for c in plain if c.isalpha()]
-    if len(letters) < 8 or sum(c.isupper() for c in letters) / len(letters) < 0.7:
+    opening = [c for c in plain if c.isalpha()][:28]
+    if len(opening) < 8 or sum(c.isupper() for c in opening) / len(opening) < 0.7:
         return None                                   # body text that merely mentions a statement
     for key, title in _CANON_TITLES:
-        if key in f and f"ngoai{key}" not in f:       # "Các khoản mục ngoài bảng cân đối kế toán" is a sub-heading
+        at = f.find(key)
+        if at >= 0 and (at == 0 or any(w in f[:at] for w in _COMPANY_WORDS)):
             return title
-    return plain if f.startswith(("bang", "baocao")) and len(plain) <= 90 else None
+    return None
+
+
+def _is_unrecognised_heading(line: str) -> bool:
+    """An upper-case "BÁO CÁO ..."/"BẢNG ..." heading that is not a known statement (e.g. the board's report).
+
+    It ends the previous statement, so chunks after it must not inherit that statement's label.
+    """
+    from rag.lexical import fold
+
+    plain = line.strip().strip("#*_ ").strip()
+    letters = [c for c in plain if c.isalpha()]
+    return (4 <= len(plain) <= 90 and len(letters) >= 8 and sum(c.isupper() for c in letters[:28]) / len(letters[:28]) >= 0.7
+            and fold(plain).startswith(("bang", "baocao")))
 
 
 def _header_cells(line: str) -> list[str] | None:
@@ -133,9 +154,10 @@ def _header_cells(line: str) -> list[str] | None:
     if not line.lstrip().startswith("|"):
         return None
     f = fold(line)
-    if not (any(h in f for h in _HEADER_HINTS) and any(h in f for h in _HEADER_PERIOD_HINTS)):
+    labelled = any(h in f for h in _HEADER_HINTS) and any(h in f for h in _HEADER_PERIOD_HINTS)
+    if not (labelled or len(_DATE_RE.findall(line)) >= 2):       # labels can be garbled; two period dates are not
         return None
-    cells = [re.sub(r"\s+", " ", c.replace("<br>", " ")).strip() for c in line.strip().strip("|").split("|")]
+    cells = [re.sub(r"\s+", " ", c.replace("<br>", " ")).strip(" *_") for c in line.strip().strip("|").split("|")]
     return [c for c in cells if c and not set(c) <= set("-: ")]
 
 
@@ -155,6 +177,9 @@ def add_table_context(text: str, chunks: list[str]) -> list[str]:
         if title:
             events.append((pos, "title", title))
             last_title_pos = pos
+        elif _is_unrecognised_heading(line):
+            events.append((pos, "reset", ""))
+            last_title_pos = -1
         elif 0 <= last_title_pos and pos - last_title_pos < 400 and fold(line).startswith(_DATE_LINE_PREFIXES):
             events.append((pos, "date", line.strip().strip("*_ ")))
         else:
@@ -174,14 +199,16 @@ def add_table_context(text: str, chunks: list[str]) -> list[str]:
         end = start + len(chunk)
         inside = {kind for p, kind, _ in events if start <= p < end}
         has_rows = any(ln.lstrip().startswith("|") for ln in chunk.splitlines())
-        if not has_rows or "title" in inside or "columns" in inside:
+        if not has_rows or inside & {"title", "columns", "reset"}:
             out.append(chunk)
             continue
         state: dict[str, str] = {}
         for p, kind, value in events:
             if p >= start:
                 break
-            if kind == "title":
+            if kind == "reset":
+                state = {}                        # unrecognised heading: better no label than the previous statement's
+            elif kind == "title":
                 if state.get("title") != value:   # the same title repeats on every page of a statement
                     state = {"title": value}      # a new statement drops the previous one's date and columns
             elif kind == "date" and "date" in state:

@@ -78,3 +78,41 @@ def test_continuation_page_keeps_columns_when_form_header_repeats():
            "MẪU SỐ B 01-DN\n\n|8.|Quỹ|322|3|4|\n")
     out, = add_table_context(doc, ["|8.|Quỹ|322|3|4|"])
     assert "Tại ngày 31 tháng 12 năm 2025" in out and "Cột: Mã số | Sốcuối năm | Sốđầu năm" in out
+
+
+# ── cases taken from real parsed BCTC (MBB, VHM, SAB) ───────────────────────────────────────────────
+
+def test_garbled_mixed_case_title_is_still_found():
+    # MBB: only the first words are upper case, the rest is "tc;1i ngay 31 thang 12 nam 2024"
+    assert _title_of("BAO CAO TINH Hi NH TAI CHiNH Rl~NG tc;1i ngay 31 thang 12 nam 2024 ") == "BÁO CÁO TÌNH HÌNH TÀI CHÍNH"
+
+
+def test_form_number_without_the_word_mau_counts_only_at_line_start():
+    assert _title_of("B02/TCTD _(?an hanh theo Thong fll' s6 49/2014/TT-NHNN ngay 31 thang 12 nam 2014)_") == "BÁO CÁO TÌNH HÌNH TÀI CHÍNH"
+    assert _title_of("Các số liệu được trình bày theo Mẫu B01-DN ban hành kèm theo Thông tư 200") is None
+
+
+def test_notes_subheading_that_mentions_a_statement_is_not_a_title():
+    # VHM: this line relabelled 222 later chunks as the cash-flow statement
+    assert _title_of("THONG TIN BO SUNG VE BAO CÁO LƯU CHUYEN TIEN TE RIENG") is None
+    assert _title_of("CÁC KHOẢN MỤC NGOÀI BẢNG CÂN ĐỐI KẾ TOÁN") is None
+    assert _title_of("CÔNG TY CỔ PHẦN VINHOMES BẢNG CÂN ĐỐI KẾ TOÁN RIÊNG (Tiếp theo)") == "BẢNG CÂN ĐỐI KẾ TOÁN"
+
+
+def test_header_row_with_garbled_labels_but_two_dates():
+    cells = _header_cells("||_Thuy/;t_|_31/12/2024_|_31/12/2023_|")
+    assert cells and "31/12/2024" in cells and "31/12/2023" in cells
+    assert _header_cells("|Tiền mặt|5|3.266.448|3.637.930|") is None
+
+
+def test_unrecognised_heading_clears_the_label_instead_of_inheriting_the_previous_statement():
+    doc = ("BẢNG CÂN ĐỐI KẾ TOÁN\n\n|Mã số|Sốcuối năm|Sốđầu năm|\n|100|1|2|\n\n"
+           "BÁO CÁO CỦA BAN TỔNG GIÁM ĐỐC\n\n|1.|Hội đồng quản trị|ông A|\n")
+    chunk = "|1.|Hội đồng quản trị|ông A|"
+    assert add_table_context(doc, [chunk]) == [chunk]
+
+
+def test_notes_subheading_does_not_relabel_the_notes():
+    doc = ("MẪU SỐ B 09-DN\n\nTHÔNG TIN BỔ SUNG VỀ BÁO CÁO LƯU CHUYỂN TIỀN TỆ RIÊNG\n\n|a|1|2|\n")
+    out, = add_table_context(doc, ["|a|1|2|"])
+    assert out.startswith("[Ngữ cảnh: THUYẾT MINH BÁO CÁO TÀI CHÍNH]")
