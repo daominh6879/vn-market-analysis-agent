@@ -829,3 +829,8 @@ Hai hạn chế còn lại: (1) incremental `MAX(date)+1` không lấp được 
 
 **Q:** Vì sao gõ không dấu "the gioi di dong" từng không ra MWG, dù "thế giới di động" ra?
 **A:** `core/tickers._normalize` bỏ dấu bằng NFKD nhưng "đ" không có dạng tách nên giữ nguyên; alias lưu "the gioi di đong" không khớp "the gioi di dong" gõ trong câu. Đã thêm `replace("đ", "d")` ở cả hai phía; có test `tests/test_ticker_extraction.py::test_company_name_with_d_bar_matches_without_diacritics`.
+
+---
+
+**Q:** `ask_report` trả `''` (rỗng) dù API DeepSeek có trả nội dung?
+**A:** `strip_thinking` (llm/utils.py) xoá mọi dòng mở đầu bằng "Theo/Dựa/Xem/Để/Vậy…" vì coi là chain-of-thought rò rỉ. Câu trả lời RAG một dòng kiểu "Theo bảng…: X" bị xoá sạch. Phát hiện bằng cách bọc `openai.resources.chat.completions.Completions.create` trong script thăm dò: `message.content` có đủ số liệu, `output_tokens=54` nhưng `LLMResponse.text == ''`. Đã sửa ở `llm/openai_client.py` (giữ text gốc khi strip ra rỗng). Chi tiết: `docs/notes/bctc-sync.md`.

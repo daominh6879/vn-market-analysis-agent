@@ -87,7 +87,8 @@ class OpenAIClient(LLMClient):
 
         if self._strip_thinking:
             from llm.utils import strip_thinking as _strip
-            text = _strip(text)
+            # The heuristic drops any line starting with e.g. "Theo"/"Dựa"; a one-line answer would vanish entirely
+            text = _strip(text) or text
 
         tool_calls: list[ToolCall] = []
         import json

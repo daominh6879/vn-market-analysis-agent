@@ -292,3 +292,19 @@ def test_e2e_report_fence_extracted():
     _assert_no_leak(result)
     assert "# Phân tích Kỹ thuật HPG" in result
     assert "Tăng mạnh" in result
+
+
+def test_client_keeps_one_line_answer_that_looks_like_thinking():
+    """RAG answers often open with "Theo ..."; strip_thinking deletes such a line, which must not empty the reply."""
+    from types import SimpleNamespace as NS
+
+    from llm.openai_client import OpenAIClient
+    from llm.types import Message
+
+    answer = "Theo bảng trong tài liệu: Vốn chủ sở hữu cuối năm 2025 là **94.430.926.468.210**."
+    msg = NS(content=answer, tool_calls=None)
+    resp = NS(choices=[NS(message=msg, finish_reason="stop")], usage=NS(prompt_tokens=1, completion_tokens=1), model="m")
+    client = OpenAIClient(api_key="x", strip_thinking_output=True)
+    client._client = NS(chat=NS(completions=NS(create=lambda **kw: resp)))
+    assert client.generate([Message(role="user", content="q")]).text == answer
+
