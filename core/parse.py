@@ -77,21 +77,84 @@ def _rasterize_pdf(path: str, dpi: int = 150) -> str:
     return tmp
 
 
-def parse_with_pymupdf(path: str, ocr_language: str = "vie+eng") -> ParsedDoc:
+# Folded markers that a page's first lines name a primary statement (balance sheet, income, cash flow) or its form number
+_STATEMENT_MARKERS = (
+    "bangcandoiketoan", "baocaotinhhinhtaichinh", "baocaoketquahoatdong", "baocaoluuchuyentien",
+    "b01dn", "b02dn", "b03dn", "b02tctd", "b03tctd", "b04tctd",
+)
+
+
+def statement_pages(page_texts: list[str]) -> list[int]:
+    """Indices of the pages whose head names a primary financial statement (notes pages, form B09/B05, are excluded)."""
+    from rag.lexical import fold
+
+    return [i for i, text in enumerate(page_texts) if any(m in fold(text[:500]) for m in _STATEMENT_MARKERS)]
+
+
+def _ocr_pages(path: str, ocr_language: str, ocr_function, only: list[int] | None = None) -> list[str]:
+    """Markdown of each page (all pages, or `only`, in order) OCR'd with the given engine."""
     import pymupdf4llm
+
+    chunks = pymupdf4llm.to_markdown(
+        path, pages=only, ocr_language=ocr_language, force_ocr=True, ocr_function=ocr_function, page_chunks=True
+    )
+    return [c["text"] for c in chunks]
+
+
+def _reocr_statements(path: str, pages: list[str], ocr_language: str) -> list[str] | None:
+    """`pages` with the primary-statement pages re-read by RapidOCR, or None when that is not possible.
+
+    Tesseract is built for ~300 dpi, but many BCTC scans embed 90-100 dpi images, where it misreads digits and drops rows
+    (VHM: 88% of the numbers right at best). RapidOCR read all 85 numbers of the same pages correctly, but loses part of the
+    Vietnamese diacritics, so it is used only for the statement pages and only when Tesseract's result failed the
+    balance-sheet check. Retrieval ignores accents, so the weaker labels cost little there.
+    """
+    import importlib.util
+
+    idx = statement_pages(pages)
+    if not idx or importlib.util.find_spec("rapidocr") is None:
+        return None
+    try:
+        from pymupdf4llm.ocr import rapidocr_api
+
+        fresh = _ocr_pages(path, ocr_language, rapidocr_api.exec_ocr, only=idx)
+    except Exception as exc:
+        print(f"  [warn] RapidOCR pass failed: {exc}")
+        return None
+    if len(fresh) != len(idx):
+        return None
+    merged = list(pages)
+    for i, text in zip(idx, fresh):
+        merged[i] = text
+    return merged
+
+
+def parse_with_pymupdf(path: str, ocr_language: str = "vie+eng") -> ParsedDoc:
+    from pymupdf4llm.ocr import tesseract_api
+
+    from core.balance_check import balance_check
 
     problem = text_layer_problem(path)
     rasterised = _rasterize_pdf(path) if problem else None
+    engine = "tesseract"
     try:
-        md = pymupdf4llm.to_markdown(rasterised or path, ocr_language=ocr_language, force_ocr=True)
+        target = rasterised or path
+        # Tesseract is named explicitly: pymupdf4llm would otherwise pick RapidOCR for every page once it is installed
+        pages = _ocr_pages(target, ocr_language, tesseract_api.exec_ocr)
+        if balance_check("\n\n".join(pages)).status != "ok":
+            fixed = _reocr_statements(target, pages, ocr_language)
+            if fixed is not None and balance_check("\n\n".join(fixed)).status == "ok":
+                pages, engine = fixed, "tesseract + rapidocr (statement pages)"
     finally:
         if rasterised:
             Path(rasterised).unlink(missing_ok=True)
+    md = "\n\n".join(pages)
     num_pages = _count_pages_pymupdf(path)
     return ParsedDoc(
         content=md,
         metadata={
             "tool": "pymupdf4llm",
+            "ocr_engine": engine,
             "source_file": Path(path).name,
             "num_pages": num_pages,
             "parsed_at": datetime.now().isoformat(),

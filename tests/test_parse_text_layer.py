@@ -68,3 +68,63 @@ def test_rasterised_copy_keeps_pages_and_loses_the_text_layer(tmp_path):
     finally:
         import os
         os.unlink(out)
+
+
+# ── two-engine parse: Tesseract everywhere, RapidOCR on the statement pages when the balance check fails ──────────
+
+from core import parse as parse_mod  # noqa: E402
+
+BS_PAGE = "BẢNG CÂN ĐỐI KẾ TOÁN RIÊNG\nngày 31 tháng 12 năm 2025\n|100|A. TÀI SẢN NGẮN HẠN||370.623.744|250.759.416|"
+CAPITAL_ONLY = "|440|TỔNG CỘNG NGUỒN VỐN||590.372.684|436.738.860|"
+BOTH = "|270|TỔNG CỘNG TÀI SẢN||590.372.684|436.738.860|\n" + CAPITAL_ONLY
+NOTES_PAGE = "THUYẾT MINH BÁO CÁO TÀI CHÍNH RIÊNG\nMẪU SỐ B 09-DN\n|1|Tiền|10|20|"
+
+
+def test_statement_pages_picks_primary_statements_and_not_the_notes():
+    pages = ["BÁO CÁO CỦA BAN GIÁM ĐỐC", BS_PAGE, "MẪU SỐ B 02-DN\n|doanh thu|1|2|", NOTES_PAGE,
+             "BÁO CÁO TÌNH HÌNH TÀI CHÍNH RIÊNG", "B03/TCTD (Ban hành theo Thông tư"]
+    assert parse_mod.statement_pages(pages) == [1, 2, 4, 5]
+
+
+def test_statement_markers_are_only_read_from_the_page_head():
+    late = "x" * 600 + " BẢNG CÂN ĐỐI KẾ TOÁN"           # a notes page that merely mentions the statement further down
+    assert parse_mod.statement_pages([late]) == []
+
+
+def _stub_ocr(monkeypatch, tess_pages, rapid_pages):
+    calls = []
+
+    def fake_ocr_pages(path, lang, fn, only=None):
+        calls.append((getattr(fn, "__module__", ""), only))
+        return list(tess_pages) if only is None else [rapid_pages[i] for i in only]
+
+    monkeypatch.setattr(parse_mod, "_ocr_pages", fake_ocr_pages)
+    monkeypatch.setattr(parse_mod, "text_layer_problem", lambda p: None)
+    monkeypatch.setattr(parse_mod, "_count_pages_pymupdf", lambda p: len(tess_pages))
+    return calls
+
+
+def test_failed_balance_check_swaps_in_the_rapidocr_statement_pages(monkeypatch):
+    pytest.importorskip("rapidocr")
+    tess = ["cover", BS_PAGE + "\n" + CAPITAL_ONLY, NOTES_PAGE]
+    rapid = {1: BS_PAGE + "\n" + BOTH}
+    calls = _stub_ocr(monkeypatch, tess, rapid)
+    doc = parse_mod.parse_with_pymupdf("x.pdf")
+    assert doc.metadata["ocr_engine"] == "tesseract + rapidocr (statement pages)"
+    assert BOTH in doc.content and NOTES_PAGE in doc.content and doc.content.startswith("cover")
+    assert calls[1][1] == [1]                       # only the statement page was re-read
+
+
+def test_a_passing_balance_check_never_runs_the_second_engine(monkeypatch):
+    tess = [BS_PAGE + "\n" + BOTH, NOTES_PAGE]
+    calls = _stub_ocr(monkeypatch, tess, {})
+    doc = parse_mod.parse_with_pymupdf("x.pdf")
+    assert doc.metadata["ocr_engine"] == "tesseract" and len(calls) == 1
+
+
+def test_the_second_engine_result_is_kept_only_if_it_passes_the_check(monkeypatch):
+    pytest.importorskip("rapidocr")
+    tess = [BS_PAGE + "\n" + CAPITAL_ONLY]
+    calls = _stub_ocr(monkeypatch, tess, {0: BS_PAGE + "\n" + CAPITAL_ONLY})     # RapidOCR does not help either
+    doc = parse_mod.parse_with_pymupdf("x.pdf")
+    assert doc.metadata["ocr_engine"] == "tesseract" and doc.content == tess[0]
