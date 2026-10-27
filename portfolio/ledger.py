@@ -168,7 +168,8 @@ def _calendar(cur) -> list[date]:
 
 
 def reference(tickers: list[str], as_of: date | None = None) -> dict:
-    """Market reference data for a ledger kept elsewhere: last close (VND), exchange, sector, trading calendar."""
+    """Market reference data for a ledger kept elsewhere: last close (VND), exchange, sector, trading calendar, and
+    the VNINDEX close on/before as_of (benchmark for vn-portfolio's advice outcomes)."""
     from core.db import get_conn
     as_of = as_of or date.today()
     tickers = sorted({t.upper() for t in tickers})
@@ -184,11 +185,15 @@ def reference(tickers: list[str], as_of: date | None = None) -> dict:
                 prices = {t: float(c) * _PRICE_UNIT for t, c in cur.fetchall()}
                 cur.execute("SELECT ticker, exchange, sector FROM securities WHERE ticker = ANY(%s)", (tickers,))
                 meta = {t: (e, s) for t, e, s in cur.fetchall()}
+            cur.execute("SELECT close FROM market_index_daily WHERE index_code = 'VNINDEX' AND date <= %s "
+                        "ORDER BY date DESC LIMIT 1", (as_of,))
+            index_row = cur.fetchone()
     return {
         "known": sorted(meta),
         "prices": prices,
         "exchanges": {t: e for t, (e, _) in meta.items()},
         "sectors": {t: s for t, (_, s) in meta.items()},
         "calendar": [d.isoformat() for d in calendar if d <= as_of],
+        "index_close": float(index_row[0]) if index_row and index_row[0] is not None else None,   # VNINDEX points
         "as_of": as_of.isoformat(),
     }
