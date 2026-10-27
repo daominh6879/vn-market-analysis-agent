@@ -5,7 +5,8 @@
 - [x] **Docker bind mounts**: Đã xong. Volumes đổi sang `./data/*`. Cần chạy `docker compose down && docker compose up -d` lần đầu.
 
 - [x] **BCTC PDF chưa có trong MinIO (2026-10-27)**: Đã xong — asset `bctc_sync` + schedule tuần + bootstrap; HPG (168 chunk) và VCB (287 chunk) đã nạp. Chi tiết: `docs/notes/bctc-sync.md`.
-- [ ] **CafeF trả link PDF 404 (2026-10-27)**: 6 trong 14 mã đã thử bị 404 ở link PDF (FPT, VNM, ACB, SSI, GAS, MSN; mẫu do tôi chọn, không ngẫu nhiên). `bctc_sync` bỏ qua các mã này (run vẫn SUCCESS, lỗi chỉ nằm trong log). Cần nguồn BCTC dự phòng; tỷ lệ trên toàn bộ 431 mã chưa biết.
+- [x] **CafeF trả link PDF 404 (2026-10-27)**: Đã xong — link trong danh sách nằm trên `cafefnew.mediacdn.vn` (404 với một số file) nhưng cùng đường dẫn chạy được trên `cafef1.mediacdn.vn` và `s.cafef.vn`; `download_pdf` thử các host này. ACB, SSI, GAS, MSN, FPT, VNM đều nạp được. Chi tiết: `docs/notes/bctc-sync.md`.
+- [ ] **OCR đọc sai chữ số trên bản scan chất lượng thấp (2026-10-27)**: VHM (đối chiếu ảnh PDF): dòng "Tổng cộng tài sản" bị bỏ, vốn chủ sở hữu đọc `172.731.896` thay vì `172.731.696`; GAS có số sai rõ (`B7.190,620.643.636`, chưa đối chiếu). Đổi `ocr_dpi` không giúp (tỉ lệ nhận đúng 44–88%, không theo quy luật). Chưa đối chiếu số liệu 12 mã còn lại với PDF; bootstrap toàn bộ 431 mã chưa chạy (khoảng 40–80 s/mã).
 
 
 

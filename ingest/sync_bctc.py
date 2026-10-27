@@ -2,7 +2,9 @@
 ingest/sync_bctc.py — Make sure the latest annual BCTC of each ticker exists in MinIO and Qdrant.
 
 For every ticker:
-  1. Ask CafeF for the BCTC file list and pick the latest annual report (Quarter=5).
+  1. Ask CafeF for the BCTC file list and rank the annual reports (Quarter=5): newest year first, then the requested
+     report type (standalone/consolidated), then audited. A newer year of the other type beats an older year of the
+     requested type, and the report type actually indexed goes into the Qdrant payload.
   2. MinIO  : object `<ticker>-docs/<year>/<filename>` missing  -> download PDF + upload.
   3. Qdrant : no active `documents` row for that key, or no points for its doc_id
               in `bctc_structural`                                -> parse + chunk + embed + upsert.
@@ -42,12 +44,19 @@ EMBED_MODEL = os.getenv("EMBED_MODEL", "bge-m3")
 CHUNK_STRATEGY = os.getenv("CHUNK_STRATEGY", "structural")
 ANNUAL_QUARTER = 5  # CafeF marks full-year reports as Quarter=5 ("CN/<year>")
 HEADERS = {"User-Agent": "Mozilla/5.0"}
+# CafeF lists most links on cafefnew.mediacdn.vn, which 404s for some files; the same path is served by these hosts
+MIRROR_HOSTS = ("cafef1.mediacdn.vn", "s.cafef.vn")
+MAX_CANDIDATES = 3  # older reports are used only when every mirror of the newer one fails
 
 
 # ── CafeF ─────────────────────────────────────────────────────────────────────
 
-def pick_latest_annual(ticker: str, report_type: str) -> dict | None:
-    """Return {"year", "name", "url", "filename"} for the latest annual report, or None."""
+def _report_type_of(name: str) -> str:
+    return "consolidated" if "hợp nhất" in name.lower() else "standalone"
+
+
+def annual_candidates(ticker: str, report_type: str) -> list[dict]:
+    """Annual reports on CafeF, best first: [{"year", "name", "url", "filename", "report_type"}, ...] (at most MAX_CANDIDATES)."""
     r = httpx.get(
         CAFEF_URL,
         params={"Symbol": ticker.lower(), "Type": 1, "Year": 0},
@@ -55,31 +64,48 @@ def pick_latest_annual(ticker: str, report_type: str) -> dict | None:
         timeout=30,
     )
     r.raise_for_status()
-    items = r.json().get("Data") or []
-
-    want_consolidated = report_type == "consolidated"
-    annual = [
-        x for x in items
-        if x.get("Quarter") == ANNUAL_QUARTER
-        and x.get("Link")
-        and ("hợp nhất" in x["Name"].lower()) == want_consolidated
+    rows = [
+        {
+            "year": x["Year"],
+            "name": x["Name"],
+            "url": x["Link"],
+            "filename": unquote(Path(urlparse(x["Link"]).path).name),
+            "report_type": _report_type_of(x["Name"]),
+        }
+        for x in (r.json().get("Data") or [])
+        if x.get("Quarter") == ANNUAL_QUARTER and x.get("Link")
     ]
-    if not annual:
-        return None
-    # newest year first; among the same year prefer the audited report
-    annual.sort(key=lambda x: (x["Year"], "kiểm toán" in x["Name"].lower()), reverse=True)
-    best = annual[0]
-    url = best["Link"]
-    filename = unquote(Path(urlparse(url).path).name)
-    return {"year": best["Year"], "name": best["Name"], "url": url, "filename": filename}
+    rows.sort(key=lambda x: (x["year"], x["report_type"] == report_type, "kiểm toán" in x["name"].lower()), reverse=True)
+    return rows[:MAX_CANDIDATES]
+
+
+def pick_latest_annual(ticker: str, report_type: str) -> dict | None:
+    """The best candidate of annual_candidates(), or None."""
+    rows = annual_candidates(ticker, report_type)
+    return rows[0] if rows else None
+
+
+def mirror_urls(url: str) -> list[str]:
+    """The listed URL first, then the same path on each mirror host."""
+    parts = urlparse(url)
+    return [url] + [parts._replace(netloc=h).geturl() for h in MIRROR_HOSTS if h != parts.netloc]
 
 
 def download_pdf(url: str) -> bytes:
-    r = httpx.get(url, headers=HEADERS, timeout=120, follow_redirects=True)
-    r.raise_for_status()
-    if not r.content.startswith(b"%PDF"):
-        raise RuntimeError(f"not a PDF (first bytes {r.content[:8]!r}): {url}")
-    return r.content
+    last: Exception | None = None
+    for candidate in mirror_urls(url):
+        try:
+            r = httpx.get(candidate, headers=HEADERS, timeout=120, follow_redirects=True)
+            r.raise_for_status()
+        except httpx.HTTPError as exc:
+            last = exc
+            continue
+        if not r.content.startswith(b"%PDF"):
+            last = RuntimeError(f"not a PDF (first bytes {r.content[:8]!r}): {candidate}")
+            continue
+        return r.content
+    assert last is not None
+    raise last
 
 
 # ── MinIO / Qdrant checks ─────────────────────────────────────────────────────
@@ -195,34 +221,48 @@ def parse_and_embed(client, qdrant, ticker: str, bucket: str, key: str, year: in
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def sync_ticker(client, qdrant, ticker: str, report_type: str, dry: bool) -> str:
+def sync_ticker(client, qdrant, ticker: str, report_type: str, dry: bool) -> tuple[str, str]:
+    """Bring the best available annual report into MinIO + Qdrant. Returns (status, note); note is "" for the plain case."""
     bucket = f"{ticker.lower()}-docs"
-    info = pick_latest_annual(ticker, report_type)
-    if info is None:
-        raise RuntimeError(f"CafeF has no annual {report_type} BCTC for {ticker}")
+    candidates = annual_candidates(ticker, report_type)
+    if not candidates:
+        raise RuntimeError(f"CafeF lists no annual BCTC for {ticker}")
 
-    key = f"{info['year']}/{info['filename']}"
-    has_minio = in_minio(client, bucket, key)
-    has_qdrant = indexed_doc_id(qdrant, key) is not None
-    print(f"  {info['name']}  ->  {bucket}/{key}")
-    print(f"  MinIO: {'ok' if has_minio else 'MISSING'}   Qdrant: {'ok' if has_qdrant else 'MISSING'}")
+    failures: list[str] = []
+    for info in candidates:
+        key = f"{info['year']}/{info['filename']}"
+        has_minio = in_minio(client, bucket, key)
+        has_qdrant = indexed_doc_id(qdrant, key) is not None
+        print(f"  {info['name']}  ->  {bucket}/{key}")
+        print(f"  MinIO: {'ok' if has_minio else 'MISSING'}   Qdrant: {'ok' if has_qdrant else 'MISSING'}")
 
-    if has_minio and has_qdrant:
-        return "up-to-date"
-    if dry:
-        return "would sync"
+        status = "up-to-date" if has_minio and has_qdrant else None
+        if status is None and dry:
+            status = "would sync"
+        if status is None:
+            if not has_minio:
+                try:
+                    data = download_pdf(info["url"])
+                except (httpx.HTTPError, RuntimeError) as exc:
+                    failures.append(f"FY{info['year']} {info['report_type']}: {exc}")
+                    print(f"  download failed on every mirror: {exc}")
+                    continue
+                if not client.bucket_exists(bucket):
+                    client.make_bucket(bucket)
+                client.put_object(bucket, key, io.BytesIO(data), length=len(data), content_type="application/pdf")
+                print(f"  uploaded {len(data) / 1e6:.1f} MB to MinIO")
+            if not has_qdrant:
+                n = parse_and_embed(client, qdrant, ticker, bucket, key, info["year"], info["report_type"])
+                print(f"  embedded {n} chunks into '{COLLECTION}'")
+            status = "synced"
 
-    if not has_minio:
-        if not client.bucket_exists(bucket):
-            client.make_bucket(bucket)
-        data = download_pdf(info["url"])
-        client.put_object(bucket, key, io.BytesIO(data), length=len(data), content_type="application/pdf")
-        print(f"  uploaded {len(data) / 1e6:.1f} MB to MinIO")
-
-    if not has_qdrant:
-        n = parse_and_embed(client, qdrant, ticker, bucket, key, info["year"], report_type)
-        print(f"  embedded {n} chunks into '{COLLECTION}'")
-    return "synced"
+        notes = []
+        if info is not candidates[0]:
+            notes.append(f"FY{info['year']} {info['report_type']} used; newer file unavailable ({'; '.join(failures)})")
+        if info["report_type"] != report_type:
+            notes.append(f"{info['report_type']} FY{info['year']} (no {report_type} report that year)")
+        return status, " | ".join(notes)
+    raise RuntimeError("no downloadable annual report: " + "; ".join(failures))
 
 
 def run(tickers: list[str] | None = None, report_type: str = "standalone", dry_run: bool = False) -> dict:
@@ -241,17 +281,20 @@ def run(tickers: list[str] | None = None, report_type: str = "standalone", dry_r
     qdrant = QdrantClient(settings.QDRANT_HOST, port=settings.QDRANT_PORT)
 
     results: dict[str, str] = {}
+    notes: dict[str, str] = {}
     failed: dict[str, str] = {}
     for i, ticker in enumerate(tickers, 1):
         print(f"\n[{i}/{len(tickers)}] {ticker}")
         try:
-            results[ticker] = sync_ticker(client, qdrant, ticker, report_type, dry_run)
+            results[ticker], note = sync_ticker(client, qdrant, ticker, report_type, dry_run)
+            if note:
+                notes[ticker] = note
         except Exception as exc:
             print(f"  ERROR: {exc}")
             failed[ticker] = str(exc)
     if not results:
         raise RuntimeError(f"bctc_sync: 0/{len(tickers)} tickers succeeded; failed={dict(list(failed.items())[:5])}")
-    return {"results": results, "failed": failed}
+    return {"results": results, "failed": failed, "notes": notes}
 
 
 def main() -> None:
@@ -270,7 +313,7 @@ def main() -> None:
 
     print("\n" + "=" * 60)
     for ticker, status in out["results"].items():
-        print(f"  {ticker:<8} {status}")
+        print(f"  {ticker:<8} {status}" + (f"   [{out['notes'][ticker]}]" if ticker in out["notes"] else ""))
     for ticker, err in out["failed"].items():
         print(f"  {ticker:<8} FAILED: {err}")
     if out["failed"]:
