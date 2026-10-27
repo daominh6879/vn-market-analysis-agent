@@ -431,6 +431,7 @@ from pipeline.assets_index import (
     market_index_ingest_job,
     market_index_ingest_schedule,
 )
+from pipeline.assets_trend import trend_forecasts, trend_forecasts_job, trend_forecasts_schedule
 from pipeline.assets_market_brief import (
     foreign_flows_ingest,
     corporate_events_ingest,
@@ -635,7 +636,7 @@ defs = Definitions(
             market_index_daily_ingest, global_quotes_ingest,
             foreign_flows_ingest, corporate_events_ingest, daily_brief,
             securities_shares, stock_dividends, ratio_history, financials_quarterly, daily_snapshots,
-            proprietary_flows_ingest, breakout_signals_daily, bctc_sync],
+            proprietary_flows_ingest, breakout_signals_daily, bctc_sync, trend_forecasts],
     jobs=[ingestion_job, ingestion_full_rebuild_job, delete_job,
           news_job, news_purge_job,
           vnstock_financials_job, vnstock_prices_job, vnstock_ratios_job,
@@ -644,7 +645,7 @@ defs = Definitions(
           foreign_flows_job, corporate_events_job, daily_brief_job,
           securities_shares_job, stock_dividends_job, ratio_history_job,
           financials_quarterly_job, daily_snapshots_job,
-          proprietary_flows_job, breakout_signals_job, bctc_sync_job],
+          proprietary_flows_job, breakout_signals_job, bctc_sync_job, trend_forecasts_job],
     schedules=[daily_schedule, news_schedule, news_purge_schedule,
                vnstock_financials_schedule, vnstock_prices_schedule, vnstock_ratios_schedule,
                ohlcv_ingest_schedule,
@@ -652,7 +653,7 @@ defs = Definitions(
                foreign_flows_schedule, corporate_events_schedule, daily_brief_schedule,
                securities_shares_schedule, stock_dividends_schedule, stock_dividends_all_schedule,
                ratio_history_schedule, financials_quarterly_schedule, daily_snapshots_schedule,
-               proprietary_flows_schedule, breakout_signals_schedule, bctc_sync_schedule],
+               proprietary_flows_schedule, breakout_signals_schedule, bctc_sync_schedule, trend_forecasts_schedule],
     sensors=[minio_new_pdf_sensor, data_bootstrap_sensor, data_freshness_sensor],
     asset_checks=[gated_mid_beats_ungated],
 )
