@@ -48,7 +48,7 @@ Run Dagster `7896bbc8` (HPG, đã đồng bộ): SUCCESS, `{'synced': 0, 'up_to_
 - Không eval nào trong `evals/` chạm `ask_report` (`eval_rag_qa_ragas.py` đi qua `rag/qa.py`, router/intents eval chỉ kiểm tra chọn tool). Đã viết `evals/eval_ask_report.py`, xem mục dưới.
 
 ## Eval `ask_report` (evals/eval_ask_report.py, 27/10/2026)
-14 câu hỏi (10 số liệu bảng cân đối, 3 chính sách trong thuyết minh, 1 câu đối chứng âm) trên HPG và VCB năm 2025; mỗi câu có "gold" (chuỗi đã bỏ dấu phải nằm chung 1 chunk, được kiểm tra còn trong index trước khi chấm). Báo cáo riêng `ctx` (gold có trong top 5 không) và `ans` (câu trả lời đúng, 3 lần gọi LLM/câu). Kết quả lưu `evals/ask_report_eval.json`.
+17 câu hỏi (13 số liệu bảng cân đối, 3 chính sách trong thuyết minh, 1 câu đối chứng âm) trên HPG, VCB và VHM năm 2025 (VHM: số đọc trực tiếp từ ảnh PDF, vì OCR của VHM bỏ sót dòng tổng tài sản và đọc sai chữ số); mỗi câu có "gold" (chuỗi đã bỏ dấu phải nằm chung 1 chunk, được kiểm tra còn trong index trước khi chấm). Báo cáo riêng `ctx` (gold có trong top 5 không) và `ans` (câu trả lời đúng, 3 lần gọi LLM/câu). Kết quả lưu `evals/ask_report_eval.json`.
 
 | | ctx (gold trong context) | ans số liệu | ans chính sách | ans đối chứng âm | câu rỗng |
 |---|---|---|---|---|---|
@@ -56,6 +56,8 @@ Run Dagster `7896bbc8` (HPG, đã đồng bộ): SUCCESS, `{'synced': 0, 'up_to_
 | hybrid (top_k=7, 3 anchor) | 14/14 | 29/30 | 10/12 | 3/3 | 0 |
 
 Số chính sách của vector dao động 6/12–9/12 giữa các lần chạy, hybrid 10/12–12/12. Các câu hybrid trượt đều có chunk vàng trong context: câu trả lời đúng nhưng thiếu một fact bắt buộc (ví dụ không nhắc "một năm" hay "nghĩa vụ").
+
+Sau khi thêm 3 câu VHM và nạp 14 mã (run cuối, hybrid top_k=7): gold trong context 17/17 (vector 10/17), số liệu 38/39 (vector 21/39), chính sách 12/12 (vector 6/12), đối chứng âm 3/3. Câu trượt duy nhất: `vhm_total_assets` 2/3, một lần trả lời "Không có trong tài liệu" vì dòng "Tổng cộng tài sản" bị OCR bỏ và số 590.372.684 chỉ còn trên dòng "Tổng cộng nguồn vốn". `vhm_equity` đúng 3/3 dù OCR đọc sai một trong hai dòng vốn chủ sở hữu.
 
 Hybrid bản đầu (top_k=5, không anchor) có ctx 13/14 và chính sách 6/12 (vector 8/12 ở lần đo đó). Các lỗi đã điều tra:
 - `vcb_provisioning_policy` (3/3 → 0/3): câu hỏi rộng nên hàng chục chunk khớp "dự phòng rủi ro tín dụng" gần như bằng nhau (điểm 155–171, chunk vàng "dự phòng rủi ro chung 0,75%" chỉ 59); phần thưởng lexical của đám đông đẩy chunk vector xếp hạng 3 ra khỏi top 5. IDF theo n-gram và giảm trọng số lexical đều không sửa được. Không có thống kê phía câu hỏi nào tách được hai nhóm (số chunk khớp ≥70% điểm tốt nhất: `vcb_equity` 10, `vcb_trading_securities` 19, `vcb_provisioning_policy` 6). Sửa: `hybrid_rank(anchors=3)` luôn giữ 3 kết quả vector đầu, `HYBRID_TOP_K=6`. Với top_k=5, anchor chỉ đổi lỗi này sang `vcb_trading_securities`; từ top_k=6 với 3 anchor đạt 14/14 và giữ nguyên ở 7, 8.
@@ -79,10 +81,19 @@ Tổng đã thử 14 mã: 8 nạp được, 6 lỗi 404 (FPT, VNM, ACB, SSI, GAS
 
 Vấn đề thấy trong dữ liệu đã nạp:
 - **Nhãn ngữ cảnh sai (đã sửa; sync lại 8 mã, run `9e98762e`, 601 s, 8/8):** MBB 137/336 chunk nhãn "Báo cáo của Ban điều hành", VHM 222/713 chunk nhãn "lưu chuyển tiền tệ", SAB 18 chunk nhãn "báo cáo kiểm toán". Nguyên nhân: (a) tiêu đề chung chung (báo cáo của Ban điều hành/kiểm toán) trở thành nhãn thay vì xoá nhãn; (b) `_title_of` khớp chuỗi con nên dòng "THÔNG TIN BỔ SUNG VỀ BÁO CÁO LƯU CHUYỂN TIỀN TỆ" trong thuyết minh bị coi là tiêu đề báo cáo; (c) tiêu đề MBB (`BAO CAO TINH Hi NH TAI CHiNH Rl~NG tc;1i ngay…`) và số mẫu `B02/TCTD` (không có chữ "Mẫu") không được nhận ra. Sau sửa: tiêu đề phải đứng đầu dòng (hoặc sau tên công ty), kiểm tra chữ hoa trên 28 chữ cái đầu, tiêu đề lạ xoá nhãn, hàng có 2 ngày `dd/mm/yyyy` được nhận là hàng cột. Nhãn lệch còn lại của MBB: 10 chunk chỉ có nhãn cột (có ngày kỳ báo cáo).
-- **Văn bản MBB hỏng từ gốc:** mã hoá font sai nên "Tiền mặt" thành `Ti~nm~t`, "Dự phòng rủi ro" thành `Dl,l'ph6ng rui ro`. Truy vấn chữ trên MBB sẽ kém; chưa xử lý.
-- **MBB năm 2024:** payload `year` = '2024' (các mã khác 2025), nên lọc `year='2025'` sẽ không thấy MBB. Chưa xác định CafeF chưa có BCTC 2025 của MBB hay nguyên nhân khác.
-- **VHM:** không tìm thấy dòng "Tổng tài sản" có số trong 713 chunk (các mã khác đều có). Chưa điều tra.
-- Chưa đối chiếu số liệu của 6 mã mới với PDF.
+- **MBB, SAB: lớp chữ ẩn của PDF không dùng được (đã sửa, xem mục dưới).**
+- **VHM:** dòng "270 Tổng cộng tài sản" bị OCR bỏ sót; tôi đọc trực tiếp ảnh trang PDF: tổng tài sản là 590.372.684 (triệu VND), cùng số với dòng "Tổng cộng nguồn vốn" mà OCR vẫn giữ. OCR còn đọc sai chữ số (dòng 400 ghi `172.731.896`, đúng là `172.731.696`; ở trang kia `16.578.452` thay vì `16.575.452`). Đây là giới hạn của OCR trên bản scan độ phân giải thấp. Thử `ocr_dpi` khác 150 không giúp: tỉ lệ nhận đúng số trên 2 trang (85 số đối chiếu bằng mắt) dao động 44–88% không theo quy luật (120 → 88%, 150 → 79%, 165 → 85%, 180 → 51%, 300 → 47%), nên không đổi tham số.
+
+## Sửa lỗi sau lần chạy 10 mã (27/10/2026)
+1. **CafeF 404 (đã sửa):** link trong danh sách CafeF nằm trên `cafefnew.mediacdn.vn`, host này trả 404 cho một số file, nhưng cùng đường dẫn trả 200 trên `cafef1.mediacdn.vn` và `s.cafef.vn` (kiểm tra bằng HEAD cho SSI, GAS và các mã khác; `cafef.vn` thì 404). `ingest/sync_bctc.download_pdf` thử lần lượt các host. 6 mã từng lỗi 404 (ACB, SSI, GAS, MSN, FPT, VNM) đều nạp được.
+2. **Chọn báo cáo (đã sửa):** `annual_candidates()` xếp hạng: năm mới nhất trước, rồi loại báo cáo được yêu cầu, rồi bản đã kiểm toán; chỉ lùi về năm cũ hơn khi mọi host đều lỗi. MBB chỉ có BCTC hợp nhất cho FY2025 (không có công ty mẹ), nên giờ lấy hợp nhất FY2025 thay vì công ty mẹ FY2024; payload `report_type` ghi loại thực sự được nạp, `bctc_sync` ghi chú trong log (`notes`).
+3. **Lớp chữ ẩn của PDF scan (đã sửa, `core/parse.py`):** `pymupdf4llm` với `force_ocr=True` là chế độ `FORCE_KEEP_OLD` (chỉ OCR trang chưa có chữ). Hai trường hợp lọt:
+   - lớp OCR sẵn của máy scan không có dấu (MBB: `Ngan hang ThU'ong mc;:1i`, SAB, ACB; tỉ lệ chữ có dấu 0,0–2%, văn bản tiếng Việt thật khoảng 14–25%);
+   - trang scan chỉ có vài ký tự rác (chữ ký số, chú thích QR): GAS có 118 trang nhưng 116 trang chỉ có ~24 ký tự chữ nên không trang nào được OCR, kết quả 14,6k ký tự / 20 chunk (nay 518 chunk).
+   Giải pháp: `text_layer_problem()` phát hiện, `_rasterize_pdf()` dựng bản chỉ có ảnh (150 dpi, đúng độ phân giải OCR của pymupdf4llm) rồi OCR như scan thường. `FORCE_DROP_OLD` đã thử nhưng giữ lại cả chữ cũ (mỗi ô thành `cũ<br>mới`). PDF không có lớp chữ (HPG, VCB, TCB, MWG, VHM, PLX) không bị ảnh hưởng, đã kiểm tra detector trả `None` cho cả 6.
+4. **Run `ca46822f` (601 s):** SAB, MBB, GAS, ACB, MSN, FPT, VNM → 7/7. Hiện 14 tài liệu active (HPG, VCB, MBB, TCB, MWG, VHM, PLX, SAB, ACB, SSI, GAS, MSN, FPT, VNM), tất cả FY2025 (MBB hợp nhất). Tỉ lệ chữ có dấu 22–25% (GAS 12%, VHM 11%, PLX 17%).
+
+Còn lại: OCR GAS có số sai rõ ràng (`B7.190,620.643.636` ở dòng tổng tài sản, chưa đối chiếu PDF); chưa đối chiếu số liệu 12 mã còn lại với PDF; chưa chạy bootstrap toàn bộ 431 mã.
 
 ## Cách chạy lại
 ```

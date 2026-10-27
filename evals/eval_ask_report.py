@@ -12,8 +12,10 @@ skips cases whose gold is gone. Then, per mode, it reports two things separately
   ans — does the generated answer contain the expected facts? (retrieval + generation: measured --runs times)
 A negative control (no gold) checks that a question the documents cannot answer still gets "Không có trong tài liệu".
 
-Expected figures are balance-sheet rows read from the OCR'd BCTC (HPG, VCB separate statements, FY2025);
-assets = liabilities + equity was checked for both. Add cases only with values read from the index/PDF, never guessed.
+Expected figures are balance-sheet rows of the separate FY2025 statements (HPG, VCB read from the OCR'd text with
+assets = liabilities + equity checked; VHM read off the rendered PDF pages, because its OCR has digit errors and a
+dropped "Tổng cộng tài sản" row, which is exactly what the VHM cases measure). Add cases only with values read from the
+PDF or the index, never guessed.
 
 Usage:
     python evals/eval_ask_report.py                      # both modes, 3 answer runs per case
@@ -72,6 +74,13 @@ CASES: list[Case] = [
          gold=["220701017"], figures=["220.701.017"]),
     Case("vcb_charter_capital", "VCB", "Vốn điều lệ của VCB cuối năm 2025 là bao nhiêu?", "figure",
          gold=["83556751"], figures=["83.556.751"]),
+    # ── VHM (triệu VND): scanned PDF whose OCR drops the "270 Tổng cộng tài sản" row and misreads digits ──
+    Case("vhm_total_assets", "VHM", "Tổng tài sản của VHM cuối năm 2025 là bao nhiêu?", "figure",
+         gold=["590372684"], figures=["590.372.684"]),
+    Case("vhm_liabilities", "VHM", "Nợ phải trả của VHM cuối năm 2025?", "figure",
+         gold=["417640988"], figures=["417.640.988"]),
+    Case("vhm_equity", "VHM", "Vốn chủ sở hữu của VHM cuối năm 2025?", "figure",
+         gold=["172731696"], figures=["172.731.696"]),
     # ── policies: facts read from the notes (VCB chunks 83/84, HPG chunk 76 at the time of writing) ──
     Case("vcb_general_provision_rate", "VCB", "Tỷ lệ dự phòng rủi ro chung của Vietcombank là bao nhiêu?", "policy",
          gold=["ruirochung", "075"], facts=[["0,75"]]),
