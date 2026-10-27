@@ -80,6 +80,119 @@ def chunk_hierarchical(text: str, child_size: int = 400, parent_size: int = 1200
     return result
 
 
+# ── Ngữ cảnh bảng cho chunk giữa bảng ────────────────────────────────────────
+
+_DATE_LINE_PREFIXES = ("taingay", "chonam", "donvi", "donvitinh")
+_HEADER_HINTS = ("maso", "thuyetminh", "chitieu")
+_HEADER_PERIOD_HINTS = ("cuoinam", "daunam", "namnay", "namtruoc", "nam20", "31122")
+
+
+# Statement names found in the title line (folded keyword → canonical name), checked in this order
+_CANON_TITLES = (
+    ("thuyetminhbaocaotaichinh", "THUYẾT MINH BÁO CÁO TÀI CHÍNH"),
+    ("bangcandoiketoan", "BẢNG CÂN ĐỐI KẾ TOÁN"),
+    ("baocaotinhhinhtaichinh", "BÁO CÁO TÌNH HÌNH TÀI CHÍNH"),
+    ("baocaoketquahoatdong", "BÁO CÁO KẾT QUẢ HOẠT ĐỘNG"),
+    ("baocaoluuchuyentien", "BÁO CÁO LƯU CHUYỂN TIỀN TỆ"),
+    ("kiemtoandoclap", "BÁO CÁO KIỂM TOÁN ĐỘC LẬP"),
+)
+# "Mẫu số B 09-DN" / "Mẫu B02/TCTD" is printed on every page of a statement and survives OCR better than its title
+_FORM_RE = re.compile(r"mau(?:so)?b(0\d)(dn|tctd)")
+_FORM_TITLES = {
+    "dn": {"01": "BẢNG CÂN ĐỐI KẾ TOÁN", "02": "BÁO CÁO KẾT QUẢ HOẠT ĐỘNG KINH DOANH",
+           "03": "BÁO CÁO LƯU CHUYỂN TIỀN TỆ", "09": "THUYẾT MINH BÁO CÁO TÀI CHÍNH"},
+    "tctd": {"02": "BÁO CÁO TÌNH HÌNH TÀI CHÍNH", "03": "BÁO CÁO KẾT QUẢ HOẠT ĐỘNG",
+             "04": "BÁO CÁO LƯU CHUYỂN TIỀN TỆ", "05": "THUYẾT MINH BÁO CÁO TÀI CHÍNH"},
+}
+
+
+def _title_of(line: str) -> str | None:
+    """Statement title of a heading / running page-header line, tolerant of OCR damage; None for anything else."""
+    from rag.lexical import fold
+
+    plain = line.strip().strip("#*_ ").strip()
+    if not plain or plain.startswith("|") or len(plain) > 200:
+        return None
+    f = fold(plain)
+    form = _FORM_RE.search(f)
+    if form and form.group(1) in _FORM_TITLES[form.group(2)]:
+        return _FORM_TITLES[form.group(2)][form.group(1)]
+    letters = [c for c in plain if c.isalpha()]
+    if len(letters) < 8 or sum(c.isupper() for c in letters) / len(letters) < 0.7:
+        return None                                   # body text that merely mentions a statement
+    for key, title in _CANON_TITLES:
+        if key in f and f"ngoai{key}" not in f:       # "Các khoản mục ngoài bảng cân đối kế toán" is a sub-heading
+            return title
+    return plain if f.startswith(("bang", "baocao")) and len(plain) <= 90 else None
+
+
+def _header_cells(line: str) -> list[str] | None:
+    """Cells of a table header row (has a "Mã số"/"Thuyết minh"/"Chỉ tiêu" label and a period label), else None."""
+    from rag.lexical import fold
+
+    if not line.lstrip().startswith("|"):
+        return None
+    f = fold(line)
+    if not (any(h in f for h in _HEADER_HINTS) and any(h in f for h in _HEADER_PERIOD_HINTS)):
+        return None
+    cells = [re.sub(r"\s+", " ", c.replace("<br>", " ")).strip() for c in line.strip().strip("|").split("|")]
+    return [c for c in cells if c and not set(c) <= set("-: ")]
+
+
+def add_table_context(text: str, chunks: list[str]) -> list[str]:
+    """Prefix chunks that start mid-table with "[Ngữ cảnh: <statement> | <date> | Cột: <header cells>]".
+
+    A table continued on the next page has no title or column labels, so a model cannot tell which column is the
+    end-of-year figure and hedges ("không nêu rõ đây là..."). The context comes from the nearest title / date / header
+    before the chunk in the source text. Chunks that carry their own title or header, and non-table chunks, are kept as is.
+    """
+    from rag.lexical import fold
+
+    events: list[tuple[int, str, str]] = []     # (position, kind, value) in document order
+    pos, last_title_pos = 0, -1
+    for line in text.splitlines(keepends=True):
+        title = _title_of(line)
+        if title:
+            events.append((pos, "title", title))
+            last_title_pos = pos
+        elif 0 <= last_title_pos and pos - last_title_pos < 400 and fold(line).startswith(_DATE_LINE_PREFIXES):
+            events.append((pos, "date", line.strip().strip("*_ ")))
+        else:
+            cells = _header_cells(line)
+            if cells:
+                events.append((pos, "columns", " | ".join(cells)))
+        pos += len(line)
+
+    out: list[str] = []
+    search_from = 0
+    for chunk in chunks:
+        start = text.find(chunk, search_from)
+        if start < 0:
+            out.append(chunk)
+            continue
+        search_from = start                       # splitter overlap can start slightly before the previous chunk's end
+        end = start + len(chunk)
+        inside = {kind for p, kind, _ in events if start <= p < end}
+        has_rows = any(ln.lstrip().startswith("|") for ln in chunk.splitlines())
+        if not has_rows or "title" in inside or "columns" in inside:
+            out.append(chunk)
+            continue
+        state: dict[str, str] = {}
+        for p, kind, value in events:
+            if p >= start:
+                break
+            if kind == "title":
+                if state.get("title") != value:   # the same title repeats on every page of a statement
+                    state = {"title": value}      # a new statement drops the previous one's date and columns
+            elif kind == "date" and "date" in state:
+                state["date"] += f" | {value}"    # "Tại ngày ..." and "Đơn vị: ..." both follow the title
+            else:
+                state[kind] = value
+        parts = [state[k] if k != "columns" else f"Cột: {state[k]}" for k in ("title", "date", "columns") if k in state]
+        out.append(f"[Ngữ cảnh: {' | '.join(parts)}]\n{chunk}" if parts else chunk)
+    return out
+
+
 # ── Gắn metadata vào đầu chunk ───────────────────────────────────────────────
 
 def prepend_metadata(chunk: str, meta: dict) -> str:

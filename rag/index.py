@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import sys
 import time
 import uuid
@@ -38,11 +39,11 @@ from qdrant_client.models import (
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from rag.chunking import chunk_fixed, chunk_structural, chunk_hierarchical, prepend_metadata
+from rag.chunking import add_table_context, chunk_fixed, chunk_structural, chunk_hierarchical, prepend_metadata
 from core.db import get_conn
 
 QDRANT_URL = "http://localhost:6333"
-OLLAMA_URL = "http://localhost:11434"
+OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")   # docker: host.docker.internal
 
 # Namespace cố định cho UUID5 — đảm bảo determinism giữa các lần chạy
 _CHUNK_NS = uuid.UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
@@ -125,7 +126,7 @@ def index_chunks(
         PointStruct(
             id=uuid.uuid5(_CHUNK_NS, f"{doc_id}_{i:04d}"),
             vector=vecs[i],
-            payload={"text": chunks[i], "idx": i, "doc_id": doc_id},
+            payload={**(meta or {}), "text": chunks[i], "idx": i, "doc_id": doc_id},   # meta = filter fields (rag/filter.py)
         )
         for i in range(len(chunks))
     ]
@@ -151,6 +152,8 @@ def run(
     t0 = time.perf_counter()
     chunker = STRATEGIES[strategy]
     chunks = chunker(text)
+    if strategy == "structural":
+        chunks = add_table_context(text, chunks)
     print(f"  doc_id={doc_id}  strategy={strategy}  chunks={len(chunks)}")
 
     dim = get_embed_dim(embed_model)
