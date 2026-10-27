@@ -182,18 +182,18 @@ def parsed_key(key: str) -> str:
 
 # ── Balance-sheet sanity check (core/balance_check.py) ────────────────────────
 
-def stored_quality(doc_id: str) -> str | None:
-    """documents.quality of the document, or None when it has not been checked (or the column does not exist yet)."""
+def stored_quality(doc_id: str) -> tuple[str | None, int | None]:
+    """(documents.quality, version of the check that produced it) — (None, None) when unchecked or the column is missing."""
     from core.db import get_conn
 
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT quality FROM documents WHERE doc_id = %s", (doc_id,))
+                cur.execute("SELECT quality, (quality_detail->>'version')::int FROM documents WHERE doc_id = %s", (doc_id,))
                 row = cur.fetchone()
-        return row[0] if row else None
+        return (row[0], row[1]) if row else (None, None)
     except Exception:
-        return None
+        return None, None
 
 
 def record_quality(qdrant, doc_id: str, check) -> None:
@@ -223,16 +223,17 @@ def ensure_quality(client, qdrant, bucket: str, key: str) -> str:
     """Make sure the indexed document has a balance-sheet check; return a log note ("" when it is fine).
 
     Runs for freshly indexed documents and, because it only needs the parsed markdown already in MinIO, also fills in
-    documents indexed before the check existed, without re-OCR. Flags only; it never blocks indexing.
+    documents indexed before the check existed or checked by an older version of its rules, without re-OCR. Flags only;
+    it never blocks indexing.
     """
-    from core.balance_check import balance_check
+    from core.balance_check import CHECK_VERSION, balance_check
 
     doc_id = indexed_doc_id(qdrant, key)
     if doc_id is None:
         return ""
-    status = stored_quality(doc_id)
+    status, version = stored_quality(doc_id)
     detail = ""
-    if status is None:
+    if status is None or version != CHECK_VERSION:         # unchecked, or checked by an older version of the rules
         try:
             text = client.get_object(bucket, parsed_key(key)).read().decode("utf-8")
         except Exception:

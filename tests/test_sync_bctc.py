@@ -166,10 +166,12 @@ class _MdClient:
         return type("Obj", (), {"read": lambda _self: self.text.encode()})()
 
 
-def _quality_env(monkeypatch, stored):
+def _quality_env(monkeypatch, stored, version=None):
+    from core.balance_check import CHECK_VERSION
+
     recorded = []
     monkeypatch.setattr(sb, "indexed_doc_id", lambda q, key: "doc1")
-    monkeypatch.setattr(sb, "stored_quality", lambda doc_id: stored)
+    monkeypatch.setattr(sb, "stored_quality", lambda doc_id: (stored, CHECK_VERSION if version is None and stored else version))
     monkeypatch.setattr(sb, "record_quality", lambda q, doc_id, check: recorded.append((doc_id, check.status)))
     return recorded
 
@@ -194,7 +196,7 @@ def test_ensure_quality_reports_a_mismatch_with_the_digits(monkeypatch):
 
 
 def test_ensure_quality_leaves_an_already_checked_document_alone(monkeypatch):
-    rec = _quality_env(monkeypatch, stored="mismatch")
+    rec = _quality_env(monkeypatch, stored="mismatch")          # stored by the current version of the check
     client = _MdClient(MISREAD)
     assert sb.ensure_quality(client, None, "b", "2025/a.pdf") == "balance check mismatch"
     assert rec == [] and client.reads == []          # no MinIO read, no second write
@@ -222,3 +224,15 @@ def test_dry_run_does_not_check_or_write(monkeypatch):
     monkeypatch.setattr(sb, "ensure_quality", lambda *a: called.append(1) or "")
     sb.sync_ticker(_Minio(), None, "PLX", "standalone", dry=True)
     assert called == []
+
+
+def test_ensure_quality_rechecks_a_document_stored_by_an_older_version(monkeypatch):
+    rec = _quality_env(monkeypatch, stored="unverified", version=1)
+    client = _MdClient(BALANCED)
+    assert sb.ensure_quality(client, None, "b", "2025/a.pdf") == ""
+    assert rec == [("doc1", "ok")] and client.reads == ["parsed/2025/a.md"]
+    rec2 = _quality_env(monkeypatch, stored="ok", version=None)   # row written before versions existed
+    # (status "ok" with no version also counts as old)
+    monkeypatch.setattr(sb, "stored_quality", lambda doc_id: ("ok", None))
+    sb.ensure_quality(_MdClient(BALANCED), None, "b", "2025/a.pdf")
+    assert rec2 == [("doc1", "ok")]

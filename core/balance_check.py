@@ -14,16 +14,21 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 
 from rag.lexical import fold
 
-_NUMBER = re.compile(r"\d{1,3}(?:[.,]\d{3})+|\d{7,}")     # 2.426.649.127 or an OCR-flattened 2426649127
+# 2.426.649.127; an OCR-flattened 2426649127; a dropped separator "45.814.910047405"
+# Bump when the matching rules change: ingest/sync_bctc.ensure_quality re-runs the check on documents stored with an older one.
+CHECK_VERSION = 2
+_NUMBER = re.compile(r"\d{1,3}(?:[.,]\d{3})+(?:\d{3})*|\d{7,}")
 _CODE_CELL = re.compile(r"\d{1,4}")                          # the "mã số" cell: 270, 440
 _ASSET_KEYS = ("tongcongtaisan", "tongtaisan")
-_CAPITAL_KEYS = ("tongcongnguonvon", "tongnguonvon", "tongnophaitravavonchusohuu")
-# after the key only a form code "(270=100+200)", a footnote, the bank suffix "có" or up to 3 letters of OCR noise may
-# follow; a real word means a different row ("Tổng tài sản thuế thu nhập hoãn lại")
-_REMAINDER_OK = re.compile(r"(?:co)?\d*[a-z]{0,3}")
+_CAPITAL_KEYS = ("tongcongnguonvon", "tongnguonvon", "tongnophaitravavonchusohuu", "tongcongnophaitravavonchusohuu")
+# after the key only a form code "(270=100+200)" (with a few letters of OCR noise around it), a footnote, the bank suffix
+# "có" or up to 3 letters alone may follow; a real word means a different row ("Tổng tài sản dài hạn", "... thuế ...")
+_REMAINDER_OK = re.compile(r"(?:co)?(?:[a-z]{0,4}\d+[a-z]{0,3}|[a-z]{0,3})")   # noise around a code, or up to 3 letters alone
+_KEY_SIMILARITY = 0.9            # one misread letter in "tongcongnguonvom" still counts as the key
 _MAX_PREFIX = 6                  # OCR noise before the label ("Ps F", "R", a row marker)
 _MAX_NUMBERS_IN_ROW = 3          # a balance-sheet total has 2 (this year, last year); segment tables have many
 
@@ -36,25 +41,39 @@ class BalanceCheck:
     detail: str = ""
 
     def as_dict(self) -> dict:
-        return {"status": self.status, "assets": self.assets[:3], "capital": self.capital[:3], "detail": self.detail}
+        return {"version": CHECK_VERSION, "status": self.status, "assets": self.assets[:3], "capital": self.capital[:3],
+                "detail": self.detail}
+
+
+def _label_matches(label: str, keys: tuple[str, ...]) -> bool:
+    """The label is one of `keys` (allowing OCR noise before it, one misread letter in it, and a code/footnote after)."""
+    for k in keys:
+        for at in range(_MAX_PREFIX + 1):
+            seg = label[at:at + len(k)]
+            if len(seg) == len(k) and SequenceMatcher(None, seg, k).ratio() >= _KEY_SIMILARITY \
+                    and _REMAINDER_OK.fullmatch(label[at + len(k):]):
+                return True
+    return False
 
 
 def _row_total(line: str, keys: tuple[str, ...]) -> str | None:
     """Current-year number of a table row whose label is one of `keys`, else None.
 
-    The label is what precedes the first number cell, minus the "mã số" cell. OCR leaves junk cells after the numbers
-    and noise around the label, so neither is allowed to veto the row.
+    The label is what precedes the first number (the "mã số" cell excluded), even when OCR put label and number in the
+    same cell. OCR also leaves junk cells after the numbers and noise inside the label, so neither may veto the row.
     """
     if not line.lstrip().startswith("|"):
         return None
-    cells = [c.strip(" *_") for c in line.replace("<br>", " ").strip().strip("|").split("|")]
-    first_number = next((i for i, c in enumerate(cells) if _NUMBER.search(c)), None)
-    if first_number is None:
+    cells = [c.replace("**", "").strip(" *_") for c in line.replace("<br>", " ").strip().strip("|").split("|")]
+    first = next((i for i, c in enumerate(cells) if _NUMBER.search(c)), None)
+    if first is None:
         return None
-    label = fold("".join(c for c in cells[:first_number] if not _CODE_CELL.fullmatch(c)))
-    if not any((at := label.find(k)) in range(_MAX_PREFIX + 1) and _REMAINDER_OK.fullmatch(label[at + len(k):]) for k in keys):
+    label = fold("".join(c for c in cells[:first] if not _CODE_CELL.fullmatch(c)))
+    if not any(ch.isalpha() for ch in label):          # label and number share a cell: use the text before the number
+        label = fold(cells[first][:_NUMBER.search(cells[first]).start()])
+    if not _label_matches(label, keys):
         return None
-    numbers = [m for c in cells[first_number:] for m in _NUMBER.findall(c)]
+    numbers = [m.group(0) for c in cells[first:] for m in _NUMBER.finditer(c)]
     if not 1 <= len(numbers) <= _MAX_NUMBERS_IN_ROW:
         return None
     return re.sub(r"\D", "", numbers[0])
