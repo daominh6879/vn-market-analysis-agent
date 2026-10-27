@@ -4,6 +4,9 @@
 
 - [x] **Docker bind mounts**: Đã xong. Volumes đổi sang `./data/*`. Cần chạy `docker compose down && docker compose up -d` lần đầu.
 
+- [x] **BCTC PDF chưa có trong MinIO (2026-10-27)**: Đã xong — asset `bctc_sync` + schedule tuần + bootstrap; HPG (168 chunk) và VCB (287 chunk) đã nạp. Chi tiết: `docs/notes/bctc-sync.md`.
+- [ ] **CafeF trả link PDF 404 cho FPT, VNM (2026-10-27)**: `bctc_sync` bỏ qua 2 mã này (run vẫn SUCCESS, lỗi chỉ nằm trong log). Cần nguồn BCTC dự phòng; chưa kiểm tra tỷ lệ mã bị 404 trên toàn universe.
+
 
 
 ## Bài 6

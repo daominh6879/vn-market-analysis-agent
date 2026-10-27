@@ -9,6 +9,9 @@ RUN grep -viE "^(-e \.\./vnmarket|chainlit|streamlit|ragas|datasets|chromadb|pan
  && pip install --no-cache-dir numba llvmlite && pip install --no-cache-dir --pre --no-deps pandas-ta \
  && pip install --no-cache-dir httpx pandas certifi seaborn openpyxl psutil tenacity pytz importlib-metadata \
  && pip install --no-cache-dir "psycopg[binary]"
+# BCTC PDFs are scans (no text layer): core/parse.py force_ocr=True needs an OCR engine. Tesseract + vie data only:
+# pymupdf4llm 2.x prefers the `rapidocr` package whenever installed (never reaches Tesseract), and RapidOCR drops Vietnamese diacritics.
+RUN apt-get update && apt-get install -y --no-install-recommends libglib2.0-0 tesseract-ocr tesseract-ocr-vie tesseract-ocr-eng && rm -rf /var/lib/apt/lists/*
 # dagster-postgres storage connects through psycopg 3 (the app code uses psycopg2-binary)
 COPY . .
 ENV PYTHONPATH=/app/vendor DAGSTER_HOME=/opt/dagster/home

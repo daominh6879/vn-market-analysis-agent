@@ -29,6 +29,7 @@ from dagster import (
     RunRequest, RunsFilter, ScheduleDefinition, SkipReason, asset, define_asset_job, sensor,
 )
 
+from pipeline.assets_bctc import bctc_sync_job
 from pipeline.assets_index import market_index_ingest_job
 from pipeline.assets_market_brief import corporate_events_job, foreign_flows_job
 from pipeline.assets_ohlcv import ohlcv_ingest_job
@@ -260,13 +261,17 @@ _BOOTSTRAP_CHECKS: list[tuple[str, str, str]] = [
     ("proprietary_flows_job", _tickers_below_coverage("proprietary_flows WHERE true"), "proprietary_flows"),
     ("breakout_signals_job",
      "SELECT EXISTS (SELECT 1 FROM proprietary_flows) AND NOT EXISTS (SELECT 1 FROM breakout_signals)", "breakout_signals"),
+    # documents has no ticker column; not every ticker has an annual BCTC on CafeF, so 50% is a floor
+    ("bctc_sync_job",
+     f"SELECT (SELECT count(*) FROM documents WHERE status = 'active' AND collection = 'bctc_structural') < 0.5 * {_ACTIVE}",
+     "bctc"),
 ]
 
 
 @sensor(
     jobs=[securities_shares_job, stock_dividends_job, ratio_history_job, financials_quarterly_job, daily_snapshots_job,
           vnstock_financials_job, vnstock_ratios_job, corporate_events_job,
-          proprietary_flows_job, breakout_signals_job],
+          proprietary_flows_job, breakout_signals_job, bctc_sync_job],
     name="data_bootstrap_sensor",
     minimum_interval_seconds=600,
     default_status=DefaultSensorStatus.RUNNING,
