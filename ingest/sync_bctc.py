@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 import os
 import sys
 import tempfile
@@ -174,6 +175,75 @@ def sector_of(ticker: str) -> str:
         return "other"
 
 
+def parsed_key(key: str) -> str:
+    """MinIO key of the parsed markdown stored next to a PDF."""
+    return f"parsed/{key[:-4]}.md" if key.lower().endswith(".pdf") else f"parsed/{key}.md"
+
+
+# ── Balance-sheet sanity check (core/balance_check.py) ────────────────────────
+
+def stored_quality(doc_id: str) -> str | None:
+    """documents.quality of the document, or None when it has not been checked (or the column does not exist yet)."""
+    from core.db import get_conn
+
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT quality FROM documents WHERE doc_id = %s", (doc_id,))
+                row = cur.fetchone()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+
+def record_quality(qdrant, doc_id: str, check) -> None:
+    """Persist a BalanceCheck on the documents row and on every Qdrant chunk of the document (payload `quality`)."""
+    import json
+
+    from core.db import get_conn
+    from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+    qdrant.set_payload(
+        collection_name=COLLECTION,
+        payload={"quality": check.status},
+        points=Filter(must=[FieldCondition(key="doc_id", match=MatchValue(value=doc_id))]),
+    )
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE documents SET quality = %s, quality_detail = %s::jsonb WHERE doc_id = %s",
+                    (check.status, json.dumps(check.as_dict(), ensure_ascii=False), doc_id),
+                )
+    except Exception as exc:   # column missing: migration 044 not applied; the payload flag is still set
+        print(f"  [warn] quality not saved to documents (run migration 044?): {exc}")
+
+
+def ensure_quality(client, qdrant, bucket: str, key: str) -> str:
+    """Make sure the indexed document has a balance-sheet check; return a log note ("" when it is fine).
+
+    Runs for freshly indexed documents and, because it only needs the parsed markdown already in MinIO, also fills in
+    documents indexed before the check existed, without re-OCR. Flags only; it never blocks indexing.
+    """
+    from core.balance_check import balance_check
+
+    doc_id = indexed_doc_id(qdrant, key)
+    if doc_id is None:
+        return ""
+    status = stored_quality(doc_id)
+    detail = ""
+    if status is None:
+        try:
+            text = client.get_object(bucket, parsed_key(key)).read().decode("utf-8")
+        except Exception:
+            return ""                       # no parsed markdown to check
+        check = balance_check(text)
+        record_quality(qdrant, doc_id, check)
+        status, detail = check.status, check.detail
+        print(f"  balance check: {status}" + (f" ({detail})" if detail else ""))
+    return "" if status == "ok" else f"balance check {status}" + (f": {detail}" if detail else "")
+
+
 def parse_and_embed(client, qdrant, ticker: str, bucket: str, key: str, year: int, report_type: str) -> int:
     import hashlib
 
@@ -194,7 +264,7 @@ def parse_and_embed(client, qdrant, ticker: str, bucket: str, key: str, year: in
         raise RuntimeError(f"quality gate failed for {key}: {quality.reason}")
 
     doc_id = hashlib.sha256(parsed.content.encode()).hexdigest()[:16]
-    md_key = f"parsed/{key[:-4]}.md" if key.lower().endswith(".pdf") else f"parsed/{key}.md"
+    md_key = parsed_key(key)
     md_bytes = parsed.content.encode("utf-8")
     client.put_object(bucket, md_key, io.BytesIO(md_bytes), length=len(md_bytes), content_type="text/markdown")
 
@@ -257,6 +327,10 @@ def sync_ticker(client, qdrant, ticker: str, report_type: str, dry: bool) -> tup
             status = "synced"
 
         notes = []
+        if not dry:
+            quality_note = ensure_quality(client, qdrant, bucket, key)
+            if quality_note:
+                notes.append(quality_note)
         if info is not candidates[0]:
             notes.append(f"FY{info['year']} {info['report_type']} used; newer file unavailable ({'; '.join(failures)})")
         if info["report_type"] != report_type:

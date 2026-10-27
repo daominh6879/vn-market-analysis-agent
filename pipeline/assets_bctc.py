@@ -40,7 +40,9 @@ def bctc_sync(context: AssetExecutionContext, config: BctcSyncConfig) -> dict:
     out = run(config.tickers or None, config.report_type)   # raises when no ticker succeeded
     statuses = list(out["results"].values())
     summary = {"synced": statuses.count("synced"), "up_to_date": statuses.count("up-to-date"),
-               "failed": len(out["failed"]), "with_notes": len(out["notes"])}
+               "failed": len(out["failed"]), "with_notes": len(out["notes"]),
+               "balance_mismatch": sum("balance check mismatch" in n for n in out["notes"].values()),
+               "balance_unverified": sum("balance check unverified" in n for n in out["notes"].values())}
     context.log.info(f"bctc_sync: {summary}; failed={list(out['failed'])[:20]}; notes={out['notes']}")
     return summary
 

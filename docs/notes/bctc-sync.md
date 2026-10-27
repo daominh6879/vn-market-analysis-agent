@@ -109,6 +109,13 @@ Phép kiểm tra chỉ thấy lỗi ở hai dòng tổng; lỗi ở các dòng k
 
 Ảnh hưởng: số liệu đi qua `sql_query` (DB vnstock) chứ không qua OCR; `ask_report` dành cho câu hỏi định tính (router: rủi ro, chiến lược, chính sách). Số trong câu trả lời của `ask_report` có thể sai chữ số với một phần mã.
 
+## Kiểm tra cân đối lúc index (migration 044, 27/10/2026)
+OCR đọc sai chữ số, nên mỗi tài liệu được kiểm tra: "Tổng (cộng) tài sản" phải bằng "Tổng (cộng) nguồn vốn" (ngân hàng: "Tổng tài sản" = "Tổng nợ phải trả và vốn chủ sở hữu"). Chỉ gắn cờ, không chặn index.
+- `core/balance_check.py::balance_check(markdown)` → `ok` / `mismatch` / `unverified`. Nhãn dòng lấy từ các ô đứng trước số đầu tiên (bỏ ô "mã số"), cho phép nhiễu OCR tối đa 6 ký tự trước và 3 chữ cái sau từ khoá, dòng có hơn 3 số bị bỏ (bảng theo ngành), nên "Tổng tài sản thuế thu nhập hoãn lại" và bảng thuyết minh theo ngành không bị đọc nhầm là tổng. `mismatch` ghi số chữ số khác nhau khi hai số cùng độ dài. 8 test dùng dòng thật của HPG, VCB, VHM, PLX, VNM.
+- `ingest/sync_bctc.ensure_quality()`: chạy cho tài liệu mới nạp và cho tài liệu đã nạp từ trước (đọc markdown đã parse trong MinIO, không OCR lại); ghi `documents.quality`/`quality_detail` (migration `044_documents_quality.sql`) và payload `quality` trên mọi chunk Qdrant. Ghi chú đi vào log và tóm tắt asset (`balance_mismatch`, `balance_unverified`). Cột chưa có (chưa chạy migration) thì chỉ cảnh báo, không ảnh hưởng việc đăng ký tài liệu.
+- Kết quả trên 29 mã (run `0496aeae`, 20 s, không OCR): 19 `ok`, 4 `mismatch`, 6 `unverified`. Mismatch: TCB (`1125765759` vs `4125765759`), PLX, CTG, PNJ, đều lệch 1–2 chữ số. TCB trước đó tôi nhầm là "không kết luận được"; bản kiểm tra chặt hơn loại được bảng theo ngành và thấy lỗi thật. Unverified (thiếu hoặc không đọc được dòng tổng): MBB, VHM, SSI, GAS, VND, GVR. Qdrant: 4992 chunk `ok`, 1346 `mismatch`, 2725 `unverified`.
+- Giới hạn: chỉ phát hiện lỗi ở hai dòng tổng; lỗi ở dòng khác, hoặc hai lỗi trùng nhau, không thấy. `unverified` không có nghĩa là đúng. Chưa dùng cờ này trong `ask_report` (câu trả lời chưa cảnh báo khi trích từ tài liệu `mismatch`).
+
 ## Cách chạy lại
 ```
 docker exec dagster-daemon sh -c 'cd /app && dagster job launch -f pipeline/assets.py -d /app -j bctc_sync_job -c /tmp/run.yaml'

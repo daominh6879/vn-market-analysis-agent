@@ -90,6 +90,7 @@ class _Minio:
 
 def _wire(monkeypatch, cands, downloads, have_minio=(), have_qdrant=()):
     monkeypatch.setattr(sb, "annual_candidates", lambda t, rt: cands)
+    monkeypatch.setattr(sb, "ensure_quality", lambda client, qdrant, bucket, key: "")
     monkeypatch.setattr(sb, "in_minio", lambda c, b, key: key in have_minio)
     monkeypatch.setattr(sb, "indexed_doc_id", lambda q, key: "doc" if key in have_qdrant else None)
     embedded = []
@@ -146,3 +147,78 @@ def test_dry_run_downloads_nothing(monkeypatch):
     emb = _wire(monkeypatch, [_cand(2025, "standalone")], {})
     assert sb.sync_ticker(_Minio(), None, "ACB", "standalone", dry=True) == ("would sync", "")
     assert emb == []
+
+
+# ── balance-sheet check (ensure_quality) ──────────────────────────────────────────────────────────
+
+BALANCED = "|270|TỔNG CỘNG TÀI SẢN||100.000.000|90.000.000|\n|440|TỔNG CỘNG NGUỒN VỐN||100.000.000|90.000.000|"
+MISREAD = "|270|TỔNG CỘNG TÀI SẢN||100.000.000|90.000.000|\n|440|TỔNG CỘNG NGUỒN VỐN||100.800.000|90.000.000|"
+
+
+class _MdClient:
+    def __init__(self, text=None):
+        self.text, self.reads = text, []
+
+    def get_object(self, bucket, key):
+        self.reads.append(key)
+        if self.text is None:
+            raise RuntimeError("NoSuchKey")
+        return type("Obj", (), {"read": lambda _self: self.text.encode()})()
+
+
+def _quality_env(monkeypatch, stored):
+    recorded = []
+    monkeypatch.setattr(sb, "indexed_doc_id", lambda q, key: "doc1")
+    monkeypatch.setattr(sb, "stored_quality", lambda doc_id: stored)
+    monkeypatch.setattr(sb, "record_quality", lambda q, doc_id, check: recorded.append((doc_id, check.status)))
+    return recorded
+
+
+def test_parsed_key_sits_next_to_the_pdf():
+    assert sb.parsed_key("2025/a b.pdf") == "parsed/2025/a b.md"
+    assert sb.parsed_key("2025/file") == "parsed/2025/file.md"
+
+
+def test_ensure_quality_checks_an_unchecked_document_and_records_it(monkeypatch):
+    rec = _quality_env(monkeypatch, stored=None)
+    client = _MdClient(BALANCED)
+    assert sb.ensure_quality(client, None, "hpg-docs", "2025/a.pdf") == ""
+    assert rec == [("doc1", "ok")] and client.reads == ["parsed/2025/a.md"]
+
+
+def test_ensure_quality_reports_a_mismatch_with_the_digits(monkeypatch):
+    rec = _quality_env(monkeypatch, stored=None)
+    note = sb.ensure_quality(_MdClient(MISREAD), None, "b", "2025/a.pdf")
+    assert rec == [("doc1", "mismatch")]
+    assert note.startswith("balance check mismatch") and "100000000 vs capital 100800000" in note
+
+
+def test_ensure_quality_leaves_an_already_checked_document_alone(monkeypatch):
+    rec = _quality_env(monkeypatch, stored="mismatch")
+    client = _MdClient(MISREAD)
+    assert sb.ensure_quality(client, None, "b", "2025/a.pdf") == "balance check mismatch"
+    assert rec == [] and client.reads == []          # no MinIO read, no second write
+    _quality_env(monkeypatch, stored="ok")
+    assert sb.ensure_quality(client, None, "b", "2025/a.pdf") == ""
+
+
+def test_ensure_quality_without_parsed_markdown_or_index_is_silent(monkeypatch):
+    rec = _quality_env(monkeypatch, stored=None)
+    assert sb.ensure_quality(_MdClient(None), None, "b", "2025/a.pdf") == "" and rec == []
+    monkeypatch.setattr(sb, "indexed_doc_id", lambda q, key: None)
+    assert sb.ensure_quality(_MdClient(BALANCED), None, "b", "2025/a.pdf") == ""
+
+
+def test_sync_ticker_puts_the_quality_note_in_its_result(monkeypatch):
+    _wire(monkeypatch, [_cand(2025, "standalone")], {"u2025standalone": b"%PDF"})
+    monkeypatch.setattr(sb, "ensure_quality", lambda *a: "balance check mismatch: assets 1 vs capital 2")
+    status, note = sb.sync_ticker(_Minio(), None, "PLX", "standalone", dry=False)
+    assert status == "synced" and "balance check mismatch" in note
+
+
+def test_dry_run_does_not_check_or_write(monkeypatch):
+    _wire(monkeypatch, [_cand(2025, "standalone")], {})
+    called = []
+    monkeypatch.setattr(sb, "ensure_quality", lambda *a: called.append(1) or "")
+    sb.sync_ticker(_Minio(), None, "PLX", "standalone", dry=True)
+    assert called == []
