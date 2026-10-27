@@ -6,7 +6,10 @@ Usage:
 """
 
 import argparse
+import os
+import re
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -21,9 +24,69 @@ class ParsedDoc:
         assert self.content.strip(), "Content rỗng sau parse"
 
 
+# Vietnamese letters that carry a diacritic (≈35-40% of the letters of real Vietnamese text)
+_DIACRITIC_RE = re.compile(
+    r"[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]", re.IGNORECASE
+)
+_MIN_LETTERS_TO_JUDGE = 1500   # fewer letters in the sampled text layer: too little evidence, trust it
+_MIN_DIACRITIC_RATIO = 0.08
+_STRAY_MAX_CHARS = 150         # a statement page has hundreds of characters; a watermark/signature footer a few dozen
+_STRAY_SHARE = 0.4
+
+
+def text_layer_problem(path: str, sample_pages: int = 12) -> str | None:
+    """Why the PDF's own text layer cannot be trusted, or None when pymupdf4llm can use it as is.
+
+    pymupdf4llm only OCRs pages that carry no text at all, so two kinds of scanned BCTC slip through:
+    - a hidden OCR layer without diacritics ("Ngan hang Thuong mai Co phan", or legacy-font "Ti~nm~t") is kept as the text;
+    - scanned pages with a few stray characters (digital-signature footer, QR caption) count as "has text" and are never
+      read: a 118-page GAS report came out as 14.6k characters.
+    PDFs whose pages have no text at all (plain scans) are fine and return None.
+    """
+    import pymupdf
+
+    doc = pymupdf.open(path)
+    n = len(doc)
+    pages = range(n) if n <= sample_pages else sorted({round(i * (n - 1) / (sample_pages - 1)) for i in range(sample_pages)})
+    texts = [doc[i].get_text() for i in pages]
+    letters = sum(ch.isalpha() for t in texts for ch in t)
+    if letters >= _MIN_LETTERS_TO_JUDGE and sum(len(_DIACRITIC_RE.findall(t)) for t in texts) / letters < _MIN_DIACRITIC_RATIO:
+        return "no diacritics"
+    stray = sum(0 < len(t.strip()) < _STRAY_MAX_CHARS for t in texts)
+    if texts and stray / len(texts) >= _STRAY_SHARE:
+        return "stray text only"
+    return None
+
+
+def _rasterize_pdf(path: str, dpi: int = 150) -> str:
+    """Write an image-only copy of the PDF (same page sizes) to a temp file and return its path.
+
+    Rendering draws what a reader sees, so a bad hidden text layer is gone and the page is OCR'd like any other scan.
+    150 dpi matches pymupdf4llm's own OCR resolution.
+    """
+    import pymupdf
+
+    src, out = pymupdf.open(path), pymupdf.open()
+    for page in src:
+        pix = page.get_pixmap(dpi=dpi, alpha=False)
+        new = out.new_page(width=page.rect.width, height=page.rect.height)
+        new.insert_image(new.rect, pixmap=pix)
+    fd, tmp = tempfile.mkstemp(suffix=".pdf")
+    os.close(fd)
+    out.save(tmp, deflate=True)
+    return tmp
+
+
 def parse_with_pymupdf(path: str, ocr_language: str = "vie+eng") -> ParsedDoc:
     import pymupdf4llm
-    md = pymupdf4llm.to_markdown(path, ocr_language=ocr_language, force_ocr=True)
+
+    problem = text_layer_problem(path)
+    rasterised = _rasterize_pdf(path) if problem else None
+    try:
+        md = pymupdf4llm.to_markdown(rasterised or path, ocr_language=ocr_language, force_ocr=True)
+    finally:
+        if rasterised:
+            Path(rasterised).unlink(missing_ok=True)
     num_pages = _count_pages_pymupdf(path)
     return ParsedDoc(
         content=md,
@@ -33,6 +96,7 @@ def parse_with_pymupdf(path: str, ocr_language: str = "vie+eng") -> ParsedDoc:
             "num_pages": num_pages,
             "parsed_at": datetime.now().isoformat(),
             "content_length": len(md),
+            "text_layer": f"rasterised ({problem})" if rasterised else "as is",
         },
     )
 
