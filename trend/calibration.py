@@ -4,7 +4,7 @@ trend/calibration.py — measured frequencies instead of LLM-declared probabilit
 For one variant and horizon, P(up | label) = (ups + 1) / (n + 2) over PAST forecasts whose outcome is known, where
 up = net return > 0 (absolute) or alpha > 0 (relative). A label seen fewer than MIN_SAMPLES times is not calibrated:
 probability None, status 'not_calibrated'. The backtest builds the table walk-forward (only forecasts whose label had
-completed by the test session); the live service builds it from every labelled forecast of the variant.
+completed by the test session).
 """
 from __future__ import annotations
 

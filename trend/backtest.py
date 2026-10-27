@@ -13,6 +13,8 @@ session), and score per variant x horizon x absolute/relative:
   (widened by sqrt(h / STEP) for overlapping windows), and the same for 'bearish' names.
 Reported for the whole period and the HOLDOUT (last quarter of sessions), stored in backtest_runs.
 Prompt, thresholds and features were fixed before the first replay; nothing is tuned on these results.
+Status (27/10/2026): research only. backtest_runs #2 showed no edge over the baselines, so the live job, the API and
+the dashboard were removed (vn-portfolio docs/notes/trend-analyzer.md); the code stays to reproduce the result.
 
 Usage:
     python -m trend.backtest --replay [--variants A,B,C,D] [--workers 8]

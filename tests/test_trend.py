@@ -187,11 +187,3 @@ def test_rule_baseline_follows_trend_and_market():
     assert (f["absolute_trend"], f["relative_trend_vs_vnindex"]) == ("bullish", "bearish")
     s["signals"]["market_regime"] = "downtrend"
     assert baselines.rules(s)["forecasts"][0]["absolute_trend"] == "neutral"
-
-
-def test_session_cutoff_uses_the_close():
-    from trend.service import session_cutoff
-    assert session_cutoff("2026-10-27T10:00:00+07:00") == "2026-10-26"
-    assert session_cutoff("2026-10-27T15:30:00+07:00") == "2026-10-27"
-    assert session_cutoff("2026-10-27") == "2026-10-27"
-    assert session_cutoff(None) is None

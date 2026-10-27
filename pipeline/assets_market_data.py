@@ -33,8 +33,8 @@ from pipeline.assets_bctc import bctc_sync_job
 from pipeline.assets_index import market_index_ingest_job
 from pipeline.assets_market_brief import corporate_events_job, foreign_flows_job
 from pipeline.assets_ohlcv import ohlcv_ingest_job
+from pipeline.assets_benchmark import benchmark_ingest_job
 from pipeline.assets_proprietary import breakout_signals_job, proprietary_flows_job
-from pipeline.assets_trend import trend_forecasts_job
 from pipeline.assets_vnstock import vnstock_financials_job, vnstock_ratios_job
 
 _TZ = "Asia/Ho_Chi_Minh"
@@ -266,9 +266,8 @@ _BOOTSTRAP_CHECKS: list[tuple[str, str, str]] = [
     ("bctc_sync_job",
      f"SELECT (SELECT count(*) FROM documents WHERE status = 'active' AND collection = 'bctc_structural') < 0.5 * {_ACTIVE}",
      "bctc"),
-    # the first live forecasts once prices exist (needs the LLM; the backtest replay is a manual CLI)
-    ("trend_forecasts_job", "SELECT EXISTS (SELECT 1 FROM ohlcv_daily WHERE date >= CURRENT_DATE - 7) "
-     "AND NOT EXISTS (SELECT 1 FROM forecast_runs WHERE mode = 'live')", "trend_forecasts"),
+    ("benchmark_ingest_job",
+     "SELECT (SELECT count(*) FROM benchmark_daily WHERE date >= CURRENT_DATE - 365) < 200", "benchmark"),
 ]
 
 
@@ -276,7 +275,7 @@ _BOOTSTRAP_CHECKS: list[tuple[str, str, str]] = [
     jobs=[securities_shares_job, stock_dividends_job, ratio_history_job, financials_quarterly_job, daily_snapshots_job,
           vnstock_financials_job, vnstock_ratios_job, corporate_events_job,
           proprietary_flows_job, breakout_signals_job, bctc_sync_job,
-          trend_forecasts_job],
+          benchmark_ingest_job],
     name="data_bootstrap_sensor",
     minimum_interval_seconds=600,
     default_status=DefaultSensorStatus.RUNNING,

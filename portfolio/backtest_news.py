@@ -17,7 +17,10 @@ title + snippet only, no prices). Caveat: the model's training data may contain 
 
 Usage:
     python -m portfolio.backtest_news --backfill --since 2026-04-01 --until 2026-10-20 [--workers 4]
-    python -m portfolio.backtest_news
+    python -m portfolio.backtest_news [--from 2026-10-28 --origin advice]
+Pre-registered rule (b), 27/10/2026 (vn-portfolio strategy-changelog): from 2026-10-28, origin advice, score >= 2 —
+propose "no new buy on negative news" only when the negative group's 5-session excess + 2·SE < 0 over >= 30 entry
+dates; read when >= 300 such pairs exist.
 """
 from __future__ import annotations
 
@@ -83,12 +86,15 @@ def backfill(since: str, until: str, workers: int) -> None:
 
 # ── event study ───────────────────────────────────────────────────────────────────────────────────────────────────
 
-def load_events() -> pd.DataFrame:
+def load_events(since: str | None = None, origin: str | None = None) -> pd.DataFrame:
+    """Scored pairs; since / origin restrict to articles from that date / pairs scored by that path ('advice')."""
     from core.db import get_conn
     with get_conn() as conn:
         df = pd.read_sql_query(
             "SELECT s.article_id, s.ticker, s.kind, s.score, s.direction, s.magnitude, s.origin, a.published_at "
-            "FROM news_impact_scores s JOIN news_articles a ON a.id = s.article_id", conn)
+            "FROM news_impact_scores s JOIN news_articles a ON a.id = s.article_id "
+            "WHERE (%(since)s::date IS NULL OR a.published_at >= %(since)s::date) "
+            "AND (%(origin)s::text IS NULL OR s.origin = %(origin)s)", conn, params={"since": since, "origin": origin})
     df["pub_date"] = pd.to_datetime(df["published_at"], utc=True).dt.tz_convert(VN_TZ).dt.tz_localize(None).dt.normalize()
     return df
 
@@ -149,11 +155,11 @@ def summarise(r: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(out)
 
 
-def run() -> pd.DataFrame:
+def run(since: str | None = None, origin: str | None = None) -> pd.DataFrame:
     from portfolio.backtest_candidates import load
     from portfolio.evidence import MIN_AVG_VALUE_BN
     d = load()
-    ev = load_events()
+    ev = load_events(since, origin)
     r = event_returns(ev, d["close"], d["value_bn"] >= MIN_AVG_VALUE_BN)
     print(f"{len(ev)} scored pairs, {len(r)} with prices; entries {r['entry'].min().date()}..{r['entry'].max().date()}"
           if len(r) else f"{len(ev)} scored pairs, none with prices yet")
@@ -166,8 +172,10 @@ if __name__ == "__main__":
     ap.add_argument("--since", default="2026-04-01")
     ap.add_argument("--until", default="2026-10-20")
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--from", dest="since", default=None, help="event study: articles from this date only")
+    ap.add_argument("--origin", default=None, help="event study: only pairs scored by this path, e.g. advice")
     a = ap.parse_args()
     if a.backfill:
         backfill(a.since, a.until, a.workers)
     else:
-        print(run().to_markdown(index=False, floatfmt="+.2f"))
+        print(run(a.since, a.origin).to_markdown(index=False, floatfmt="+.2f"))
