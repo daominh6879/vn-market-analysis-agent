@@ -50,6 +50,7 @@ class Case:
     gold: list[str] = field(default_factory=list)       # folded substrings that must share one chunk (empty = no gold)
     figures: list[str] = field(default_factory=list)    # numbers the answer must contain (separators ignored)
     facts: list[list[str]] = field(default_factory=list)  # each group: any alternative (folded match) must be in the answer
+    tickers: list[str] = field(default_factory=list)    # several companies in one question (default: [ticker]); no gold check
 
 
 CASES: list[Case] = [
@@ -81,6 +82,11 @@ CASES: list[Case] = [
          gold=["417640988"], figures=["417.640.988"]),
     Case("vhm_equity", "VHM", "Vốn chủ sở hữu của VHM cuối năm 2025?", "figure",
          gold=["172731696"], figures=["172.731.696"]),
+    # ── one question about two companies: the answer must keep each company's figure apart ──
+    Case("hpg_vs_vcb_total_assets", "HPG", "So sánh tổng tài sản cuối năm 2025 của HPG và VCB", "figure",
+         tickers=["HPG", "VCB"], figures=["98.670.778.691.605", "2.426.649.127"]),
+    Case("hpg_vs_mwg_total_assets", "HPG", "So sánh tổng tài sản cuối năm 2025 của HPG và MWG", "figure",
+         tickers=["HPG", "MWG"], figures=["98.670.778.691.605", "27.626.935.334.025"]),
     # ── policies: facts read from the notes (VCB chunks 83/84, HPG chunk 76 at the time of writing) ──
     Case("vcb_general_provision_rate", "VCB", "Tỷ lệ dự phòng rủi ro chung của Vietcombank là bao nhiêu?", "policy",
          gold=["ruirochung", "075"], facts=[["0,75"]]),
@@ -130,7 +136,7 @@ def main() -> None:
     args = parser.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
 
-    from tools.rag_query import HYBRID_TOP_K, TOP_K, _llm_answer, _retrieve
+    from tools.rag_query import HYBRID_TOP_K, TOP_K, _label_hits, _llm_answer, _retrieve_hits
 
     index = {t: _all_chunks(t) for t in sorted({c.ticker for c in CASES})}
     modes = {"vector": False, "hybrid": True}
@@ -144,10 +150,11 @@ def main() -> None:
             print(f"[skip] {case.id}: {row['skipped']}")
             continue
         for mode, hybrid in modes.items():
-            ctx = _retrieve(case.question, tickers=[case.ticker], year=YEAR, hybrid=hybrid)   # each mode's own default top_k
+            hits = _retrieve_hits(case.question, tickers=case.tickers or [case.ticker], year=YEAR, hybrid=hybrid)   # each mode's own top_k
+            ctx = [text for text, _ in hits]
             res: dict = {"ctx": gold_in(ctx, case.gold) if case.gold else None}
             if not args.no_answer:
-                answers = [_llm_answer(case.question, ctx) for _ in range(args.runs)]
+                answers = [_llm_answer(case.question, _label_hits(hits)) for _ in range(args.runs)]   # same context as ask_report
                 res["ans_ok"] = sum(answer_ok(case, a) for a in answers)
                 res["empty"] = sum(not a for a in answers)
                 res["sample"] = answers[0][:240]
@@ -171,7 +178,7 @@ def main() -> None:
 
     summary: dict = {}
     for mode in modes:
-        gold_rows = [r for r in scored if r["kind"] != "negative"]
+        gold_rows = [r for r in scored if r["kind"] != "negative" and r[mode]["ctx"] is not None]   # cases with a gold fact
         summary[mode] = {"ctx_hit": f"{sum(bool(r[mode]['ctx']) for r in gold_rows)}/{len(gold_rows)}"}
         if not args.no_answer:
             for kind in ("figure", "policy", "negative"):

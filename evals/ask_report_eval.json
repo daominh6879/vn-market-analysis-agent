@@ -8,14 +8,14 @@
   "summary": {
     "vector": {
       "ctx_hit": "10/17",
-      "ans_figure": "21/39",
+      "ans_figure": "21/45",
       "ans_policy": "6/12",
       "ans_negative": "3/3",
       "empty_answers": 0
     },
     "hybrid": {
       "ctx_hit": "17/17",
-      "ans_figure": "38/39",
+      "ans_figure": "44/45",
       "ans_policy": "12/12",
       "ans_negative": "3/3",
       "empty_answers": 0
@@ -31,13 +31,13 @@
         "ctx": false,
         "ans_ok": 0,
         "empty": 0,
-        "sample": "Không có trong tài liệu. Các đoạn trích không bao gồm chỉ tiêu \"Tổng tài sản\" trên bảng cân đối kế toán tại ngày 31/12/2025."
+        "sample": "Không có trong tài liệu. Các đoạn trích không bao gồm chỉ tiêu \"Tổng tài sản\" (Mã số 270/280) trên bảng cân đối kế toán của HPG năm 2025."
       },
       "hybrid": {
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "Tổng tài sản cuối năm 2025 là **98.670.778.691.605 VND** (theo Bảng cân đối kế toán)."
+        "sample": "Tổng tài sản của HPG tại ngày 31/12/2025 là **98.670.778.691.605 VND** (theo Bảng cân đối kế toán, mã số 270)."
       }
     },
     {
@@ -49,13 +49,13 @@
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "**Nợ phải trả cuối năm 2025: 4.239.852.223.395 VND** (mã số 300, Bảng cân đối kế toán).\n\nChi tiết:\n- Nợ ngắn hạn: 1.380.352.223.395 VND\n- Nợ dài hạn: 2.859.500.000.000 VND"
+        "sample": "Nợ phải trả của HPG cuối năm 2025 (báo cáo chính - bảng cân đối kế toán): **4.239.852.223.395 VND**, trong đó nợ ngắn hạn 1.380.352.223.395 VND và nợ dài hạn 2.859.500.000.000 VND."
       },
       "hybrid": {
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "**Nợ phải trả cuối năm 2025: 4.239.852.223.395 VND** (theo Bảng cân đối kế toán, mã số 300).\n\nTrong đó:\n- Nợ ngắn hạn: 1.380.352.223.395 VND\n- Nợ dài hạn: 2.859.500.000.000 VND (toàn bộ là vay dài hạn)"
+        "sample": "**Nợ phải trả HPG cuối năm 2025 (hợp nhất? — báo cáo riêng/standalone): 4.239.852.223.395 VND** (mã số 300, Bảng cân đối kế toán). Đầu năm: 1.012.889.937.592 VND."
       }
     },
     {
@@ -67,13 +67,13 @@
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "**Vốn chủ sở hữu cuối năm 2025: 94.430.926.468.210 VND** (mã số 400, Bảng cân đối kế toán tại ngày 31/12/2025)."
+        "sample": "Vốn chủ sở hữu của HPG cuối năm 2025: **94.430.926.468.210 VND** (theo Bảng cân đối kế toán, mã số 400/410)."
       },
       "hybrid": {
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "**Vốn chủ sở hữu cuối năm 2025: 94.430.926.468.210 VND** (Bảng cân đối kế toán, mã số 400/410)."
+        "sample": "Vốn chủ sở hữu (mã 400/410) của HPG cuối năm 2025: **94.430.926.468.210 VND** (đầu năm: 80.780.186.578.052 VND). [HPG | 2025 | standalone]"
       }
     },
     {
@@ -85,13 +85,13 @@
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "**Vốn chủ sở hữu cuối năm 2024 (số đầu năm 2025): 80.780.186.578.052 VND** (Bảng cân đối kế toán, chỉ tiêu 410)."
+        "sample": "Vốn chủ sở hữu của HPG đầu năm 2025 (cuối năm 2024) là **80.780.186.578.052 VND** [HPG | 2025 | standalone]."
       },
       "hybrid": {
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "**Vốn chủ sở hữu cuối năm 2024 (đầu năm 2025): 80.780.186.578.052 VND** (mã số 400, cột \"Số đầu năm\" — Bảng cân đối kế toán tại ngày 31/12/2025)."
+        "sample": "Vốn chủ sở hữu HPG cuối năm 2024 (số đầu năm 2025) — theo Bảng cân đối kế toán hợp nhất/riêng [HPG | 2025 | standalone]: **80.780.186.578.052 VND**."
       }
     },
     {
@@ -103,13 +103,13 @@
         "ctx": false,
         "ans_ok": 0,
         "empty": 0,
-        "sample": "Không có trong tài liệu. Các đoạn trích không bao gồm chỉ tiêu \"Tiền và các khoản tương đương tiền\" trên bảng cân đối kế toán hay lưu chuyển tiền tệ."
+        "sample": "Không có trong tài liệu. Các đoạn trích không bao gồm chỉ tiêu \"Tiền và các khoản tương đương tiền\" trên bảng cân đối kế toán hay lưu chuyển tiền tệ của HPG năm 2025."
       },
       "hybrid": {
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "**Tiền và các khoản tương đương tiền cuối năm 2025: 481.464.857.088 VND**\n\nChi tiết (thuyết minh số 5):\n- Tiền mặt: 820.836.566\n- Tiền gửi ngân hàng không kỳ hạn: 37.944.020.522\n- Các khoản tương đương tiền: 442.700.000.000\n\n(Số đầu năm: 31"
+        "sample": "**HPG | 2025 | standalone — Tiền và các khoản tương đương tiền cuối năm 2025: 481.464.857.088 VND**, gồm:\n- Tiền mặt: 820.836.566 VND\n- Tiền gửi ngân hàng không kỳ hạn: 37.944.020.522 VND\n- Các khoản tương đương tiền: 442.700.000.000 VND\n\n("
       }
     },
     {
@@ -121,13 +121,13 @@
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "Vay dài hạn cuối năm 2025: **2.859.500.000.000 VND** (mã số 338, thuyết minh 19)."
+        "sample": "Vay dài hạn của HPG tại ngày 31/12/2025 là **2.859.500.000.000 VND** (theo Bảng cân đối kế toán riêng)."
       },
       "hybrid": {
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "**2.859.500.000.000 VND** (vay dài hạn, số cuối năm 2025) — theo Bảng cân đối kế toán (Mã số 338). Thuyết minh số 19 cũng ghi nhận cùng con số này."
+        "sample": "Vay dài hạn của HPG cuối năm 2025 là **2.859.500.000.000 VND** (số đầu năm: 0).\n\nNguồn: [HPG | 2025 | standalone] — Bảng cân đối kế toán (Mã số 338) và Thuyết minh số 19 (Vay dài hạn)."
       }
     },
     {
@@ -139,13 +139,13 @@
         "ctx": false,
         "ans_ok": 0,
         "empty": 0,
-        "sample": "Không có trong tài liệu. Các đoạn trích không chứa số liệu \"Tổng tài sản\" trên bảng cân đối kế toán của VCB cho năm 2025."
+        "sample": "Tổng tài sản của VCB tại ngày 31/12/2025 (số liệu trong thuyết minh): **2.431.319.722 triệu VND** (tức ~2.431.320 tỷ đồng)."
       },
       "hybrid": {
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "Tổng tài sản cuối năm 2025: **2.426.649.127 triệu VND** (theo Báo cáo tình hình tài chính)."
+        "sample": "Tổng tài sản của VCB tại ngày 31/12/2025 là **2.426.649.127 triệu VND** (theo Báo cáo tình hình tài chính)."
       }
     },
     {
@@ -157,13 +157,13 @@
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "**2.205.948.110 triệu VND** (theo Báo cáo tình hình tài chính ngày 31/12/2025)."
+        "sample": "Tổng nợ phải trả của VCB tại 31/12/2025 là **2.205.948.110 triệu VND** (theo Báo cáo tình hình tài chính). Số trong thuyết minh cũng ghi 2.205.948.110 triệu VND — khớp nhau."
       },
       "hybrid": {
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "**Tổng nợ phải trả cuối năm 2025: 2.205.948.110 triệu VND** (theo Báo cáo tình hình tài chính)."
+        "sample": "Tổng nợ phải trả của VCB tại ngày 31/12/2025 là **2.205.948.110 Triệu VND** (theo Báo cáo tình hình tài chính). Số này khớp với thuyết minh."
       }
     },
     {
@@ -175,13 +175,13 @@
         "ctx": false,
         "ans_ok": 0,
         "empty": 0,
-        "sample": "Không có trong tài liệu. Các đoạn trích không chứa số liệu vốn chủ sở hữu trên báo cáo tình hình tài chính của VCB cuối năm 2025."
+        "sample": "Không có trong tài liệu. Các đoạn trích không chứa số liệu vốn chủ sở hữu trên bảng cân đối kế toán của VCB năm 2025."
       },
       "hybrid": {
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "**Vốn chủ sở hữu cuối năm 2025: 220.701.017 triệu VND** (~220.701 tỷ đồng), theo Báo cáo tình hình tài chính (mục VI – Vốn chủ sở hữu). Con số này tăng so với 192.910.494 triệu VND cuối năm 2024."
+        "sample": "**Vốn chủ sở hữu VCB cuối năm 2025: 220.701.017 triệu VND** (tức ~220.701 tỷ đồng), theo Báo cáo tình hình tài chính [VCB | 2025 | standalone].\n\n(So sánh: cuối năm 2024 là 192.910.494 triệu VND.)"
       }
     },
     {
@@ -193,13 +193,13 @@
         "ctx": false,
         "ans_ok": 0,
         "empty": 0,
-        "sample": "Không có trong tài liệu. Các đoạn trích không nêu số vốn điều lệ của VCB tại cuối năm 2025."
+        "sample": "Không có trong tài liệu. Các đoạn trích không chứa thông tin về vốn điều lệ của VCB tại ngày 31/12/2025."
       },
       "hybrid": {
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "Vốn điều lệ cuối năm 2025 (31/12/2025) là **55.890.913 triệu VND** (theo thuyết minh) — trên Báo cáo tình hình tài chính ghi **83.556.751 triệu VND**, có sự chênh lệch giữa hai nguồn."
+        "sample": "Vốn điều lệ của VCB tại ngày 31/12/2025 là **83.556.751 triệu VND** (tức ~83.557 tỷ đồng), theo Báo cáo tình hình tài chính [VCB | 2025 | standalone]."
       }
     },
     {
@@ -211,13 +211,13 @@
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "Không có trong tài liệu. Các đoạn trích không bao gồm chỉ tiêu \"Tổng tài sản\" trên bảng cân đối kế toán; chỉ có \"TOTAL LIABILITIES AND OWNERS' EQUITY\" = 590,372,684 triệu VND (cuối năm), là tổng nợ phải trả và vốn chủ sở hữu — không phải tổ"
+        "sample": "Không có trong tài liệu. Các đoạn trích không bao gồm dòng \"Tổng tài sản\" trên bảng cân đối kế toán; chỉ có \"TOTAL LIABILITIES AND OWNERS' EQUITY\" = 590,372,684 triệu VND (năm 2025)."
       },
       "hybrid": {
         "ctx": true,
         "ans_ok": 2,
         "empty": 0,
-        "sample": "Không có trong tài liệu. Các đoạn tài liệu cung cấp không bao gồm chỉ tiêu \"Tổng tài sản\" trên bảng cân đối kế toán cuối năm 2025 (chỉ có số liệu Tổng nợ phải trả và vốn chủ sở hữu là 590.372.684 triệu VND)."
+        "sample": "Không có trong tài liệu. Các đoạn tài liệu VHM 2025 (standalone) được cung cấp chỉ có số liệu về vốn chủ sở hữu, các khoản phải trả, doanh thu tài chính và chi phí — không có dòng \"Tổng tài sản\" trên bảng cân đối kế toán."
       }
     },
     {
@@ -229,13 +229,13 @@
         "ctx": false,
         "ans_ok": 0,
         "empty": 0,
-        "sample": "Không có trong tài liệu. Các đoạn tài liệu được cung cấp chỉ đề cập đến cam kết (commitments) và các khoản phải trả liên quan bên liên quan, không có số liệu tổng nợ phải trả trên bảng cân đối kế toán của VHM tại 31/12/2025."
+        "sample": "Không có trong tài liệu. Các đoạn tài liệu của VHM 2025 (báo cáo riêng) không nêu con số tổng nợ phải trả trên bảng cân đối kế toán."
       },
       "hybrid": {
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "**Nợ phải trả của Vinhomes (VHM) tại 31/12/2025: 417.640.988 triệu VND (≈ 417.641 tỷ VND)** — theo bảng cân đối kế toán, Mã số 300 – Nợ phải trả.\n\n(Đầu năm: 299.897.327 triệu VND.)"
+        "sample": "**Nợ phải trả của VHM cuối năm 2025: 417.640.988 triệu VND** (≈ 417.641 tỷ VND), theo Bảng cân đối kế toán (Mã số 300).\n\nSố đầu năm: 299.897.327 triệu VND."
       }
     },
     {
@@ -247,13 +247,49 @@
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "**Vốn chủ sở hữu cuối năm 2025: 172.731.696 (triệu VND)** — theo Bảng cân đối kế toán (mã số 400).\n\nTrong đó: Vốn điều lệ 41.074.120; Thặng dư vốn (7.050.610); Quỹ khác 35.000; Lợi nhuận chưa phân phối 138.673.186 (triệu VND)."
+        "sample": "Vốn chủ sở hữu của VHM cuối năm 2025 (mã 400, bảng cân đối kế toán riêng): **172.731.696 triệu VND** (đầu năm: 136.841.533 triệu VND)."
       },
       "hybrid": {
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "**Vốn chủ sở hữu cuối năm 2025: 172.731.696 triệu VND** (tức ~172.731,7 tỷ VND).\n\n(Theo Bảng cân đối kế toán — mã số 400/410.)"
+        "sample": "**Vốn chủ sở hữu VHM cuối năm 2025: 172.731.696 triệu VND** (báo cáo chính – Bảng cân đối kế toán, mã số 410)."
+      }
+    },
+    {
+      "id": "hpg_vs_vcb_total_assets",
+      "ticker": "HPG",
+      "kind": "figure",
+      "question": "So sánh tổng tài sản cuối năm 2025 của HPG và VCB",
+      "vector": {
+        "ctx": null,
+        "ans_ok": 0,
+        "empty": 0,
+        "sample": "Không có trong tài liệu — tài liệu chỉ cung cấp số liệu của VCB, không có dữ liệu của HPG để so sánh.\n\nTổng tài sản cuối năm 2025 của VCB: **2.454.871.437 triệu VND** (theo thuyết minh BCĐKT)."
+      },
+      "hybrid": {
+        "ctx": null,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "**Tổng tài sản cuối năm 2025:**\n\n- **HPG:** 98.670.778.691.605 VND (~98.671 tỷ VND) — theo Bảng cân đối kế toán [HPG | 2025 | standalone]\n- **VCB:** 2.426.649.127 triệu VND (~2.426.649 tỷ VND) — theo Báo cáo tình hình tài chính [VCB | 2025 "
+      }
+    },
+    {
+      "id": "hpg_vs_mwg_total_assets",
+      "ticker": "HPG",
+      "kind": "figure",
+      "question": "So sánh tổng tài sản cuối năm 2025 của HPG và MWG",
+      "vector": {
+        "ctx": null,
+        "ans_ok": 0,
+        "empty": 0,
+        "sample": "**HPG (2025, Bảng cân đối kế toán – số cuối năm):** Tổng cộng tài sản = **98.670.778.691.605 VND**.\n\n**MWG:** Không có trong tài liệu."
+      },
+      "hybrid": {
+        "ctx": null,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "**Tổng tài sản cuối năm 2025 (báo cáo chính - bảng cân đối kế toán):**\n\n- **HPG:** 98.670.778.691.605 VND (~98.671 tỷ đồng)\n- **MWG:** 27.626.935.334.025 VND (~27.627 tỷ đồng)\n\n**So sánh:** Tổng tài sản của HPG lớn hơn MWG khoảng 71.043.843"
       }
     },
     {
@@ -265,13 +301,13 @@
         "ctx": true,
         "ans_ok": 0,
         "empty": 0,
-        "sample": "Không có trong tài liệu. Các đoạn tài liệu chỉ nêu số trích lập dự phòng chung cho vay khách hàng (1.711.505 triệu VND năm 2025; 1.295.885 triệu VND năm 2024) mà không nêu tỷ lệ dự phòng rủi ro chung."
+        "sample": "Không có trong tài liệu. Các đoạn trích chỉ nêu số dư dự phòng rủi ro cho vay khách hàng và chi phí trích lập dự phòng, không nêu tỷ lệ dự phòng rủi ro chung."
       },
       "hybrid": {
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "0,75% tổng số dư nợ gốc tại ngày cuối cùng của mỗi tháng của các khoản nợ được phân loại từ nợ Nhóm 1 đến nợ Nhóm 4 (theo Nghị định 86)."
+        "sample": "Theo Nghị định 86, Ngân hàng trích lập dự phòng rủi ro chung **bằng 0,75% tổng số dư nợ gốc** tại ngày cuối cùng của mỗi tháng của các khoản nợ được phân loại từ nợ Nhóm 1 đến nợ Nhóm 4. [VCB | 2025 | standalone]"
       }
     },
     {
@@ -283,13 +319,13 @@
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "**Trích lập dự phòng rủi ro tín dụng tại Vietcombank (theo Thông tư 31/2024 và Nghị định 86/2024):**\n\n**1. Dự phòng rủi ro cụ thể:**\n- Trích theo tỷ lệ tương ứng kết quả phân loại nợ, trên số dư nợ gốc cuối tháng/quý/đột xuất **trừ giá trị "
+        "sample": "**Vietcombank (VCB) trích lập dự phòng rủi ro tín dụng như sau:**\n\n**1. Căn cứ pháp lý:** Thông tư 31/2024/TT-NHNN và Nghị định 86/2024/NĐ-CP.\n\n**2. Dự phòng rủi ro cụ thể** — trích theo tỷ lệ tương ứng nhóm nợ, trên số dư nợ gốc cuối tháng"
       },
       "hybrid": {
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "**Trích lập dự phòng rủi ro tín dụng tại Vietcombank (theo Thuyết minh BCTC riêng 2025):**\n\n**Cơ sở pháp lý:** Thông tư 31/2024/TT-NHNN (phân loại tài sản có) và Nghị định 86/2024/NĐ-CP (mức trích, phương pháp trích lập dự phòng).\n\n**1. Dự "
+        "sample": "**Vietcombank (VCB) trích lập dự phòng rủi ro tín dụng theo Nghị định 86 và Thông tư 31, gồm 2 loại:**\n\n**1. Dự phòng rủi ro cụ thể** — tính trên số dư nợ gốc (sau khi trừ giá trị khấu trừ của tài sản bảo đảm) theo nhóm nợ:\n\n| Nhóm nợ | Tỷ "
       }
     },
     {
@@ -301,13 +337,13 @@
         "ctx": false,
         "ans_ok": 0,
         "empty": 0,
-        "sample": "Không có trong tài liệu. Các đoạn trích không đề cập chính sách kế toán đối với chứng khoán kinh doanh (chỉ có số liệu lãi/lỗ thuần từ mua bán chứng khoán kinh doanh và đầu tư)."
+        "sample": "Không có trong tài liệu. Các đoạn tài liệu cung cấp chỉ đề cập đến đầu tư vào công ty liên doanh/liên kết và kết quả mua bán chứng khoán kinh doanh, không nêu chính sách kế toán đối với chứng khoán kinh doanh."
       },
       "hybrid": {
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "Chứng khoán kinh doanh được ghi nhận ban đầu theo giá gốc; sau đó chứng khoán kinh doanh niêm yết được ghi nhận theo giá gốc trừ đi dự phòng rủi ro và dự phòng giảm giá. Đây là chứng khoán nợ, chứng khoán vốn và các chứng khoán khác được mu"
+        "sample": "**Chính sách kế toán chứng khoán kinh doanh – VCB 2025:**\n\n- **Định nghĩa:** Là chứng khoán nợ, chứng khoán vốn và các chứng khoán khác được mua và nắm giữ trong vòng một năm nhằm thu lợi nhuận do chênh lệch giá.\n- **Ghi nhận ban đầu:** The"
       }
     },
     {
@@ -319,13 +355,13 @@
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "Theo thuyết minh: Doanh thu chưa thực hiện là khoản doanh thu nhận trước liên quan đến một hay nhiều năm tài chính cho dịch vụ chưa được cung cấp. Công ty ghi nhận các khoản doanh thu chưa thực hiện tương ứng với phần nghĩa vụ sẽ phải thực "
+        "sample": "Theo chính sách kế toán của HPG (Báo cáo tài chính riêng 2025): Doanh thu chưa thực hiện là khoản doanh thu nhận trước liên quan đến một hay nhiều năm tài chính cho dịch vụ chưa được cung cấp. Công ty ghi nhận doanh thu chưa thực hiện tương"
       },
       "hybrid": {
         "ctx": true,
         "ans_ok": 3,
         "empty": 0,
-        "sample": "Theo thuyết minh: doanh thu chưa thực hiện là khoản doanh thu nhận trước liên quan đến một hay nhiều năm tài chính cho dịch vụ **chưa được cung cấp**. Công ty ghi nhận các khoản này tương ứng với phần nghĩa vụ sẽ phải thực hiện trong tương "
+        "sample": "Theo chính sách tại thuyết minh BCTC riêng HPG 2025: doanh thu chưa thực hiện là khoản doanh thu nhận trước liên quan đến một hay nhiều năm tài chính cho dịch vụ chưa được cung cấp. Công ty ghi nhận các khoản này tương ứng với phần nghĩa vụ"
       }
     },
     {

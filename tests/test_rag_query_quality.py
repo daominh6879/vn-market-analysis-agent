@@ -49,3 +49,26 @@ def test_ask_report_is_unchanged_for_a_clean_document(monkeypatch):
 def test_retrieve_keeps_returning_plain_texts(monkeypatch):
     monkeypatch.setattr(rq, "_retrieve_hits", lambda *a, **k: [("a", {"x": 1}), ("b", {})])
     assert rq._retrieve("q") == ["a", "b"]
+
+
+def test_label_hits_heads_each_chunk_with_its_source():
+    hits = [("tổng tài sản 98", {"ticker": "HPG", "year": "2025", "report_type": "standalone"}),
+            ("tổng tài sản 27", {"ticker": "MWG", "year": "2025"}), ("no meta", {})]
+    assert rq._label_hits(hits) == ["[HPG | 2025 | standalone]\ntổng tài sản 98", "[MWG | 2025]\ntổng tài sản 27", "no meta"]
+
+
+def test_ask_report_sends_the_labelled_contexts_to_the_llm(monkeypatch):
+    seen = {}
+
+    class _Col:
+        name = rq.BCTC_COLLECTION
+
+    class _Q:
+        def get_collections(self):
+            return type("C", (), {"collections": [_Col()]})()
+
+    monkeypatch.setattr(rq, "_get_qdrant", lambda: _Q())
+    monkeypatch.setattr(rq, "_retrieve_hits", lambda *a, **k: [("body", {"ticker": "HPG", "year": "2025"})])
+    monkeypatch.setattr(rq, "_llm_answer", lambda q, ctx: seen.setdefault("ctx", ctx) and "ok")
+    rq.ask_report("q", tickers=["HPG"])
+    assert seen["ctx"] == ["[HPG | 2025]\nbody"]

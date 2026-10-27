@@ -37,7 +37,9 @@ _SYSTEM = (
     "Bạn là trợ lý tài chính. Trả lời ngắn gọn, đi thẳng vào trọng tâm — không dài dòng. "
     "Dựa vào các đoạn tài liệu dưới đây. "
     "Nếu thông tin không có trong tài liệu, nói rõ 'Không có trong tài liệu'. "
-    "Mỗi đoạn có thể bắt đầu bằng nhãn [Ngữ cảnh: tên báo cáo | ngày | Cột: ...] cho biết nó thuộc báo cáo nào và cột nào là số cuối năm. "
+    "Mỗi đoạn bắt đầu bằng nhãn nguồn [MÃ | năm | loại báo cáo] cho biết nó của công ty nào; câu hỏi nhiều công ty thì dùng đúng nhãn "
+    "của từng công ty, không gộp số liệu của hai công ty. Đoạn còn có thể có nhãn [Ngữ cảnh: tên báo cáo | ngày | Cột: ...] cho biết "
+    "nó thuộc báo cáo nào và cột nào là số cuối năm. "
     "Chỉ khi câu hỏi hỏi một con số tổng hợp (tổng tài sản, nợ phải trả, vốn chủ sở hữu, doanh thu, lợi nhuận...): ưu tiên số trên báo cáo chính "
     "(bảng cân đối kế toán / báo cáo tình hình tài chính, kết quả hoạt động, lưu chuyển tiền tệ) hơn số trong thuyết minh; "
     "nếu hai nguồn khác nhau, nêu số báo cáo chính trước và ghi chú số còn lại. "
@@ -141,6 +143,18 @@ def _retrieve_hits(
     return [(pool[pid], payloads[pid]) for pid in fused[:top_k] if pool.get(pid)]
 
 
+def _label_hits(hits: list[tuple[str, dict]]) -> list[str]:
+    """Chunk texts for the LLM, each headed by its source "[MÃ | năm | loại]".
+
+    The text alone never says which company it belongs to, so a question about two tickers could not be answered.
+    """
+    out = []
+    for text, payload in hits:
+        parts = [str(payload[k]) for k in ("ticker", "year", "report_type") if payload.get(k)]
+        out.append(f"[{' | '.join(parts)}]\n{text}" if parts else text)
+    return out
+
+
 _BIG_NUMBER = re.compile(r"\d{1,3}(?:[.,]\d{3})+")
 
 
@@ -223,7 +237,7 @@ def ask_report(
                 message=f"Không tìm thấy đoạn tài liệu liên quan{filter_desc} trong {BCTC_COLLECTION}.",
             )
 
-        answer = _llm_answer(question, contexts)
+        answer = _llm_answer(question, _label_hits(hits))
         caution = quality_caution([payload for _, payload in hits], answer)
         filter_info = f"tickers={tickers}" if tickers else (f"sector={sector}" if sector else "no filter")
         return ToolResult(
