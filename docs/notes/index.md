@@ -83,3 +83,4 @@ Ghi chép thực nghiệm, số đo, quyết định kỹ thuật. Không giải
 | Bài 31 | [bai-31-streaming.md](bai-31-streaming.md) | SSE stream_turn(); thread+queue; heartbeat 15s; cancel→no save; endpoint /messages/stream; 4 tests |
 - [Xử lý báo cáo test agent 10/10/2026](bao-cao-test-agent-2026-10-10.md) — ánh xạ 15 lỗi → sửa, chưa chạy
 - [Độ tươi dữ liệu thị trường 21/10/2026](data-freshness.md) — Dagster không chạy 20–21/10; kiểm tra + 503 stale_data + sensor tự chạy lại; đã chạy thật, backfill 270→399/429
+- [BCTC sync → Dagster 27/10/2026](bctc-sync.md) — asset `bctc_sync` + schedule + bootstrap; OCR Tesseract vie; hybrid vector+lexical; HPG 168 / VCB 287 chunk, FPT/VNM 404 từ CafeF

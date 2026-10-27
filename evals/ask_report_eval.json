@@ -1,0 +1,296 @@
+{
+  "top_k": {
+    "vector": 5,
+    "hybrid": 6
+  },
+  "year": "2025",
+  "runs": 3,
+  "summary": {
+    "vector": {
+      "ctx_hit": "8/14",
+      "ans_figure": "15/30",
+      "ans_policy": "9/12",
+      "ans_negative": "3/3",
+      "empty_answers": 0
+    },
+    "hybrid": {
+      "ctx_hit": "14/14",
+      "ans_figure": "30/30",
+      "ans_policy": "12/12",
+      "ans_negative": "3/3",
+      "empty_answers": 0
+    }
+  },
+  "cases": [
+    {
+      "id": "hpg_total_assets",
+      "ticker": "HPG",
+      "kind": "figure",
+      "question": "Tổng tài sản của HPG cuối năm 2025 là bao nhiêu?",
+      "vector": {
+        "ctx": false,
+        "ans_ok": 0,
+        "empty": 0,
+        "sample": "Không có trong tài liệu. Các đoạn trích không bao gồm chỉ tiêu \"Tổng tài sản\" (Mã số 270) trên bảng cân đối kế toán, nên không xác định được con số này."
+      },
+      "hybrid": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "Tổng cộng tài sản (Mã số 270) tại ngày 31/12/2025 là **98.670.778.691.605 VND**."
+      }
+    },
+    {
+      "id": "hpg_liabilities",
+      "ticker": "HPG",
+      "kind": "figure",
+      "question": "Nợ phải trả của HPG cuối năm 2025?",
+      "vector": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "**Nợ phải trả cuối năm 2025: 4.239.852.223.395 VND** (mã số 300, Bảng cân đối kế toán), gồm:\n- Nợ ngắn hạn: 1.380.352.223.395 VND\n- Nợ dài hạn: 2.859.500.000.000 VND"
+      },
+      "hybrid": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "**Nợ phải trả cuối năm 2025: 4.239.852.223.395 VND** (mã số 300, Bảng cân đối kế toán), tăng mạnh so với đầu năm 1.012.889.937.592 VND.\n\nTrong đó:\n- Nợ ngắn hạn: 1.380.352.223.395 VND\n- Nợ dài hạn: 2.859.500.000.000 VND (toàn bộ là vay dài "
+      }
+    },
+    {
+      "id": "hpg_equity_end",
+      "ticker": "HPG",
+      "kind": "figure",
+      "question": "Vốn chủ sở hữu của HPG cuối năm 2025?",
+      "vector": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "**Vốn chủ sở hữu cuối năm 2025: 94.430.926.468.210 VND** (mã số 400, trên Bảng cân đối kế toán tại ngày 31/12/2025)."
+      },
+      "hybrid": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "Vốn chủ sở hữu (mã 400) tại ngày 31/12/2025 là **94.430.926.468.210 VND** (đầu năm: 80.780.186.578.052 VND)."
+      }
+    },
+    {
+      "id": "hpg_equity_start",
+      "ticker": "HPG",
+      "kind": "figure",
+      "question": "Vốn chủ sở hữu của HPG đầu năm 2025 (cuối năm 2024)?",
+      "vector": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "Vốn chủ sở hữu (mã số 400) đầu năm 2025 (tức cuối năm 2024): **80.780.186.578.052 VND** (~80.780 tỷ đồng)."
+      },
+      "hybrid": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "Vốn chủ sở hữu (mã 400/410) cuối năm 2024 (số đầu năm 2025): **80.780.186.578.052 VND**."
+      }
+    },
+    {
+      "id": "hpg_cash",
+      "ticker": "HPG",
+      "kind": "figure",
+      "question": "Tiền và các khoản tương đương tiền của HPG cuối năm 2025?",
+      "vector": {
+        "ctx": false,
+        "ans_ok": 0,
+        "empty": 0,
+        "sample": "Không có trong tài liệu. Các đoạn trích không bao gồm chỉ tiêu \"Tiền và các khoản tương đương tiền\" trên bảng cân đối kế toán hay lưu chuyển tiền tệ."
+      },
+      "hybrid": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "**Tiền và các khoản tương đương tiền cuối năm 2025: 481.464.857.088 VND** (theo Bảng cân đối kế toán và Thuyết minh số 5).\n\nChi tiết:\n- Tiền mặt: 820.836.566\n- Tiền gửi ngân hàng không kỳ hạn: 37.944.020.522\n- Các khoản tương đương tiền: 44"
+      }
+    },
+    {
+      "id": "hpg_long_term_borrowings",
+      "ticker": "HPG",
+      "kind": "figure",
+      "question": "Vay dài hạn của HPG cuối năm 2025 là bao nhiêu?",
+      "vector": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "Vay dài hạn cuối năm 2025 (mã số 338) là **2.859.500.000.000 VND**."
+      },
+      "hybrid": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "Vay dài hạn cuối năm 2025 là **2.859.500.000.000 VND** (mã số 338), tăng từ 0 đầu năm."
+      }
+    },
+    {
+      "id": "vcb_total_assets",
+      "ticker": "VCB",
+      "kind": "figure",
+      "question": "Tổng tài sản của VCB cuối năm 2025 là bao nhiêu?",
+      "vector": {
+        "ctx": false,
+        "ans_ok": 0,
+        "empty": 0,
+        "sample": "Không có trong tài liệu.\n\nCác đoạn tài liệu được cung cấp (thuyết minh TSCĐ, thù lao Ban điều hành, phân loại tài sản/nợ phải trả tài chính) không bao gồm số liệu \"Tổng tài sản\" trên bảng cân đối kế toán của VCB tại ngày 31/12/2025."
+      },
+      "hybrid": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "Tổng tài sản cuối năm 2025 (31/12/2025) là **2.426.649.127 triệu VND** (theo Báo cáo tình hình tài chính)."
+      }
+    },
+    {
+      "id": "vcb_liabilities",
+      "ticker": "VCB",
+      "kind": "figure",
+      "question": "Tổng nợ phải trả của VCB cuối năm 2025?",
+      "vector": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "Tổng nợ phải trả cuối năm 2025: **2.205.948.110 triệu VND** (theo Báo cáo tình hình tài chính). Số này khớp với thuyết minh."
+      },
+      "hybrid": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "**Tổng nợ phải trả cuối năm 2025: 2.205.948.110 triệu VND** (theo Báo cáo tình hình tài chính và thuyết minh)."
+      }
+    },
+    {
+      "id": "vcb_equity",
+      "ticker": "VCB",
+      "kind": "figure",
+      "question": "Vốn chủ sở hữu của VCB cuối năm 2025?",
+      "vector": {
+        "ctx": false,
+        "ans_ok": 0,
+        "empty": 0,
+        "sample": "Không có trong tài liệu. Các đoạn trích không chứa số liệu \"Vốn chủ sở hữu\" cuối năm 2025 của VCB (chỉ có dữ liệu tài sản/nợ phải trả tài chính và thuyết minh TSCĐ, đầu tư)."
+      },
+      "hybrid": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "**Vốn chủ sở hữu cuối năm 2025: 220.701.017 triệu VND** (theo Báo cáo tình hình tài chính)."
+      }
+    },
+    {
+      "id": "vcb_charter_capital",
+      "ticker": "VCB",
+      "kind": "figure",
+      "question": "Vốn điều lệ của VCB cuối năm 2025 là bao nhiêu?",
+      "vector": {
+        "ctx": false,
+        "ans_ok": 0,
+        "empty": 0,
+        "sample": "Không có trong tài liệu."
+      },
+      "hybrid": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "Vốn điều lệ cuối năm 2025 là **83.556.751 triệu VND** (theo Báo cáo tình hình tài chính, mục Vốn chủ sở hữu)."
+      }
+    },
+    {
+      "id": "vcb_general_provision_rate",
+      "ticker": "VCB",
+      "kind": "policy",
+      "question": "Tỷ lệ dự phòng rủi ro chung của Vietcombank là bao nhiêu?",
+      "vector": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "0,75% tổng số dư nợ gốc tại ngày cuối cùng của mỗi tháng của các khoản nợ được phân loại từ nợ Nhóm 1 đến nợ Nhóm 4 (theo Nghị định 86)."
+      },
+      "hybrid": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "Theo thuyết minh (chính sách dự phòng rủi ro chung): Vietcombank trích lập dự phòng rủi ro chung bằng **0,75%** tổng số dư nợ gốc tại ngày cuối cùng của mỗi tháng của các khoản nợ được phân loại từ nợ Nhóm 1 đến nợ Nhóm 4 (theo Nghị định 86"
+      }
+    },
+    {
+      "id": "vcb_provisioning_policy",
+      "ticker": "VCB",
+      "kind": "policy",
+      "question": "Ngân hàng Vietcombank trích lập dự phòng rủi ro tín dụng như thế nào?",
+      "vector": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "**Chính sách trích lập dự phòng rủi ro tín dụng tại Vietcombank (theo Thông tư 31/2024 và Nghị định 86/2024):**\n\n**1. Dự phòng rủi ro cụ thể:**\n- Trích theo tỷ lệ tương ứng nhóm nợ, trên số dư nợ gốc tại ngày cuối tháng/quý/đột xuất **trừ g"
+      },
+      "hybrid": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "**Chính sách trích lập dự phòng rủi ro tín dụng của Vietcombank (theo Nghị định 86 và Thông tư 31):**\n\n**1. Dự phòng rủi ro cụ thể:**\n- Trích theo tỷ lệ tương ứng kết quả phân loại nợ, trên số dư nợ gốc tại ngày cuối tháng/quý/đột xuất **tr"
+      }
+    },
+    {
+      "id": "vcb_trading_securities",
+      "ticker": "VCB",
+      "kind": "policy",
+      "question": "Chính sách kế toán đối với chứng khoán kinh doanh của Vietcombank?",
+      "vector": {
+        "ctx": false,
+        "ans_ok": 0,
+        "empty": 0,
+        "sample": "Không có trong tài liệu. Các đoạn trích chỉ nêu việc sở hữu 52%/51% vốn tại hai công ty liên doanh (và lý do phân loại vào \"Vốn góp liên doanh\"), cùng số liệu lãi/lỗ thuần từ mua bán chứng khoán kinh doanh — không đề cập chính sách kế toán "
+      },
+      "hybrid": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "Chứng khoán kinh doanh là chứng khoán nợ, chứng khoán vốn và các chứng khoán khác được mua và nắm giữ trong vòng một năm nhằm thu lợi nhuận do chênh lệch giá. Được ghi nhận ban đầu theo giá gốc; sau đó, chứng khoán kinh doanh niêm yết được "
+      }
+    },
+    {
+      "id": "hpg_unearned_revenue",
+      "ticker": "HPG",
+      "kind": "policy",
+      "question": "Doanh thu chưa thực hiện của Hòa Phát được ghi nhận như thế nào?",
+      "vector": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "- Doanh thu chưa thực hiện là khoản doanh thu nhận trước liên quan đến một hay nhiều năm tài chính cho dịch vụ **chưa được cung cấp**.\n- Công ty ghi nhận doanh thu chưa thực hiện tương ứng với **phần nghĩa vụ sẽ phải thực hiện trong tương l"
+      },
+      "hybrid": {
+        "ctx": true,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "Theo thuyết minh: Doanh thu chưa thực hiện là khoản doanh thu nhận trước liên quan đến một hay nhiều năm tài chính cho dịch vụ chưa được cung cấp. Công ty ghi nhận các khoản doanh thu chưa thực hiện tương ứng với phần nghĩa vụ sẽ phải thực "
+      }
+    },
+    {
+      "id": "hpg_future_revenue",
+      "ticker": "HPG",
+      "kind": "negative",
+      "question": "Doanh thu năm 2030 của Hòa Phát dự kiến là bao nhiêu?",
+      "vector": {
+        "ctx": null,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "Không có trong tài liệu."
+      },
+      "hybrid": {
+        "ctx": null,
+        "ans_ok": 3,
+        "empty": 0,
+        "sample": "Không có trong tài liệu."
+      }
+    }
+  ]
+}
