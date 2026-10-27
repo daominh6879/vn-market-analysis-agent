@@ -101,6 +101,82 @@ def _ocr_pages(path: str, ocr_language: str, ocr_function, only: list[int] | Non
     return [c["text"] for c in chunks]
 
 
+_NUMBER_TOKEN = re.compile(r"\d{1,3}(?:[.,]\d{3})+(?:\d{3})*|\d{7,}")
+_MIN_REPAIR_DIGITS = 6        # shorter numbers (notes, percentages) are too easy to confuse with each other
+_MAX_REPAIR_DISTANCE = 2      # digits that may differ between a misread number and its replacement
+
+
+def repair_numbers(text: str, trusted: set[str]) -> tuple[str, int]:
+    """Replace numbers Tesseract misread with the second engine's reading; returns (text, replacements).
+
+    `trusted` holds digit strings read by RapidOCR. A number of `text` that is not among them is replaced only when exactly one
+    trusted number of the same length differs from it in 1-2 digits (the usual 8/5, 3/8, 1/4 confusions). Table structure and
+    diacritics stay Tesseract's; the caller keeps the result only if the balance-sheet check passes afterwards.
+    """
+    by_length: dict[int, list[str]] = {}
+    for t in trusted:
+        by_length.setdefault(len(t), []).append(t)
+    changes = 0
+
+    def fix(m: re.Match) -> str:
+        nonlocal changes
+        digits = re.sub(r"\D", "", m.group(0))
+        if len(digits) < _MIN_REPAIR_DIGITS or digits in trusted:
+            return m.group(0)
+        near = [t for t in by_length.get(len(digits), []) if 0 < sum(a != b for a, b in zip(digits, t)) <= _MAX_REPAIR_DISTANCE]
+        if len(near) != 1:
+            return m.group(0)
+        it = iter(near[0])
+        changes += 1
+        return "".join(next(it) if ch.isdigit() else ch for ch in m.group(0))
+
+    return _NUMBER_TOKEN.sub(fix, text), changes
+
+
+def _rapidocr_numbers(path: str, page_indices: list[int]) -> dict[int, set[str]]:
+    """Digit strings (6+ digits) RapidOCR reads on each page, looking at the page image only (no table rebuilding)."""
+    import tempfile
+
+    import pymupdf
+    from rapidocr import RapidOCR
+
+    engine, doc, out = RapidOCR(), pymupdf.open(path), {}
+    for i in page_indices:
+        fd, png = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        try:
+            doc[i].get_pixmap(dpi=150, colorspace=pymupdf.csGRAY).save(png)
+            res = engine(png)
+        finally:
+            Path(png).unlink(missing_ok=True)
+        text = " ".join(res.txts or [])
+        out[i] = {d for tok in re.findall(r"\d[\d.,]*\d", text) if len(d := re.sub(r"\D", "", tok)) >= _MIN_REPAIR_DIGITS}
+    return out
+
+
+def _repair_statements(path: str, pages: list[str]) -> tuple[list[str], int] | None:
+    """`pages` with misread numbers on the statement pages corrected from RapidOCR, and how many; None if nothing changed.
+
+    Unlike _reocr_statements this keeps Tesseract's table structure and diacritics: RapidOCR is used only as a second reading
+    of the digits (on CTG it read the total right but pymupdf4llm rebuilt only 19 of the 26 table rows from its output).
+    """
+    import importlib.util
+
+    idx = statement_pages(pages)
+    if not idx or importlib.util.find_spec("rapidocr") is None:
+        return None
+    try:
+        oracle = _rapidocr_numbers(path, idx)
+    except Exception as exc:
+        print(f"  [warn] RapidOCR number pass failed: {exc}")
+        return None
+    repaired, total = list(pages), 0
+    for i in idx:
+        repaired[i], n = repair_numbers(pages[i], oracle[i])
+        total += n
+    return (repaired, total) if total else None
+
+
 def _reocr_statements(path: str, pages: list[str], ocr_language: str) -> list[str] | None:
     """`pages` with the primary-statement pages re-read by RapidOCR, or None when that is not possible.
 
@@ -142,9 +218,15 @@ def parse_with_pymupdf(path: str, ocr_language: str = "vie+eng") -> ParsedDoc:
         # Tesseract is named explicitly: pymupdf4llm would otherwise pick RapidOCR for every page once it is installed
         pages = _ocr_pages(target, ocr_language, tesseract_api.exec_ocr)
         if balance_check("\n\n".join(pages)).status != "ok":
-            fixed = _reocr_statements(target, pages, ocr_language)
-            if fixed is not None and balance_check("\n\n".join(fixed)).status == "ok":
-                pages, engine = fixed, "tesseract + rapidocr (statement pages)"
+            # 1) keep Tesseract's text, correct its digits from RapidOCR; 2) else swap in RapidOCR's statement pages (recovers
+            # dropped rows). Either is kept only if the balance-sheet check passes afterwards.
+            repaired = _repair_statements(target, pages)
+            if repaired is not None and balance_check("\n\n".join(repaired[0])).status == "ok":
+                pages, engine = repaired[0], f"tesseract + rapidocr digits ({repaired[1]} numbers corrected)"
+            else:
+                fixed = _reocr_statements(target, pages, ocr_language)
+                if fixed is not None and balance_check("\n\n".join(fixed)).status == "ok":
+                    pages, engine = fixed, "tesseract + rapidocr (statement pages)"
     finally:
         if rasterised:
             Path(rasterised).unlink(missing_ok=True)

@@ -128,3 +128,57 @@ def test_the_second_engine_result_is_kept_only_if_it_passes_the_check(monkeypatc
     calls = _stub_ocr(monkeypatch, tess, {0: BS_PAGE + "\n" + CAPITAL_ONLY})     # RapidOCR does not help either
     doc = parse_mod.parse_with_pymupdf("x.pdf")
     assert doc.metadata["ocr_engine"] == "tesseract" and doc.content == tess[0]
+
+
+# ── digit repair from the second engine ────────────────────────────────────────────────────────────
+
+def test_repair_replaces_a_misread_number_with_the_unique_near_match_keeping_separators():
+    text = "|270|TỔNG CỘNG TÀI SẢN||2.735.488.878|2.356.000.100|"
+    fixed, n = parse_mod.repair_numbers(text, {"2735388878", "2356000100"})
+    assert n == 1 and fixed == "|270|TỔNG CỘNG TÀI SẢN||2.735.388.878|2.356.000.100|"
+
+
+def test_repair_leaves_numbers_the_second_engine_agrees_with_or_cannot_decide():
+    trusted = {"2735388878", "2735388879", "9999999999"}
+    text = "2.735.388.878 | 2.735.388.870 | 1.234.567.890 | 12.345 | 2.735.4"
+    # exact match kept; two equally near candidates -> ambiguous, kept; no near candidate kept; short numbers kept
+    assert parse_mod.repair_numbers(text, trusted) == (text, 0)
+
+
+def test_repair_ignores_other_lengths_and_far_candidates():
+    assert parse_mod.repair_numbers("|1.000.000.000|", {"100000000"}) == ("|1.000.000.000|", 0)         # length differs
+    assert parse_mod.repair_numbers("|1.234.567.890|", {"1234500000"}) == ("|1.234.567.890|", 0)          # > 2 digits off
+
+
+def _stub_two_engines(monkeypatch, tess_pages, oracle=None, rapid_pages=None):
+    monkeypatch.setattr(parse_mod, "_ocr_pages", lambda path, lang, fn, only=None: list(tess_pages) if only is None
+                        else [rapid_pages[i] for i in only])
+    monkeypatch.setattr(parse_mod, "_rapidocr_numbers", lambda path, idx: {i: set(oracle or ()) for i in idx})
+    monkeypatch.setattr(parse_mod, "text_layer_problem", lambda p: None)
+    monkeypatch.setattr(parse_mod, "_count_pages_pymupdf", lambda p: len(tess_pages))
+
+
+def test_digit_repair_keeps_tesseract_text_and_fixes_the_total(monkeypatch):
+    pytest.importorskip("rapidocr")
+    page = "BẢNG CÂN ĐỐI KẾ TOÁN\n|270|TỔNG CỘNG TÀI SẢN||2.735.488.878|1|\n|440|TỔNG CỘNG NGUỒN VỐN||2.735.388.878|1|"
+    _stub_two_engines(monkeypatch, [page], oracle={"2735388878"})
+    doc = parse_mod.parse_with_pymupdf("x.pdf")
+    assert doc.metadata["ocr_engine"].startswith("tesseract + rapidocr digits")
+    assert "TỔNG CỘNG TÀI SẢN||2.735.388.878" in doc.content and "ẢNG CÂN ĐỐI KẾ TOÁN" in doc.content
+
+
+def test_digit_repair_that_does_not_balance_falls_back_to_the_page_swap(monkeypatch):
+    pytest.importorskip("rapidocr")
+    broken = "BẢNG CÂN ĐỐI KẾ TOÁN\n" + CAPITAL_ONLY                         # total-assets row dropped: nothing to repair
+    rapid = "BẢNG CÂN ĐỐI KẾ TOÁN\n" + BOTH
+    _stub_two_engines(monkeypatch, [broken], oracle={"590372684"}, rapid_pages={0: rapid})
+    doc = parse_mod.parse_with_pymupdf("x.pdf")
+    assert doc.metadata["ocr_engine"] == "tesseract + rapidocr (statement pages)" and BOTH in doc.content
+
+
+def test_nothing_that_balances_keeps_the_tesseract_text(monkeypatch):
+    pytest.importorskip("rapidocr")
+    page = "BẢNG CÂN ĐỐI KẾ TOÁN\n|270|TỔNG CỘNG TÀI SẢN||2.735.488.878|1|\n|440|TỔNG CỘNG NGUỒN VỐN||9.999.999.999|1|"
+    _stub_two_engines(monkeypatch, [page], oracle={"2735388878"}, rapid_pages={0: page})
+    doc = parse_mod.parse_with_pymupdf("x.pdf")
+    assert doc.metadata["ocr_engine"] == "tesseract" and doc.content == page
