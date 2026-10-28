@@ -128,6 +128,17 @@ OCR đọc sai chữ số, nên mỗi tài liệu được kiểm tra: "Tổng (
 - **Kết quả (run `8fb4a66f`, 380 s, CTG/TCB/PNJ):** cả ba → ok (`ok` nghĩa là hai dòng tổng khớp; từng số được sửa còn lại không được kiểm tra riêng, ngoài phép đo VHM ở trên). Toàn bộ 29 tài liệu: **27 ok, 1 mismatch (GAS), 1 unverified (MBB)**.
 - **Còn lại và lý do:** GAS: Tesseract đọc dòng tổng thành rác (`B7.190,620.643.636`; sửa 82 số khác nhưng tổng vẫn hỏng), nên không còn số hoàn chỉnh để đối chiếu; MBB: Tesseract không có dòng "Tổng tài sản" nào, mà sửa số không thêm được dòng, và thay trang bằng RapidOCR cũng không lấy lại được. Cả hai cần phương án khác (ví dụ OCR riêng vùng dòng tổng), chưa làm.
 
+## Bootstrap toàn bộ 431 mã (27–28/10/2026)
+
+- Lần chạy đầu: 6 run song song (402 mã) bị `run_monitoring` cắt ở 240 phút → 354 tài liệu. Bộ chạy tiếp (idempotent) chạy thêm các vòng cho phần thiếu.
+- Sau các vòng: 424/431. 7 mã (ACL, BTT, CIG, CII, SGT, SJD, TTA) lỗi giống nhau: Ollama `/api/embeddings` trả 500 `the input length exceeds the context length`.
+- Nguyên nhân (đã đo trên SJD, BTT): `add_table_context` nối nhãn "[Ngữ cảnh: ...]" quá dài — dòng trang thuyết minh bị OCR dồn thành một dòng bị nhận là tiêu đề cột (SJD: chunk 8.563 ký tự), và các dòng ngày nối dồn (BTT: 7.099 ký tự). Chunk gốc từ splitter luôn ≤ 799 ký tự.
+- Sửa trong `rag/chunking.py`: dòng tiêu đề dài hơn 600 ký tự không được coi là tiêu đề cột (`_MAX_HEADER_LINE`); tổng nhãn tối đa 500 ký tự (`_MAX_LABEL`). Chunk lớn nhất: SJD 892, BTT 1.312 ký tự. Test: `tests/test_table_context.py`.
+- Chạy lại 7 mã: cả 7 nạp được → **431/431**.
+- Chất lượng (kiểm tra tổng tài sản = tổng nguồn vốn): ok 329, mismatch 29, unverified 73.
+- Các ca mismatch "số bị cắt" (SVD, VFG, VSH, VVS) không phải lỗi bộ kiểm tra: văn bản OCR của hàng tổng thật sự hỏng (SVD nguồn vốn `45431338`; VFG `2.288,A55:444.855`; VSH `8.180 07858 298` thiếu một chữ số). Cần sửa ở bước OCR.
+- Còn mở: GAS, MBB, VHM chưa sửa được; 73 tài liệu unverified chưa điều tra nguyên nhân.
+
 ## Cách chạy lại
 ```
 docker exec dagster-daemon sh -c 'cd /app && dagster job launch -f pipeline/assets.py -d /app -j bctc_sync_job -c /tmp/run.yaml'

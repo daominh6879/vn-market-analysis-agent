@@ -116,3 +116,16 @@ def test_notes_subheading_does_not_relabel_the_notes():
     doc = ("MẪU SỐ B 09-DN\n\nTHÔNG TIN BỔ SUNG VỀ BÁO CÁO LƯU CHUYỂN TIỀN TỆ RIÊNG\n\n|a|1|2|\n")
     out, = add_table_context(doc, ["|a|1|2|"])
     assert out.startswith("[Ngữ cảnh: THUYẾT MINH BÁO CÁO TÀI CHÍNH]")
+
+
+def test_flattened_notes_page_is_not_a_header_row():
+    from rag.chunking import _header_cells
+    flat = "| Mã số " + "Thuyết minh 31/12/2025 31/12/2024 " * 300 + "|"
+    assert _header_cells(flat) is None
+
+
+def test_context_label_is_capped():
+    from rag.chunking import add_table_context
+    text = "BẢNG CÂN ĐỐI KẾ TOÁN\nTại ngày 31/12/2025\n" + "Đơn vị: " + "x" * 3000 + "\n| a | 1.000.000 |\n"
+    out = add_table_context(text, ["| a | 1.000.000 |"])
+    assert len(out[0]) < 700

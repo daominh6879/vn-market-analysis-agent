@@ -147,11 +147,15 @@ def _is_unrecognised_heading(line: str) -> bool:
             and fold(plain).startswith(("bang", "baocao")))
 
 
+_MAX_LABEL = 500            # the date part keeps appending lines on a notes page; cap the whole label
+_MAX_HEADER_LINE = 600      # a real header row is short; an OCR'd notes page flattened into one "|" line is not (bge-m3 rejects >8k chars)
+
+
 def _header_cells(line: str) -> list[str] | None:
     """Cells of a table header row (has a "Mã số"/"Thuyết minh"/"Chỉ tiêu" label and a period label), else None."""
     from rag.lexical import fold
 
-    if not line.lstrip().startswith("|"):
+    if not line.lstrip().startswith("|") or len(line) > _MAX_HEADER_LINE:
         return None
     f = fold(line)
     labelled = any(h in f for h in _HEADER_HINTS) and any(h in f for h in _HEADER_PERIOD_HINTS)
@@ -216,7 +220,8 @@ def add_table_context(text: str, chunks: list[str]) -> list[str]:
             else:
                 state[kind] = value
         parts = [state[k] if k != "columns" else f"Cột: {state[k]}" for k in ("title", "date", "columns") if k in state]
-        out.append(f"[Ngữ cảnh: {' | '.join(parts)}]\n{chunk}" if parts else chunk)
+        label = " | ".join(parts)[:_MAX_LABEL]
+        out.append(f"[Ngữ cảnh: {label}]\n{chunk}" if parts else chunk)
     return out
 
 
