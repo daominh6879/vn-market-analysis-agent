@@ -20,7 +20,7 @@ from rag.lexical import fold
 
 # 2.426.649.127; an OCR-flattened 2426649127; a dropped separator "45.814.910047405"
 # Bump when the matching rules change: ingest/sync_bctc.ensure_quality re-runs the check on documents stored with an older one.
-CHECK_VERSION = 2
+CHECK_VERSION = 3
 _NUMBER = re.compile(r"\d{1,3}(?:[.,]\d{3})+(?:\d{3})*|\d{7,}")
 _CODE_CELL = re.compile(r"\d{1,4}")                          # the "mã số" cell: 270, 440
 _ASSET_KEYS = ("tongcongtaisan", "tongtaisan")
@@ -56,6 +56,20 @@ def _label_matches(label: str, keys: tuple[str, ...]) -> bool:
     return False
 
 
+def _virtual_rows(line: str) -> list[list[str]]:
+    """Cell lists of a markdown row; a row whose cells hold several `<br>` lines (OCR merged neighbouring table rows into one)
+    is also split into one virtual row per line, aligned from the top and from the bottom of each cell."""
+    cells = [c.replace("**", "").strip(" *_") for c in line.strip().strip("|").split("|")]
+    rows = [[c.replace("<br>", " ") for c in cells]]
+    parts = [[p.strip() for p in c.split("<br>") if p.strip()] or [""] for c in cells]
+    depth = max(map(len, parts))
+    if depth > 1:
+        for j in range(depth):
+            rows.append([p[j] if j < len(p) else "" for p in parts])                 # top-aligned
+            rows.append([p[len(p) - depth + j] if len(p) - depth + j >= 0 else "" for p in parts])   # bottom-aligned
+    return rows
+
+
 def _row_total(line: str, keys: tuple[str, ...]) -> str | None:
     """Current-year number of a table row whose label is one of `keys`, else None.
 
@@ -64,7 +78,13 @@ def _row_total(line: str, keys: tuple[str, ...]) -> str | None:
     """
     if not line.lstrip().startswith("|"):
         return None
-    cells = [c.replace("**", "").strip(" *_") for c in line.replace("<br>", " ").strip().strip("|").split("|")]
+    for cells in _virtual_rows(line):
+        if (total := _cells_total(cells, keys)) is not None:
+            return total
+    return None
+
+
+def _cells_total(cells: list[str], keys: tuple[str, ...]) -> str | None:
     first = next((i for i, c in enumerate(cells) if _NUMBER.search(c)), None)
     if first is None:
         return None

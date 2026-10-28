@@ -139,6 +139,13 @@ OCR đọc sai chữ số, nên mỗi tài liệu được kiểm tra: "Tổng (
 - Các ca mismatch "số bị cắt" (SVD, VFG, VSH, VVS) không phải lỗi bộ kiểm tra: văn bản OCR của hàng tổng thật sự hỏng (SVD nguồn vốn `45431338`; VFG `2.288,A55:444.855`; VSH `8.180 07858 298` thiếu một chữ số). Cần sửa ở bước OCR.
 - Còn mở: GAS, MBB, VHM chưa sửa được; 73 tài liệu unverified chưa điều tra nguyên nhân.
 
+### Phân loại 73 tài liệu unverified và sửa bộ kiểm tra (28/10/2026)
+
+- Đo trên văn bản đã parse trong MinIO: 31 tài liệu không có nhãn "Tổng cộng tài sản"/"Tổng cộng nguồn vốn" ở một hoặc cả hai hàng (OCR làm mất nhãn); 42 tài liệu có nhãn nhưng bộ kiểm tra không đọc được hàng.
+- Một nguyên nhân của nhóm thứ hai (đã kiểm chứng trên ANT, CCL, DRL): OCR gộp hàng tổng với hàng bên cạnh trong cùng ô qua `<br>`, nhãn và số nằm ở các dòng con khác nhau. `core/balance_check.py` nay tách ô theo `<br>` thành các hàng ảo (căn từ trên và từ dưới). `CHECK_VERSION` = 3.
+- Chạy lại trên 431 tài liệu: không tài liệu `ok` nào bị đổi; 4 unverified → ok (APS, CCL, DRL, TCT), 3 unverified → mismatch (BMC, ECO, OCB). Sau khi áp dụng vào chỉ mục: ok 333, mismatch 32, unverified 66.
+- 66 tài liệu còn lại không sửa được ở bộ kiểm tra: bước parse đã thử sửa số và đổi trang bằng RapidOCR khi kiểm tra ≠ ok, nên chúng cần cách OCR khác (ví dụ OCR theo vùng hàng tổng) — chưa làm.
+
 ## Cách chạy lại
 ```
 docker exec dagster-daemon sh -c 'cd /app && dagster job launch -f pipeline/assets.py -d /app -j bctc_sync_job -c /tmp/run.yaml'

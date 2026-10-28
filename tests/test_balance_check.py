@@ -89,3 +89,9 @@ def test_similar_but_different_rows_are_still_rejected():
 
 def test_markdown_bold_markers_inside_a_number_are_removed():
     assert balance_check("|TONGCONGTAISAN||15**.**000.000.000|1.000.000|").assets == ["15000000000"]
+
+
+def test_total_row_merged_with_the_previous_row_by_br():
+    md = ("|2._|Tàisảnthuếhoãnlại<br>TONGCONGTÀISAN(270=100+200)|262<br>270|17|1.923.277.422<br>1.120.924.601.278|2.344.651.375<br>921.907.299.592||\n"
+          "|NGUON VON<br>TONGCONGNGUONVON|<br>440|18|3.000<br>1.120.924.601.278|1<br>921.907.299.592||\n")
+    assert balance_check(md).status == "ok"
