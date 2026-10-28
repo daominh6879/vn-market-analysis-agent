@@ -38,6 +38,7 @@ from dotenv import load_dotenv
 load_dotenv(ROOT / ".env")
 
 from core.config import settings
+from core.parse import PARSE_VERSION
 
 CAFEF_URL = "https://cafef.vn/du-lieu/Ajax/PageNew/FileBCTC.ashx"
 COLLECTION = "bctc_structural"
@@ -196,7 +197,32 @@ def stored_quality(doc_id: str) -> tuple[str | None, int | None]:
         return None, None
 
 
-def record_quality(qdrant, doc_id: str, check) -> None:
+def stored_parser(doc_id: str) -> int | None:
+    """Version of core.parse that produced the stored document (set when it was parsed here); None if unknown."""
+    from core.db import get_conn
+
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT (quality_detail->>'parser')::int FROM documents WHERE doc_id = %s", (doc_id,))
+                row = cur.fetchone()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+
+def retire_document(qdrant, doc_id: str) -> None:
+    """Drop a superseded parse of a report: its Qdrant chunks and its active documents row."""
+    from core.db import get_conn
+    from rag.index import delete_doc_chunks
+
+    delete_doc_chunks(qdrant, COLLECTION, doc_id)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE documents SET status = 'deleted', deleted_at = NOW() WHERE doc_id = %s", (doc_id,))
+
+
+def record_quality(qdrant, doc_id: str, check, parser: int | None = None) -> None:
     """Persist a BalanceCheck on the documents row and on every Qdrant chunk of the document (payload `quality`)."""
     import json
 
@@ -213,13 +239,13 @@ def record_quality(qdrant, doc_id: str, check) -> None:
             with conn.cursor() as cur:
                 cur.execute(
                     "UPDATE documents SET quality = %s, quality_detail = %s::jsonb WHERE doc_id = %s",
-                    (check.status, json.dumps(check.as_dict(), ensure_ascii=False), doc_id),
+                    (check.status, json.dumps({**check.as_dict(), **({"parser": parser} if parser else {})}, ensure_ascii=False), doc_id),
                 )
     except Exception as exc:   # column missing: migration 044 not applied; the payload flag is still set
         print(f"  [warn] quality not saved to documents (run migration 044?): {exc}")
 
 
-def ensure_quality(client, qdrant, bucket: str, key: str) -> str:
+def ensure_quality(client, qdrant, bucket: str, key: str, parsed_now: bool = False) -> str:
     """Make sure the indexed document has a balance-sheet check; return a log note ("" when it is fine).
 
     Runs for freshly indexed documents and, because it only needs the parsed markdown already in MinIO, also fills in
@@ -233,13 +259,14 @@ def ensure_quality(client, qdrant, bucket: str, key: str) -> str:
         return ""
     status, version = stored_quality(doc_id)
     detail = ""
-    if status is None or version != CHECK_VERSION:         # unchecked, or checked by an older version of the rules
+    # unchecked, checked by an older version of the rules, or just re-indexed (new points carry no `quality` payload yet)
+    if status is None or version != CHECK_VERSION or parsed_now:
         try:
             text = client.get_object(bucket, parsed_key(key)).read().decode("utf-8")
         except Exception:
             return ""                       # no parsed markdown to check
         check = balance_check(text)
-        record_quality(qdrant, doc_id, check)
+        record_quality(qdrant, doc_id, check, parser=PARSE_VERSION if parsed_now else None)
         status, detail = check.status, check.detail
         print(f"  balance check: {status}" + (f" ({detail})" if detail else ""))
     return "" if status == "ok" else f"balance check {status}" + (f": {detail}" if detail else "")
@@ -292,6 +319,26 @@ def parse_and_embed(client, qdrant, ticker: str, bucket: str, key: str, year: in
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+def stale_parse(qdrant, key: str) -> str | None:
+    """doc_id of the indexed report if it failed its balance check and was parsed by an older core.parse, else None."""
+    doc_id = indexed_doc_id(qdrant, key)
+    if doc_id is None:
+        return None
+    status, _ = stored_quality(doc_id)
+    return doc_id if status in ("mismatch", "unverified") and stored_parser(doc_id) != PARSE_VERSION else None
+
+
+def newest_doc_id(key: str) -> str | None:
+    """doc_id of the most recently indexed active documents row for `key`."""
+    from core.db import get_conn
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT doc_id FROM documents WHERE source_uri = %s AND status = 'active' ORDER BY indexed_at DESC LIMIT 1", (key,))
+            row = cur.fetchone()
+    return row[0] if row else None
+
+
 def sync_ticker(client, qdrant, ticker: str, report_type: str, dry: bool) -> tuple[str, str]:
     """Bring the best available annual report into MinIO + Qdrant. Returns (status, note); note is "" for the plain case."""
     bucket = f"{ticker.lower()}-docs"
@@ -326,10 +373,20 @@ def sync_ticker(client, qdrant, ticker: str, report_type: str, dry: bool) -> tup
                 n = parse_and_embed(client, qdrant, ticker, bucket, key, info["year"], info["report_type"])
                 print(f"  embedded {n} chunks into '{COLLECTION}'")
             status = "synced"
+            parsed_now = not has_qdrant
+        elif not dry and (old_id := stale_parse(qdrant, key)):
+            # indexed by an older parser and its balance check did not pass: parse again, then retire the old chunks
+            parse_and_embed(client, qdrant, ticker, bucket, key, info["year"], info["report_type"])
+            if (new_id := newest_doc_id(key)) != old_id:
+                retire_document(qdrant, old_id)
+            status, parsed_now = "reparsed", True
+            print(f"  re-parsed with parser v{PARSE_VERSION}: {old_id} -> {new_id}")
+        else:
+            parsed_now = False
 
         notes = []
         if not dry:
-            quality_note = ensure_quality(client, qdrant, bucket, key)
+            quality_note = ensure_quality(client, qdrant, bucket, key, parsed_now)
             if quality_note:
                 notes.append(quality_note)
         if info is not candidates[0]:

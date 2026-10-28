@@ -90,9 +90,10 @@ class _Minio:
 
 def _wire(monkeypatch, cands, downloads, have_minio=(), have_qdrant=()):
     monkeypatch.setattr(sb, "annual_candidates", lambda t, rt: cands)
-    monkeypatch.setattr(sb, "ensure_quality", lambda client, qdrant, bucket, key: "")
+    monkeypatch.setattr(sb, "ensure_quality", lambda client, qdrant, bucket, key, parsed_now=False: "")
     monkeypatch.setattr(sb, "in_minio", lambda c, b, key: key in have_minio)
     monkeypatch.setattr(sb, "indexed_doc_id", lambda q, key: "doc" if key in have_qdrant else None)
+    monkeypatch.setattr(sb, "stale_parse", lambda q, key: None)
     embedded = []
     monkeypatch.setattr(sb, "parse_and_embed", lambda c, q, t, b, key, year, rt: embedded.append((key, year, rt)) or 5)
 
@@ -172,7 +173,7 @@ def _quality_env(monkeypatch, stored, version=None):
     recorded = []
     monkeypatch.setattr(sb, "indexed_doc_id", lambda q, key: "doc1")
     monkeypatch.setattr(sb, "stored_quality", lambda doc_id: (stored, CHECK_VERSION if version is None and stored else version))
-    monkeypatch.setattr(sb, "record_quality", lambda q, doc_id, check: recorded.append((doc_id, check.status)))
+    monkeypatch.setattr(sb, "record_quality", lambda q, doc_id, check, parser=None: recorded.append((doc_id, check.status)))
     return recorded
 
 
@@ -236,3 +237,24 @@ def test_ensure_quality_rechecks_a_document_stored_by_an_older_version(monkeypat
     monkeypatch.setattr(sb, "stored_quality", lambda doc_id: ("ok", None))
     sb.ensure_quality(_MdClient(BALANCED), None, "b", "2025/a.pdf")
     assert rec2 == [("doc1", "ok")]
+
+
+def test_report_that_failed_its_check_under_an_older_parser_is_parsed_again(monkeypatch):
+    sb = _wire_stale(monkeypatch)
+    status, _ = sb.sync_ticker(object(), object(), "GAS", "standalone", dry=False)
+    assert status == "reparsed"
+    assert sb._retired == ["old"]
+
+
+def _wire_stale(monkeypatch):
+    sb = __import__("ingest.sync_bctc", fromlist=["x"])
+    sb._retired = []
+    monkeypatch.setattr(sb, "annual_candidates", lambda t, rt: [{"year": 2025, "filename": "a.pdf", "name": "n", "url": "u", "report_type": "standalone"}])
+    monkeypatch.setattr(sb, "in_minio", lambda c, b, key: True)
+    monkeypatch.setattr(sb, "indexed_doc_id", lambda q, key: "old")
+    monkeypatch.setattr(sb, "stale_parse", lambda q, key: "old")
+    monkeypatch.setattr(sb, "parse_and_embed", lambda *a: 5)
+    monkeypatch.setattr(sb, "newest_doc_id", lambda key: "new")
+    monkeypatch.setattr(sb, "retire_document", lambda q, doc_id: sb._retired.append(doc_id))
+    monkeypatch.setattr(sb, "ensure_quality", lambda *a: "")
+    return sb

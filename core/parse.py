@@ -205,6 +205,87 @@ def _reocr_statements(path: str, pages: list[str], ocr_language: str) -> list[st
     return merged
 
 
+# Bump when parsing changes in a way that can fix documents whose balance check failed: ingest/sync_bctc re-parses those once.
+PARSE_VERSION = 2
+_REGION_DPI = 200
+_REGION_MAX_PAGES = 14          # balance sheets sit in the first pages of a BCTC
+
+
+def _page_rows(res) -> list[list[tuple[float, str]]]:
+    """RapidOCR boxes grouped into text rows by vertical centre; each row is [(left x, text)] ordered left to right."""
+    items = sorted(((min(p[1] for p in b) + max(p[1] for p in b)) / 2, max(p[1] for p in b) - min(p[1] for p in b),
+                    min(p[0] for p in b), t) for b, t in zip(res.boxes, res.txts))
+    rows: list[list[tuple[float, str]]] = []
+    last_y = last_h = None
+    for y, h, x, t in items:
+        if rows and abs(y - last_y) <= max(8, 0.6 * h):
+            rows[-1].append((x, t))
+        else:
+            rows.append([(x, t)])
+        last_y, last_h = y, h
+    return [sorted(r) for r in rows]
+
+
+def region_totals(path: str, candidates: list[int] | None = None) -> tuple[list[str], list[str]] | None:
+    """Total-assets and total-capital rows read straight from the page images by RapidOCR, or None.
+
+    When Tesseract's table rebuild loses or garbles the two total rows (GAS: 7.190.620.643.636 vs 643.636), RapidOCR still
+    reads them from the image: boxes are grouped into rows and the row whose label is a total is taken whole. Returns the
+    current- and previous-year digit strings of both rows only when the two current-year figures are equal, i.e. the
+    balance-sheet identity holds on figures read independently of the first pass.
+    """
+    import importlib.util
+
+    from core.balance_check import _ASSET_KEYS, _CAPITAL_KEYS, _label_matches
+    from rag.lexical import fold
+
+    if importlib.util.find_spec("rapidocr") is None:
+        return None
+    import pymupdf
+    from rapidocr import RapidOCR
+
+    engine, doc = RapidOCR(), pymupdf.open(path)
+    pages = candidates or list(range(min(len(doc), _REGION_MAX_PAGES)))
+    assets: list[list[str]] = []
+    capital: list[list[str]] = []
+    for i in pages:
+        fd, png = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        try:
+            doc[i].get_pixmap(dpi=_REGION_DPI, colorspace=pymupdf.csGRAY).save(png)
+            res = engine(png)
+        finally:
+            Path(png).unlink(missing_ok=True)
+        if not res.txts:
+            continue
+        for row in _page_rows(res):
+            label = fold("".join(t for _, t in row if not re.search(r"\d{4,}", t)))
+            nums = [d for _, t in row for m in re.findall(r"\d[\d.,]*\d", t) if len(d := re.sub(r"\D", "", m)) >= _MIN_REPAIR_DIGITS]
+            if len(nums) < 1:
+                continue
+            if _label_matches(label, _ASSET_KEYS):
+                assets.append(nums)
+            elif _label_matches(label, _CAPITAL_KEYS):
+                capital.append(nums)
+    for a in assets:
+        for c in capital:
+            if a[0] == c[0]:
+                return a[:2], c[:2]
+    return None
+
+
+def _group(digits: str) -> str:
+    return f"{int(digits):,}".replace(",", ".")
+
+
+def _totals_block(totals: tuple[list[str], list[str]]) -> str:
+    """Markdown rows for the two totals, in the layout balance_check reads."""
+    (a, c) = totals
+    row = lambda label, nums: f"| {label} | " + " | ".join(_group(n) for n in nums) + " |"
+    return ("\n\n| Bảng cân đối kế toán: tổng cộng đọc lại từ ảnh trang | Cuối năm | Đầu năm |\n|---|---|---|\n"
+            + row("TỔNG CỘNG TÀI SẢN", a) + "\n" + row("TỔNG CỘNG NGUỒN VỐN", c))
+
+
 def parse_with_pymupdf(path: str, ocr_language: str = "vie+eng") -> ParsedDoc:
     from pymupdf4llm.ocr import tesseract_api
 
@@ -227,6 +308,21 @@ def parse_with_pymupdf(path: str, ocr_language: str = "vie+eng") -> ParsedDoc:
                 fixed = _reocr_statements(target, pages, ocr_language)
                 if fixed is not None and balance_check("\n\n".join(fixed)).status == "ok":
                     pages, engine = fixed, "tesseract + rapidocr (statement pages)"
+            if balance_check("\n\n".join(pages)).status != "ok":
+                # 3) the total rows themselves, read from the page images and appended as rows (kept only if assets == capital)
+                # the original file first: re-rendering the 150 dpi raster lost GAS's total rows that the embedded image gives
+                scan_pages = sorted(set(statement_pages(pages)) | set(range(_REGION_MAX_PAGES)))
+                totals = None
+                for source in dict.fromkeys([path, target]):
+                    try:
+                        totals = region_totals(source, scan_pages)
+                    except Exception as exc:
+                        print(f"  [warn] RapidOCR region pass failed: {exc}")
+                    if totals is not None:
+                        break
+                if totals is not None:
+                    pages = pages[:-1] + [pages[-1] + _totals_block(totals)]
+                    engine += " + rapidocr total rows"
     finally:
         if rasterised:
             Path(rasterised).unlink(missing_ok=True)

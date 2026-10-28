@@ -182,3 +182,14 @@ def test_nothing_that_balances_keeps_the_tesseract_text(monkeypatch):
     _stub_two_engines(monkeypatch, [page], oracle={"2735388878"}, rapid_pages={0: page})
     doc = parse_mod.parse_with_pymupdf("x.pdf")
     assert doc.metadata["ocr_engine"] == "tesseract" and doc.content == page
+
+
+def test_region_totals_block_satisfies_the_balance_check():
+    from core.balance_check import balance_check
+    from core.parse import _group, _totals_block
+
+    assert _group("87090620643636") == "87.090.620.643.636"
+    block = _totals_block((["87090620643636", "78781946257137"], ["87090620643636", "78781946257137"]))
+    garbled = "| TỔNG CỘNG TÀI SẢN | 270 | 7190620643636 |\n| TỔNG CỘNG NGUỒN VỐN | 440 | 620.643.636 |\n"
+    assert balance_check(garbled).status == "mismatch"
+    assert balance_check(garbled + block).status == "ok"

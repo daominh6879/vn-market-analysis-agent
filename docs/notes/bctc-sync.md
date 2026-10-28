@@ -146,6 +146,17 @@ OCR đọc sai chữ số, nên mỗi tài liệu được kiểm tra: "Tổng (
 - Chạy lại trên 431 tài liệu: không tài liệu `ok` nào bị đổi; 4 unverified → ok (APS, CCL, DRL, TCT), 3 unverified → mismatch (BMC, ECO, OCB). Sau khi áp dụng vào chỉ mục: ok 333, mismatch 32, unverified 66.
 - 66 tài liệu còn lại không sửa được ở bộ kiểm tra: bước parse đã thử sửa số và đổi trang bằng RapidOCR khi kiểm tra ≠ ok, nên chúng cần cách OCR khác (ví dụ OCR theo vùng hàng tổng) — chưa làm.
 
+### OCR theo hàng cho hàng tổng (28/10/2026)
+
+- `core/parse.region_totals`: khi kiểm tra cân đối vẫn ≠ ok sau sửa số và đổi trang, RapidOCR đọc ảnh trang ở 200 dpi, gom box theo hàng (toạ độ y) và lấy nguyên hàng "Tổng cộng tài sản" / "Tổng cộng nguồn vốn". Chỉ nhận khi hai số năm nay bằng nhau; khi đó nối 2 hàng vào cuối markdown (bảng "tổng cộng đọc lại từ ảnh trang"). `PARSE_VERSION` = 2.
+- Thử trên 7 mã trước khi tích hợp: GAS, MBB, VHM, SVD, VSH, VVS đọc ra hai hàng khớp nhau; VFG không đọc được hàng nguồn vốn. GAS thật là 87.090.620.643.636 (OCR cũ ra 7190620643636). Dùng PDF gốc, không dùng bản raster 150 dpi (bản raster làm mất hàng tổng của GAS).
+- `ingest/sync_bctc.py`: tài liệu mismatch/unverified do parser cũ được parse lại một lần (`stale_parse`), phiên bản cũ bị loại (`retire_document`: xoá chunk Qdrant, `status='deleted'`). `quality_detail.parser` lưu phiên bản.
+- Lỗi gặp khi chạy: 35 tài liệu parse lại ra cùng nội dung (cùng `doc_id`) nên các điểm Qdrant mới không có payload `quality`; sửa `ensure_quality` ghi lại khi vừa parse (`parsed_now`) và đặt lại payload từ `documents.quality`.
+- Kết quả trên 431 mã (97 tài liệu parse lại + GAS): ok 396, unverified 27, mismatch 8 (trước: 333 / 66 / 32).
+  - mismatch: BCM, CNG, DSN, ECO, EVF, SHB, TNI, VFG
+  - unverified: AGR, ANT, BSI, CEO, CMV, CTR, D2D, DAH, DPR, DSE, EIB, FMC, HDC, HPX, HRC, HU1, NSC, NT2, ORS, PGD, PHR, PPC, SZL, TCI, TCM, VHC, VIX
+- Giới hạn: `ok` nghĩa là tổng tài sản = tổng nguồn vốn; không chứng minh các dòng khác đúng. Chưa so sánh các số khác với PDF.
+
 ## Cách chạy lại
 ```
 docker exec dagster-daemon sh -c 'cd /app && dagster job launch -f pipeline/assets.py -d /app -j bctc_sync_job -c /tmp/run.yaml'
