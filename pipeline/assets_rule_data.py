@@ -17,6 +17,11 @@ Assets (ingest/fetch_rule_data.py, bctc notes: ingest/extract_bctc_notes.py):
   price_history_ingest      prices from 2017, foreign flows from 2018  → ohlcv_daily, foreign_flows (Sunday 11:00)
   bctc_notes_extract        related party, bonds, CASA (PDF notes; only figures with no structured source)
                                                                        → bctc_note_facts       (Sunday 10:00)
+  macro_ingest              CPI, credit / deposit growth (NSO), VCB 12-month deposit rate → macro_indicators (daily 09:00)
+  insurer_lines_ingest      insurers' full statements (investment lines) → fireant_statement_lines (Saturday 08:30)
+  intraday_ingest           14:25 state + ATC fill per session (DNSE 1m) → intraday_snapshot   (weekdays 15:10)
+  broker_reports_ingest     broker research list, target prices (Simplize) → broker_reports    (weekdays 19:00)
+  broker_forecasts_extract  EPS / NPAT forecasts read from the report PDFs → broker_forecasts  (weekdays 19:00)
 
 data_bootstrap_sensor (pipeline/assets_market_data.py) starts each job with backfill when its table is empty.
 """
@@ -149,6 +154,41 @@ def bctc_notes_extract(context: AssetExecutionContext, config: NotesConfig) -> d
     return _log(context, "bctc_notes", run(force=config.force))
 
 
+@asset(group_name="rule_data", retry_policy=_RETRY,
+       description="Cục Thống kê CPI / credit releases (sentence quoted, post time = published) and Vietcombank's 12-month deposit rate → macro_indicators (3.3 thắt chặt / nới lỏng, 5.8).")
+def macro_ingest(context: AssetExecutionContext, config: BackfillConfig) -> dict:
+    from ingest.fetch_rule_data import run_macro
+    return _log(context, "macro", run_macro(backfill=config.backfill))
+
+
+@asset(group_name="rule_data", retry_policy=_RETRY,
+       description="FireAnt full balance sheet / income statement of the insurers → fireant_statement_lines (5.8 lợi suất đầu tư, tài sản rủi ro).")
+def insurer_lines_ingest(context: AssetExecutionContext, config: BackfillConfig) -> dict:
+    from ingest.fetch_rule_data import run_insurer_lines
+    return _log(context, "insurer_lines", run_insurer_lines(backfill=config.backfill))
+
+
+@asset(group_name="rule_data", retry_policy=RetryPolicy(max_retries=3, delay=300),
+       description="After the close: 1-minute bars → state at 14:25 and the ATC fill per session → intraday_snapshot (2.3-D same_day_atc).")
+def intraday_ingest(context: AssetExecutionContext, config: BackfillConfig) -> dict:
+    from ingest.fetch_rule_data import run_intraday
+    return _log(context, "intraday", run_intraday(backfill=config.backfill))
+
+
+@asset(group_name="rule_data", retry_policy=_RETRY,
+       description="Simplize broker research list (broker, date, target price, PDF) → broker_reports.")
+def broker_reports_ingest(context: AssetExecutionContext, config: BackfillConfig) -> dict:
+    from ingest.fetch_rule_data import run_broker_reports
+    return _log(context, "broker_reports", run_broker_reports(backfill=config.backfill))
+
+
+@asset(group_name="rule_data", deps=[broker_reports_ingest], retry_policy=RetryPolicy(max_retries=1, delay=600),
+       description="LLM reads the forecast table of each new broker report; figures kept only when the PDF row puts them under that year → broker_forecasts (6.5-B consensus).")
+def broker_forecasts_extract(context: AssetExecutionContext) -> dict:
+    from ingest.extract_broker_forecasts import run
+    return _log(context, "broker_forecasts", run())
+
+
 block_trades_job = define_asset_job("block_trades_job", selection=[block_trades_ingest])
 index_data_job = define_asset_job("index_data_job", selection=[size_indices_ingest, index_valuation_ingest])
 foreign_room_job = define_asset_job("foreign_room_job", selection=[foreign_room_ingest])
@@ -161,6 +201,10 @@ fireant_data_job = define_asset_job("fireant_data_job", selection=[fireant_data_
 price_history_job = define_asset_job("price_history_job", selection=[price_history_ingest])
 board_close_job = define_asset_job("board_close_job", selection=[board_close_ingest])
 yield_curve_job = define_asset_job("yield_curve_job", selection=[yield_curve_ingest])
+macro_job = define_asset_job("macro_job", selection=[macro_ingest])
+insurer_lines_job = define_asset_job("insurer_lines_job", selection=[insurer_lines_ingest])
+intraday_job = define_asset_job("intraday_job", selection=[intraday_ingest])
+broker_job = define_asset_job("broker_job", selection=[broker_reports_ingest, broker_forecasts_extract])
 
 
 def _schedule(job, cron: str, name: str) -> ScheduleDefinition:
@@ -181,11 +225,16 @@ rule_data_schedules = [
     _schedule(price_history_job, "0 11 * * 0", "price_history_sun_1100"),      # new listings / moved tickers
     _schedule(board_close_job, "5 15 * * 1-5", "board_close_1505"),             # board frozen after ATC / put-through
     _schedule(yield_curve_job, "30 17 * * 1-5", "yield_curve_1730"),
+    _schedule(macro_job, "0 9 * * *", "macro_0900"),                           # NSO posts ~08:00 on release days
+    _schedule(insurer_lines_job, "30 8 * * 6", "insurer_lines_sat_0830"),
+    _schedule(intraday_job, "10 15 * * 1-5", "intraday_1510"),                 # after the ATC bar (14:45)
+    _schedule(broker_job, "0 19 * * 1-5", "broker_1900"),
 ]
 rule_data_jobs = [block_trades_job, index_data_job, foreign_room_job, corporate_actions_job, commodities_job,
                   shareholders_job, vnd_items_job, bctc_notes_job, fireant_data_job, price_history_job,
-                  board_close_job, yield_curve_job]
+                  board_close_job, yield_curve_job, macro_job, insurer_lines_job, intraday_job, broker_job]
 rule_data_assets = [block_trades_ingest, size_indices_ingest, index_valuation_ingest, foreign_room_ingest,
                     corporate_actions_ingest, commodities_ingest, shareholders_ingest, vnd_items_ingest,
                     bctc_notes_extract, fireant_data_ingest, fireant_holders_ingest, price_history_ingest,
-                    board_close_ingest, yield_curve_ingest]
+                    board_close_ingest, yield_curve_ingest, macro_ingest, insurer_lines_ingest, intraday_ingest,
+                    broker_reports_ingest, broker_forecasts_extract]

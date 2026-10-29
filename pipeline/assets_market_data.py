@@ -39,7 +39,8 @@ from pipeline.assets_proprietary import breakout_signals_job, proprietary_flows_
 from pipeline.assets_vnstock import vnstock_financials_job, vnstock_ratios_job
 from pipeline.assets_rule_data import (
     bctc_notes_job, block_trades_job, commodities_job, corporate_actions_job, foreign_room_job, index_data_job,
-    shareholders_job, vnd_items_job, fireant_data_job, price_history_job, yield_curve_job,
+    shareholders_job, vnd_items_job, fireant_data_job, price_history_job, yield_curve_job, macro_job,
+    insurer_lines_job, intraday_job, broker_job,
 )
 
 _TZ = "Asia/Ho_Chi_Minh"
@@ -297,6 +298,10 @@ _BOOTSTRAP_CHECKS: list[tuple[str, str, str]] = [
     ("bctc_notes_job", "SELECT NOT EXISTS (SELECT 1 FROM bctc_note_facts)", "bctc_notes"),
     ("fireant_data_job", "SELECT NOT EXISTS (SELECT 1 FROM fireant_financial_data)", "fireant_data"),
     ("yield_curve_job", "SELECT NOT EXISTS (SELECT 1 FROM gov_bond_yields)", "yield_curve"),
+    ("macro_job", "SELECT NOT EXISTS (SELECT 1 FROM macro_indicators WHERE source <> 'vcb')", "macro"),
+    ("insurer_lines_job", "SELECT NOT EXISTS (SELECT 1 FROM fireant_statement_lines)", "insurer_lines"),
+    ("intraday_job", "SELECT NOT EXISTS (SELECT 1 FROM intraday_snapshot)", "intraday"),
+    ("broker_job", "SELECT NOT EXISTS (SELECT 1 FROM broker_reports)", "broker"),
     ("price_history_job", "SELECT (SELECT count(DISTINCT ticker) FROM ohlcv_daily WHERE date < '2018-01-01') < 0.5 * "
      f"{_ACTIVE}", "price_history"),
 ]
@@ -312,6 +317,10 @@ _BOOTSTRAP_RUN_CONFIG: dict[str, dict] = {
     "corporate_actions": {"ops": {"corporate_actions_ingest": {"config": {"backfill": True}}}},
     "commodities": {"ops": {"commodities_ingest": {"config": {"backfill": True}}}},
     "yield_curve": {"ops": {"yield_curve_ingest": {"config": {"backfill": True}}}},
+    "macro": {"ops": {"macro_ingest": {"config": {"backfill": True}}}},
+    "insurer_lines": {"ops": {"insurer_lines_ingest": {"config": {"backfill": True}}}},
+    "intraday": {"ops": {"intraday_ingest": {"config": {"backfill": True}}}},
+    "broker": {"ops": {"broker_reports_ingest": {"config": {"backfill": True}}}},
 }
 
 
@@ -321,7 +330,8 @@ _BOOTSTRAP_RUN_CONFIG: dict[str, dict] = {
           proprietary_flows_job, breakout_signals_job, ohlcv_ingest_job, global_quotes_job, bctc_sync_job,
           benchmark_ingest_job, insider_trades_job, news_scored_job, insider_deals_job,
           block_trades_job, index_data_job, foreign_room_job, corporate_actions_job, commodities_job, shareholders_job,
-          vnd_items_job, bctc_notes_job, fireant_data_job, price_history_job, yield_curve_job],
+          vnd_items_job, bctc_notes_job, fireant_data_job, price_history_job, yield_curve_job, macro_job,
+          insurer_lines_job, intraday_job, broker_job],
     name="data_bootstrap_sensor",
     minimum_interval_seconds=600,
     default_status=DefaultSensorStatus.RUNNING,

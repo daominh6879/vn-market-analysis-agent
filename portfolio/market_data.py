@@ -38,6 +38,17 @@ VND_ITEMS = {
     (411, 11200): "ins_short_investments", (411, 12500): "ins_long_investments", (411, 11110): "ins_cash",
     (411, 11120): "ins_cash_equivalents", (411, 14000): "ins_equity",
 }
+# fireant_statement_lines → insurer fields, by line name (FireAnt line ids change meaning when the filing template
+# changes, e.g. 1010201 "Đầu tư chứng khoán ngắn hạn" before 2022, "Chứng khoán kinh doanh" after); provisions skipped
+INSURER_LINES = (
+    (2, r"doanh thu (hoạt động|hđ) tài chính", "ins_fin_income"),
+    (1, r"^[ivx]+\.\s*tiền( và các khoản tương đương tiền)?$", "ins_cash_total"),
+    (1, r"^[ivx]+\.\s*các khoản đầu tư tài chính ngắn hạn$|^[ivx]+\.\s*đầu tư tài chính ngắn hạn$", "ins_invest_st"),
+    (1, r"^[ivx]+\.\s*các khoản đầu tư tài chính dài hạn$|^[ivx]+\.\s*đầu tư tài chính dài hạn$", "ins_invest_lt"),
+    (1, r"^\d+\.\s*(chứng khoán kinh doanh|đầu tư chứng khoán ngắn hạn)$", "ins_trading_securities"),
+    (1, r"^\d+\.\s*đầu tư (khác )?(vào|góp vốn vào) (công cụ vốn|đơn vị khác)$", "ins_equity_other"),
+    (1, r"^\d+\.\s*đầu tư vào công ty (liên kết|liên doanh)", "ins_associates"),
+)
 EXTRA_DAYS = 400          # block trades / foreign room: one year of history is what the rules look back on
 
 
@@ -115,7 +126,40 @@ def _extras(cur, since: date | None) -> dict:
         else:
             node["values"][m] = _f(v)
             node["quotes"][m] = quote
+    out.update(_extras_055(cur))
     return {k: (dict(v) if not isinstance(v, list) else v) for k, v in out.items()}
+
+
+def _extras_055(cur) -> dict:
+    """Migration 055: macro figures (NSO, Vietcombank), insurer investment lines (FireAnt full statements), the 14:25
+    intraday state + ATC fill, broker forecasts (EPS / NPAT read from research PDFs, see extract_broker_forecasts)."""
+    import re
+    out: dict = {"macro": defaultdict(list), "insurer_lines": defaultdict(lambda: defaultdict(list)),
+                 "intraday": defaultdict(list), "broker_forecasts": defaultdict(list)}
+    for code, pe, v, pub, src in _rows(cur, "SELECT code, period_end, value, published_at, source FROM macro_indicators "
+                                            "ORDER BY code, period_end, published_at", {}):
+        out["macro"][code].append([_iso(pe), pub.isoformat(), _f(v), src])
+    rx = [(k, re.compile(p, re.I), name) for k, p, name in INSURER_LINES]
+    for t, kind, y, q, name, v in _rows(cur, "SELECT ticker, kind, year, quarter, name, value FROM fireant_statement_lines "
+                                             "WHERE quarter > 0 ORDER BY ticker, year, quarter", {}):
+        n = (name or "").strip()
+        if "dự phòng" in n.lower():
+            continue
+        for k, r, field in rx:
+            if k == kind and r.search(n):
+                out["insurer_lines"][t][field].append([f"Q{q}/{y}", _f(v)])
+                break
+    out["insurer_lines"] = {t: dict(v) for t, v in out["insurer_lines"].items()}
+    for row in _rows(cur, "SELECT ticker, date, open, high_1425, low_1425, price_1425, volume_1425, atc_price, atc_volume, "
+                          "close, volume FROM intraday_snapshot ORDER BY ticker, date", {}):
+        out["intraday"][row[0]].append([_iso(row[1]), *[_f(x) for x in row[2:]]])
+    for t, broker, issued, fy, eps, npat, target, rid in _rows(
+            cur, "SELECT r.ticker, r.broker, r.issue_date, f.fiscal_year, f.eps, f.npat_parent, r.target_price, r.id "
+                 "FROM broker_forecasts f JOIN broker_reports r ON r.id = f.report_id ORDER BY r.ticker, r.issue_date", {}):
+        out["broker_forecasts"][t].append({"broker": broker, "issue_date": _iso(issued), "fiscal_year": fy,
+                                           "eps": _f(eps), "npat_parent": _f(npat), "target_price": _f(target),
+                                           "report_id": rid})
+    return out
 
 
 def _fa_map():

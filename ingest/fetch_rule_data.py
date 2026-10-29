@@ -12,6 +12,10 @@ produced nothing so Dagster retries / alerts. Sources: VNDirect finfo through vn
   corporate_actions   issues with price, AGMs, trading / margin alerts       (5.9 pha loãng, 12.x trạng thái)
   vnd_items           AGM business plan, broker loans, insurer statements    (5.4 kế hoạch, 3.3 margin, 5.8 bảo hiểm)
   commodities         Brent, HRC, iron ore, gas, urea, sugar                 (4.4 / 9.6 ngành chu kỳ)
+  macro               CPI, core inflation, credit / deposit growth (NSO), VCB 12-month deposit rate   (3.3, 3.5, 5.8)
+  insurer_lines       insurers' full statements: investment lines            (5.8 lợi suất đầu tư, tài sản rủi ro)
+  intraday            14:25 state and ATC fill per session (DNSE 1m)         (2.3-D same_day_atc)
+  broker_reports      broker research list with target prices (Simplize)     (6.5-B consensus, with extract_broker_forecasts)
 
 Usage (thin wrapper around the functions the Dagster assets call, pipeline/assets_rule_data.py):
     python ingest/fetch_rule_data.py block_trades --tickers HPG,VCB
@@ -20,6 +24,7 @@ Usage (thin wrapper around the functions the Dagster assets call, pipeline/asset
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -575,6 +580,240 @@ def run_commodities(backfill: bool = False) -> dict:
     return out
 
 
+# ── macro: Cục Thống kê releases + Vietcombank deposit rate ──────────────────
+
+NSO_SEARCHES = (("chỉ số giá tiêu dùng", r"^Chỉ số giá tiêu dùng"),
+                ("tình hình kinh tế xã hội", r"(Thông cáo báo chí|Báo cáo).*tình hình kinh tế\s*[–-]\s*xã hội"))
+NSO_HISTORY_START = date(2019, 1, 1)
+VN_MONTHS = {"một": 1, "hai": 2, "ba": 3, "tư": 4, "năm": 5, "sáu": 6, "bảy": 7, "tám": 8, "chín": 9, "mười": 10,
+             "mười một": 11, "mười hai": 12}
+_PCT = r"([\d]+(?:[.,]\d+)?)\s*%"
+
+
+def _pct(x: str) -> float:
+    return float(x.replace(",", "."))
+
+
+def _month_of(title: str, published: date) -> tuple[int, int] | None:
+    """(year, month) a CPI release is about: 'tháng Chín … năm 2026', 'tháng 12 năm 2023', 'tháng Mười Hai, quý IV và
+    năm 2025'. Without a year in the title: the month before publication."""
+    t = title.lower()
+    m = re.search(r"tháng\s+(mười hai|mười một|một|hai|ba|tư|năm|sáu|bảy|tám|chín|mười|\d{1,2})\b", t)
+    if not m:
+        return None
+    w = m.group(1)
+    month = int(w) if w.isdigit() else VN_MONTHS[w]
+    y = re.search(r"năm\s+(\d{4})", t)
+    year = int(y.group(1)) if y else (published.year if month <= published.month else published.year - 1)
+    return year, month
+
+
+def _month_end(year: int, month: int) -> date:
+    return (date(year + (month == 12), month % 12 + 1, 1) - timedelta(days=1))
+
+
+def parse_cpi(text: str) -> dict[str, tuple[float, str]]:
+    """The month's CPI sentences → {cpi_mom, cpi_ytd, cpi_yoy: (percent, sentence)}; core_yoy from 'Lạm phát cơ bản
+    tháng X … so với cùng kỳ'. The figures may sit in one sentence or several ('So với tháng 12/2025, CPI tháng Chín
+    tăng 4,20%; tăng 5,08% so với cùng kỳ'). Period averages (bình quân, quý) are skipped. Signs from tăng / giảm."""
+    out: dict[str, tuple[float, str]] = {}
+    for sent in re.split(r"(?<=\.)\s+", text):
+        low = sent.lower()
+        if "cpi" in low and "tháng" in low and not re.search(r"bình quân|quý|lạm phát cơ bản", low):
+            clauses = re.findall(r"(tăng|giảm)\s+" + _PCT + r"\s*(so với [^;,.]*?(?:trước|\d{4}))", sent)
+            # 'So với tháng 12/2025, CPI tháng Chín tăng 4,20%' — the comparison comes first
+            lead = re.match(r"\s*So với (tháng 12/\d{4}|cùng kỳ năm trước|tháng trước),\s*CPI[^%]*?(tăng|giảm)\s+" + _PCT, sent)
+            if lead:
+                clauses.insert(0, (lead.group(2), lead.group(3), "so với " + lead.group(1)))
+            for verb, num, ctx in clauses:
+                key = ("cpi_mom" if "tháng trước" in ctx else "cpi_ytd" if "tháng 12" in ctx else
+                       "cpi_yoy" if "cùng kỳ" in ctx else None)
+                if key and key not in out:
+                    out[key] = (_pct(num) * (-1 if verb == "giảm" else 1), sent.strip()[:400])
+        if re.match(r"\s*Lạm phát cơ bản(\s*\[\d+\])?\s+tháng", sent) and "core_yoy" not in out:
+            m = re.search(r"(tăng|giảm)\s+" + _PCT + r"\s*so với cùng kỳ", sent)
+            if m:
+                out["core_yoy"] = (_pct(m.group(2)) * (-1 if m.group(1) == "giảm" else 1), sent.strip()[:400])
+    return out
+
+
+def parse_credit(text: str) -> tuple[date, dict[str, tuple[float, str]]] | None:
+    """'Tính đến thời điểm 28/9/2026, huy động vốn của các tổ chức tín dụng tăng 9,78% (cùng thời điểm năm trước tăng
+    9,99%); tăng trưởng tín dụng của nền kinh tế đạt 10,89% (cùng thời điểm năm trước tăng 13,37%).'"""
+    m = re.search(r"Tính đến (?:thời điểm |ngày )?(\d{1,2})/(\d{1,2})/(\d{4})[^.]*?tín dụng[^.]*\.", text)
+    if not m:
+        return None
+    sent, day = m.group(0), date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+    out: dict[str, tuple[float, str]] = {}
+    prev = r"(?:\s*so với (?:cuối năm|tháng 12/)\s*\d{4})?(?:\s*\(cùng (?:thời điểm|kỳ) năm trước (?:tăng|đạt)\s+" + _PCT + r"\))?"
+    d = re.search(r"huy động vốn[^%;]{0,90}?(?:tăng|đạt)\s+" + _PCT + prev, sent)
+    c = re.search(r"(?:tăng trưởng tín dụng|dư nợ tín dụng|tín dụng (?:của )?(?:nền kinh tế|toàn hệ thống))[^%;]{0,60}?"
+                  r"(?:đạt|tăng)\s+" + _PCT + prev, sent)
+    for key, mm in (("deposit_growth_ytd", d), ("credit_ytd", c)):
+        if mm:
+            out[key] = (_pct(mm.group(1)), sent.strip()[:400])
+            if mm.group(2):
+                out[key + "_prev"] = (_pct(mm.group(2)), sent.strip()[:400])
+    return (day, out) if out else None
+
+
+def _store_macro(rows: list[tuple]) -> int:
+    return _executemany("""INSERT INTO macro_indicators (code, period_end, value, published_at, source, quote)
+                           VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (code, period_end, source) DO UPDATE SET
+                           value=EXCLUDED.value, published_at=LEAST(macro_indicators.published_at, EXCLUDED.published_at),
+                           quote=EXCLUDED.quote, fetched_at=NOW()""", rows)
+
+
+def run_macro(backfill: bool = False) -> dict:
+    """NSO CPI releases (monthly) and socio-economic press releases (credit / deposit growth) → macro_indicators, with
+    the post time as published_at and the sentence as quote; plus today's Vietcombank 12-month VND deposit rate.
+    Backfill pages back to 2019; otherwise the newest 20 posts of each search."""
+    from vnmarket import VnMarket
+    from vnmarket.errors import NoData, SourceError
+
+    tz = "Asia/Ho_Chi_Minh"
+    rows, posts, unparsed = [], 0, []
+    with VnMarket() as vn:
+        seen: set[int] = set()
+        for search, title_rx in NSO_SEARCHES:
+            for page in range(1, 40 if backfill else 2):
+                try:
+                    df = vn.macro.statistics_posts(search, page, 100 if backfill else 30)
+                except (NoData, SourceError):             # WordPress answers 400 past the last page
+                    break
+                for r in df.itertuples(index=False):
+                    if r.id in seen or not re.search(title_rx, r.title, re.I):
+                        continue
+                    seen.add(r.id)
+                    post = vn.macro.statistics_post(int(r.id))
+                    pub = pd.Timestamp(post["published"])
+                    pub = pub.tz_localize(tz) if pub.tzinfo is None else pub
+                    posts += 1
+                    found = 0
+                    ym = _month_of(r.title, pub.date()) if title_rx.startswith("^Chỉ số") else None
+                    if ym:
+                        for code, (v, q) in parse_cpi(post["text"]).items():
+                            rows.append((code, _month_end(*ym), v, pub.to_pydatetime(), f"nso:{r.id}", q)); found += 1
+                    cr = parse_credit(post["text"])
+                    if cr:
+                        for code, (v, q) in cr[1].items():
+                            rows.append((code, cr[0], v, pub.to_pydatetime(), f"nso:{r.id}", q)); found += 1
+                    if not found:
+                        unparsed.append(r.title[:80])
+                if df["published"].min().date() < NSO_HISTORY_START:
+                    break
+        try:
+            dep = vn.macro.deposit_rates()
+            x = dep[(dep.currency == "VND") & (dep.tenor_type == "Savings") & (dep.tenor == "12-months")]
+            if not x.empty:
+                upd = pd.Timestamp(x.updated.iloc[0])
+                rows.append(("deposit_12m_vcb", upd.tz_convert(tz).date(), float(x.rate.iloc[0]) * 100,
+                             upd.to_pydatetime(), "vcb", "Vietcombank, tiết kiệm 12 tháng VND (cá nhân)"))
+        except NoData:
+            pass
+    n = _store_macro(rows)
+    if n == 0:
+        raise RuntimeError(f"macro: nothing parsed from {posts} posts; unparsed={unparsed[:5]}")
+    return {"posts": posts, "rows": n, "unparsed": len(unparsed), "unparsed_sample": unparsed[:5]}
+
+
+# ── insurers: full statements (investment lines) ─────────────────────────────
+
+def run_insurer_lines(tickers: list[str] | None = None, backfill: bool = False) -> dict:
+    """FireAnt full balance sheet + income statement of the insurers (40 quarters on backfill, the last 6 otherwise)
+    → fireant_statement_lines: investment yield (financial income / investments) and risky-asset share (khung 5.8)."""
+    tickers = tickers or _active(("Bảo hiểm",))
+    limit = 40 if backfill else 6
+
+    def one(vn, t: str) -> int:
+        n = 0
+        for kind in (1, 2):
+            df = vn.finance.full_report(t, kind, date.today().year, 4, limit)
+            df = df[df["value"].notna()]
+            n += _executemany("""INSERT INTO fireant_statement_lines (ticker, kind, year, quarter, item_id, parent_id,
+                                 level, name, value) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                                 ON CONFLICT (ticker, kind, year, quarter, item_id) DO UPDATE SET value=EXCLUDED.value,
+                                 name=EXCLUDED.name, fetched_at=NOW()""",
+                              [(t, kind, int(r.year), int(r.quarter), int(r.item_id), _int(r.parent_id), _int(r.level),
+                                r.name, _num(r.value)) for r in df.itertuples(index=False)])
+        return n
+
+    return _per_ticker("insurer_lines", tickers, one)
+
+
+# ── intraday: 14:25 state and the ATC fill (entry_mode same_day_atc) ─────────
+
+SNAPSHOT_AT = "14:25"
+ATC_AT = "14:45"
+INTRADAY_BACKFILL_DAYS = 100           # DNSE keeps about three months of 1-minute bars
+
+
+def intraday_rows(t: str, bars: pd.DataFrame) -> list[tuple]:
+    """1-minute bars of several sessions → one row per session: what was known before 14:25 and the ATC fill."""
+    out = []
+    bars = bars.copy()
+    bars["d"] = bars["time"].dt.date
+    for d, g in bars.groupby("d"):
+        hm = g["time"].dt.strftime("%H:%M")
+        pre = g[hm < SNAPSHOT_AT]
+        atc = g[hm == ATC_AT]
+        if pre.empty:
+            continue
+        out.append((t, d, _num(g["open"].iloc[0]), _num(pre["high"].max()), _num(pre["low"].min()),
+                    _num(pre["close"].iloc[-1]), int(pre["volume"].sum()),
+                    _num(atc["close"].iloc[0]) if not atc.empty else None,
+                    int(atc["volume"].iloc[0]) if not atc.empty else None,
+                    _num(g["close"].iloc[-1]), int(g["volume"].sum()), "dnse"))
+    return out
+
+
+def run_intraday(tickers: list[str] | None = None, backfill: bool = False) -> dict:
+    """After the close: every active ticker's 1-minute bars (last 5 days, or ~3 months on backfill) → intraday_snapshot.
+    Only sessions with an ATC bar are complete; a session still trading is skipped by the caller's schedule."""
+    tickers = tickers or _active()
+    start = date.today() - timedelta(days=INTRADAY_BACKFILL_DAYS if backfill else 5)
+
+    def one(vn, t: str) -> int:
+        bars = vn.prices.history(t, start=start, end=date.today(), interval="1m")
+        return _executemany("""INSERT INTO intraday_snapshot (ticker, date, open, high_1425, low_1425, price_1425,
+                               volume_1425, atc_price, atc_volume, close, volume, source)
+                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (ticker, date) DO UPDATE SET
+                               open=EXCLUDED.open, high_1425=EXCLUDED.high_1425, low_1425=EXCLUDED.low_1425,
+                               price_1425=EXCLUDED.price_1425, volume_1425=EXCLUDED.volume_1425,
+                               atc_price=EXCLUDED.atc_price, atc_volume=EXCLUDED.atc_volume, close=EXCLUDED.close,
+                               volume=EXCLUDED.volume, fetched_at=NOW()""", intraday_rows(t, bars))
+
+    return _per_ticker("intraday", tickers, one)
+
+
+# ── broker research list (Simplize) ──────────────────────────────────────────
+
+BROKER_HISTORY_START = date(2023, 1, 1)
+
+
+def run_broker_reports(tickers: list[str] | None = None, backfill: bool = False) -> dict:
+    """Simplize broker reports per ticker → broker_reports (newest 50, or every page back to 2023 on backfill). The
+    EPS / NPAT forecasts inside each PDF are read by ingest/extract_broker_forecasts.py."""
+    tickers = tickers or _active()
+
+    def one(vn, t: str) -> int:
+        n = 0
+        for page in range(0, 40 if backfill else 1):
+            df = vn.company.broker_reports(t, page, 50)
+            n += _executemany("""INSERT INTO broker_reports (id, ticker, broker, issue_date, title, target_price,
+                                 recommendation, pdf_url) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                                 ON CONFLICT (id) DO UPDATE SET target_price=EXCLUDED.target_price,
+                                 recommendation=EXCLUDED.recommendation, title=EXCLUDED.title""",
+                              [(int(r.id), t, r.broker, _day(r.issue_date), r.title, _num(r.target_price),
+                                r.recommendation, r.pdf_url if isinstance(r.pdf_url, str) else None)
+                               for r in df.itertuples(index=False)])
+            if len(df) < 50 or df["issue_date"].min().date() < BROKER_HISTORY_START:
+                break
+        return n
+
+    return _per_ticker("broker_reports", tickers, one)
+
+
 RUNNERS = {
     "block_trades": lambda a: run_block_trades(a.tickers, a.backfill),
     "size_indices": lambda a: run_size_indices(a.backfill),
@@ -590,6 +829,10 @@ RUNNERS = {
     "board_close": lambda a: run_board_close(),
     "yield_curve": lambda a: run_yield_curve(a.backfill),
     "fireant_holders": lambda a: run_fireant_holders(a.tickers),
+    "macro": lambda a: run_macro(a.backfill),
+    "insurer_lines": lambda a: run_insurer_lines(a.tickers, a.backfill),
+    "intraday": lambda a: run_intraday(a.tickers, a.backfill),
+    "broker_reports": lambda a: run_broker_reports(a.tickers, a.backfill),
 }
 
 
