@@ -416,6 +416,7 @@ from pipeline.assets_market_data import (
     data_bootstrap_sensor, data_freshness_sensor,
 )
 from pipeline.assets_bctc import bctc_sync, bctc_sync_job, bctc_sync_schedule
+from pipeline.assets_rule_data import rule_data_assets, rule_data_jobs, rule_data_schedules
 from pipeline.assets_proprietary import (
     proprietary_flows_ingest, breakout_signals_daily, proprietary_flows_job, breakout_signals_job,
     proprietary_flows_schedule, breakout_signals_schedule, gated_mid_beats_ungated,
@@ -642,7 +643,7 @@ defs = Definitions(
             foreign_flows_ingest, corporate_events_ingest, daily_brief,
             securities_shares, stock_dividends, ratio_history, financials_quarterly, daily_snapshots,
             proprietary_flows_ingest, breakout_signals_daily, bctc_sync, benchmark_ingest,
-            news_scored, insider_trades_ingest, insider_deals_ingest],
+            news_scored, insider_trades_ingest, insider_deals_ingest, *rule_data_assets],
     jobs=[ingestion_job, ingestion_full_rebuild_job, delete_job,
           news_job, news_purge_job,
           vnstock_financials_job, vnstock_prices_job, vnstock_ratios_job,
@@ -652,7 +653,7 @@ defs = Definitions(
           securities_shares_job, stock_dividends_job, ratio_history_job,
           financials_quarterly_job, daily_snapshots_job,
           proprietary_flows_job, breakout_signals_job, bctc_sync_job, benchmark_ingest_job,
-          news_scored_job, insider_trades_job, insider_deals_job],
+          news_scored_job, insider_trades_job, insider_deals_job, *rule_data_jobs],
     schedules=[daily_schedule, news_schedule, news_purge_schedule,
                vnstock_financials_schedule, vnstock_prices_schedule, vnstock_ratios_schedule,
                ohlcv_ingest_schedule,
@@ -662,7 +663,7 @@ defs = Definitions(
                ratio_history_schedule, financials_quarterly_schedule, daily_snapshots_schedule,
                proprietary_flows_schedule, breakout_signals_schedule, bctc_sync_schedule,
                benchmark_ingest_schedule, news_scored_schedule, insider_trades_schedule,
-               insider_deals_schedule],
+               insider_deals_schedule, *rule_data_schedules],
     sensors=[minio_new_pdf_sensor, data_bootstrap_sensor, data_freshness_sensor],
     asset_checks=[gated_mid_beats_ungated],
 )

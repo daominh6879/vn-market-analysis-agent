@@ -37,6 +37,10 @@ from pipeline.assets_ohlcv import ohlcv_ingest_job
 from pipeline.assets_benchmark import benchmark_ingest_job
 from pipeline.assets_proprietary import breakout_signals_job, proprietary_flows_job
 from pipeline.assets_vnstock import vnstock_financials_job, vnstock_ratios_job
+from pipeline.assets_rule_data import (
+    bctc_notes_job, block_trades_job, commodities_job, corporate_actions_job, foreign_room_job, index_data_job,
+    shareholders_job, vnd_items_job, fireant_data_job, price_history_job, yield_curve_job,
+)
 
 _TZ = "Asia/Ho_Chi_Minh"
 # Request pacing lives in vnmarket (per-source throttle), so the loops below do not sleep.
@@ -281,12 +285,33 @@ _BOOTSTRAP_CHECKS: list[tuple[str, str, str]] = [
      "SELECT (SELECT count(*) FROM news_impact_scores s JOIN news_articles a ON a.id = s.article_id "
      "WHERE s.kind = 'ticker' AND a.published_at >= CURRENT_DATE - 365) < 0.5 * (SELECT count(*) "
      "FROM news_articles a, unnest(a.tickers) t WHERE a.published_at >= CURRENT_DATE - 365)", "news_scores"),
+    # vn-portfolio rule engine datasets (pipeline/assets_rule_data.py): full history on an empty / under-covered table
+    ("block_trades_job", _tickers_below_coverage("block_trades WHERE true"), "block_trades"),
+    ("index_data_job", "SELECT NOT EXISTS (SELECT 1 FROM index_valuation) OR NOT EXISTS "
+     "(SELECT 1 FROM market_index_daily WHERE index_code = 'VNMID')", "index_data"),
+    ("foreign_room_job", _tickers_below_coverage("foreign_room WHERE true"), "foreign_room"),
+    ("corporate_actions_job", "SELECT NOT EXISTS (SELECT 1 FROM corporate_actions)", "corporate_actions"),
+    ("commodities_job", "SELECT NOT EXISTS (SELECT 1 FROM commodity_daily)", "commodities"),
+    ("shareholders_job", "SELECT NOT EXISTS (SELECT 1 FROM shareholders)", "shareholders"),
+    ("vnd_items_job", "SELECT NOT EXISTS (SELECT 1 FROM vnd_financial_items WHERE model_type = 33)", "vnd_items"),
+    ("bctc_notes_job", "SELECT NOT EXISTS (SELECT 1 FROM bctc_note_facts)", "bctc_notes"),
+    ("fireant_data_job", "SELECT NOT EXISTS (SELECT 1 FROM fireant_financial_data)", "fireant_data"),
+    ("yield_curve_job", "SELECT NOT EXISTS (SELECT 1 FROM gov_bond_yields)", "yield_curve"),
+    ("price_history_job", "SELECT (SELECT count(DISTINCT ticker) FROM ohlcv_daily WHERE date < '2018-01-01') < 0.5 * "
+     f"{_ACTIVE}", "price_history"),
 ]
 _BOOTSTRAP_RUN_CONFIG: dict[str, dict] = {
     "ohlcv_history": {"ops": {"ohlcv_daily_ingest": {"config": {"days_back": 365, "backfill": True}}}},
     "insider_trades": {"ops": {"insider_trades_ingest": {"config": {"days_back": 400}}}},
     "insider_deals": {"ops": {"insider_deals_ingest": {"config": {"days_back": 400}}}},
     "news_scores": {"ops": {"news_scored": {"config": {"days_back": 400}}}},
+    "block_trades": {"ops": {"block_trades_ingest": {"config": {"backfill": True}}}},
+    "index_data": {"ops": {"size_indices_ingest": {"config": {"backfill": True}},
+                           "index_valuation_ingest": {"config": {"backfill": True}}}},
+    "foreign_room": {"ops": {"foreign_room_ingest": {"config": {"backfill": True}}}},
+    "corporate_actions": {"ops": {"corporate_actions_ingest": {"config": {"backfill": True}}}},
+    "commodities": {"ops": {"commodities_ingest": {"config": {"backfill": True}}}},
+    "yield_curve": {"ops": {"yield_curve_ingest": {"config": {"backfill": True}}}},
 }
 
 
@@ -294,7 +319,9 @@ _BOOTSTRAP_RUN_CONFIG: dict[str, dict] = {
     jobs=[securities_shares_job, stock_dividends_job, ratio_history_job, financials_quarterly_job, daily_snapshots_job,
           vnstock_financials_job, vnstock_ratios_job, corporate_events_job,
           proprietary_flows_job, breakout_signals_job, ohlcv_ingest_job, global_quotes_job, bctc_sync_job,
-          benchmark_ingest_job, insider_trades_job, news_scored_job, insider_deals_job],
+          benchmark_ingest_job, insider_trades_job, news_scored_job, insider_deals_job,
+          block_trades_job, index_data_job, foreign_room_job, corporate_actions_job, commodities_job, shareholders_job,
+          vnd_items_job, bctc_notes_job, fireant_data_job, price_history_job, yield_curve_job],
     name="data_bootstrap_sensor",
     minimum_interval_seconds=600,
     default_status=DefaultSensorStatus.RUNNING,

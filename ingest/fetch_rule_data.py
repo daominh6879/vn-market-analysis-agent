@@ -1,0 +1,607 @@
+"""
+ingest/fetch_rule_data.py — datasets for vn-portfolio's rule engine (khung v2.2) that were missing there.
+
+Every function is incremental (latest stored date minus a small overlap) unless `backfill`, and raises when a run
+produced nothing so Dagster retries / alerts. Sources: VNDirect finfo through vnmarket, yfinance for commodities.
+
+  block_trades        put-through vs matched volume/value per session        (12.4 giao dịch thỏa thuận bất thường)
+  size_indices        VN100 / VNMID / VNSML + older VNINDEX/VN30/HNX30 days   (3.7 chỉ số theo vốn hóa, MA200 history)
+  index_valuation     VNINDEX P/E, P/B per session from 2017-12               (3.3 P/E thị trường vùng thấp)
+  foreign_room        total room / room left per session                     (7.6-B, 12.5 room ngoại)
+  shareholders        major holders and insiders                             (12.4 cổ đông tập trung)
+  corporate_actions   issues with price, AGMs, trading / margin alerts       (5.9 pha loãng, 12.x trạng thái)
+  vnd_items           AGM business plan, broker loans, insurer statements    (5.4 kế hoạch, 3.3 margin, 5.8 bảo hiểm)
+  commodities         Brent, HRC, iron ore, gas, urea, sugar                 (4.4 / 9.6 ngành chu kỳ)
+
+Usage (thin wrapper around the functions the Dagster assets call, pipeline/assets_rule_data.py):
+    python ingest/fetch_rule_data.py block_trades --tickers HPG,VCB
+    python ingest/fetch_rule_data.py commodities --backfill
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+from datetime import date, timedelta
+from pathlib import Path
+
+import pandas as pd
+
+ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(ROOT))
+
+from dotenv import load_dotenv
+load_dotenv(ROOT / ".env")
+
+from core.db import get_conn
+
+HISTORY_START = date(2017, 1, 1)        # VNDirect index / ratio history starts 2017; stock prices go back to 2013
+OVERLAP_DAYS = 7
+MIN_TICKER_COVERAGE = 0.5               # a per-ticker run where fewer than half the tickers answered is a failure
+SIZE_INDICES = ("VN100", "VNMID", "VNSML")
+BACKFILL_INDICES = ("VNINDEX", "VN30", "HNX30")   # stored from SSI since 2025-05; older sessions come from VNDirect
+VALUATION_INDICES = ("VNINDEX",)
+
+# vn-portfolio sector.yaml commodity_by_sector codes → yfinance front-month futures (2.1 hàng hóa)
+COMMODITIES = {
+    "brent": ("BZ=F", "USD/bbl"),
+    "hrc": ("HRC=F", "USD/short ton"),          # US Midwest HRC steel
+    "iron_ore": ("TIO=F", "USD/t"),             # SGX 62% Fe
+    "natgas": ("NG=F", "USD/MMBtu"),
+    "urea": ("UFV=F", "USD/short ton"),         # granular urea FOB US Gulf (from 2020; the Middle East contract
+    "urea_me": ("UME=F", "USD/t"),              # UME=F stopped updating on 2026-07-30, kept for its 2017–2026 history)
+    "sugar": ("SB=F", "USc/lb"),
+}
+
+# VNDirect statement models read into vnd_financial_items: (model types, report type, sectors to ask; None = all)
+VND_ITEM_SETS = {
+    "business_plan": ((33,), None, None),                        # AGM plan: revenue, PBT, NPAT (parent) per year
+    "broker": ((89, 90), "QUARTER", ("Chứng khoán",)),           # 89/700001 Các khoản cho vay (margin + ứng trước)
+    "insurer": ((411, 412), "QUARTER", ("Bảo hiểm",)),           # premiums, claims, expenses, investments
+}
+
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+def _active(sectors: tuple[str, ...] | None = None) -> list[str]:
+    with get_conn() as conn, conn.cursor() as cur:
+        if sectors:
+            cur.execute("SELECT ticker FROM securities WHERE is_active AND sector = ANY(%s) ORDER BY ticker",
+                        (list(sectors),))
+        else:
+            cur.execute("SELECT ticker FROM securities WHERE is_active ORDER BY ticker")
+        return [r[0] for r in cur.fetchall()]
+
+
+def _latest(table: str, key: str, date_col: str = "date") -> dict[str, date]:
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(f"SELECT {key}, MAX({date_col}) FROM {table} GROUP BY {key}")
+        return dict(cur.fetchall())
+
+
+def _start(latest: dict, key: str, backfill: bool, floor: date = HISTORY_START) -> date:
+    if backfill or key not in latest or latest[key] is None:
+        return floor
+    return max(floor, latest[key] - timedelta(days=OVERLAP_DAYS))
+
+
+def _num(x):
+    return None if x is None or pd.isna(x) else float(x)
+
+
+def _int(x):
+    return None if x is None or pd.isna(x) else int(round(float(x)))
+
+
+def _day(x):
+    return None if x is None or pd.isna(x) else pd.Timestamp(x).date()
+
+
+def _executemany(sql: str, rows: list[tuple]) -> int:
+    if not rows:
+        return 0
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.executemany(sql, rows)
+    return len(rows)
+
+
+def _per_ticker(name: str, tickers: list[str], fn) -> dict:
+    """Run fn(vn, ticker) -> rows written for each ticker; NoData is normal, a run under the coverage floor raises."""
+    from vnmarket import VnMarket
+    from vnmarket.errors import NoData
+
+    rows, ok, no_data, failed = 0, 0, 0, []
+    with VnMarket() as vn:
+        for t in tickers:
+            try:
+                rows += fn(vn, t)
+                ok += 1
+            except NoData:
+                no_data += 1
+            except Exception as exc:                       # one ticker failing must not stop the others
+                failed.append((t, repr(exc)[:120]))
+    if tickers and ok + no_data < MIN_TICKER_COVERAGE * len(tickers):
+        raise RuntimeError(f"{name}: only {ok}/{len(tickers)} tickers answered; failed={failed[:10]}")
+    if tickers and rows == 0 and ok == 0 and no_data == 0:
+        raise RuntimeError(f"{name}: no rows for {len(tickers)} tickers; failed={failed[:10]}")
+    return {"rows": rows, "tickers_ok": ok, "no_data": no_data, "failed": len(failed), "failed_sample": failed[:5]}
+
+
+# ── block trades ─────────────────────────────────────────────────────────────
+
+def run_block_trades(tickers: list[str] | None = None, backfill: bool = False) -> dict:
+    latest = _latest("block_trades", "ticker")
+
+    def one(vn, t):
+        df = vn.market.daily(t, start=str(_start(latest, t, backfill)))
+        rows = [(t, _day(r.date), _int(r.pt_volume) or 0, _num(r.pt_value) or 0.0, _int(r.nm_volume) or 0,
+                 _num(r.nm_value) or 0.0) for r in df.itertuples(index=False)]
+        return _executemany("""
+            INSERT INTO block_trades (ticker, date, pt_volume, pt_value, nm_volume, nm_value) VALUES (%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (ticker, date) DO UPDATE SET pt_volume=EXCLUDED.pt_volume, pt_value=EXCLUDED.pt_value,
+                nm_volume=EXCLUDED.nm_volume, nm_value=EXCLUDED.nm_value, fetched_at=NOW()""", rows)
+
+    return _per_ticker("block_trades", tickers or _active(), one)
+
+
+# ── long price / foreign-flow history (before the VCI/HOSE feeds start) ─────
+
+PRICE_HISTORY_START = date(2017, 1, 1)   # dividends (raw-price rebuild in vn-portfolio) are stored from 2016-11
+FOREIGN_HISTORY_START = date(2018, 9, 30)  # VNDirect foreigns reach back to 2018-08-30
+
+
+def _vnd_foreign(vn, t: str, end: date) -> pd.DataFrame | None:
+    """VNDirect foreign trading up to `end`, 1000 rows per page (the vnmarket fallback chain pages 100 at a time)."""
+    from vnmarket.sources import vnd
+    parts, page = [], 1
+    while True:
+        try:
+            total, df = vn.market._x(_one(vnd.foreign(t, page, 1000)))
+        except Exception:                              # no foreign trading history is normal for small names
+            break
+        parts.append(df[df["date"] <= pd.Timestamp(end)])
+        if df.empty or sum(len(x) for x in parts) >= total or df["date"].min() <= pd.Timestamp(PRICE_HISTORY_START):
+            break
+        page += 1
+    return pd.concat(parts, ignore_index=True) if parts else None
+
+
+def _one(ep):
+    """A one-step vnmarket plan around a single endpoint."""
+    return (yield ep)
+
+
+def run_price_history(tickers: list[str] | None = None) -> dict:
+    """ohlcv_daily and foreign_flows sessions before each ticker's first stored day, from VNDirect: adjusted OHLC in
+    nghìn đồng and matched volume (identical to the stored VCI series on the overlap: checked 8 tickers × 251
+    sessions, max deviation 0.09%), foreign buy/sell in tỷ đồng. Existing rows are never touched (DO NOTHING)."""
+    first_px = {}
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT ticker, MIN(date) FROM ohlcv_daily GROUP BY ticker")
+        first_px = dict(cur.fetchall())
+        cur.execute("SELECT ticker, MIN(date) FROM foreign_flows GROUP BY ticker")
+        first_ff = dict(cur.fetchall())
+
+    def one(vn, t):
+        n = 0
+        end = (first_px.get(t) or date.today()) - timedelta(days=1)
+        if end > PRICE_HISTORY_START:
+            df = vn.market.daily(t, start=str(PRICE_HISTORY_START), end=str(end))
+            rows = [(t, _day(r.date), _num(r.adj_open), _num(r.adj_high), _num(r.adj_low), _num(r.adj_close),
+                     _int(r.nm_volume) or 0) for r in df.itertuples(index=False)
+                    if r.adj_close is not None and not pd.isna(r.adj_close)]
+            n += _executemany("""INSERT INTO ohlcv_daily (ticker, date, open, high, low, close, volume)
+                                 VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING""", rows)
+        fend = (first_ff.get(t) or date.today()) - timedelta(days=1)
+        if fend > FOREIGN_HISTORY_START:
+            ff = _vnd_foreign(vn, t, fend)
+            if ff is not None and not ff.empty:
+                rows = [(t, _day(r.date), round(float(r.buy_value or 0) / 1e9, 4), round(float(r.sell_value or 0) / 1e9, 4),
+                         round(float(r.net_value or 0) / 1e9, 4), _int(r.buy_volume) or 0, _int(r.sell_volume) or 0,
+                         _int(r.net_volume) or 0) for r in ff.itertuples(index=False)]
+                n += _executemany("""INSERT INTO foreign_flows (ticker, date, buy_value, sell_value, net_value,
+                                     buy_volume, sell_volume, net_volume) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                                     ON CONFLICT DO NOTHING""", rows)
+        return n
+
+    return _per_ticker("price_history", tickers or _active(), one)
+
+
+# ── closing board snapshot + covered warrants (no history: collected from 2026-10-29 on) ─
+
+MEMBERSHIP_INDICES = ("VN30", "VN100", "VNMID", "VNSML", "VNX50", "VNDIAMOND", "VNFINLEAD", "VNFINSELECT")
+
+
+def run_board_close() -> dict:
+    """After the close: HOSE stock board (best bid/offer, ceiling, admin status) → board_close_snapshot, covered
+    warrants (underlying, last trading / maturity date) → covered_warrants. Raises when the board is not today's."""
+    from vnmarket import VnMarket
+
+    with VnMarket() as vn:
+        st = vn.market.board_detail("s", "hose")
+        cw = vn.market.board_detail("w", "hose")
+    day = st["trading_date"].max()
+    if pd.isna(day):
+        raise RuntimeError("board_close: no trading date on the board")
+    rows = [(r.symbol, _day(r.trading_date), _num(r.ref), _num(r.ceiling), _num(r.floor), _num(r.close),
+             _int(r.matched_volume), _num(r.bid1), _int(r.bid1_volume), _num(r.offer1), _int(r.offer1_volume),
+             r.admin_status or "") for r in st.itertuples(index=False) if r.trading_date == day]
+    n = _executemany("""INSERT INTO board_close_snapshot (ticker, date, ref, ceiling, floor, close, matched_volume, bid1,
+                            bid1_volume, offer1, offer1_volume, admin_status) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT (ticker, date) DO UPDATE SET close=EXCLUDED.close,
+                            matched_volume=EXCLUDED.matched_volume, bid1=EXCLUDED.bid1, bid1_volume=EXCLUDED.bid1_volume,
+                            offer1=EXCLUDED.offer1, offer1_volume=EXCLUDED.offer1_volume,
+                            admin_status=EXCLUDED.admin_status, fetched_at=NOW()""", rows)
+    w = _executemany("""INSERT INTO covered_warrants (symbol, underlying, issuer, cw_type, exercise_price, exercise_ratio,
+                            first_trading_date, last_trading_date, maturity_date) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT (symbol) DO UPDATE SET last_trading_date=EXCLUDED.last_trading_date,
+                            maturity_date=EXCLUDED.maturity_date, last_seen_at=NOW()""",
+                     [(r.symbol, r.underlying or "", r.issuer or "", r.cw_type or "", _num(r.exercise_price),
+                       str(r.exercise_ratio or ""), _day(r.first_trading_date), _day(r.last_trading_date),
+                       _day(r.maturity_date)) for r in cw.itertuples(index=False) if r.underlying])
+    if n == 0:
+        raise RuntimeError("board_close: empty stock board")
+    members = 0
+    with VnMarket() as vn:
+        for code in MEMBERSHIP_INDICES:
+            try:
+                syms = vn.listing.symbols(code)
+            except Exception:                              # one basket failing does not stop the snapshot
+                continue
+            members += _executemany("INSERT INTO index_membership (date, index_code, ticker) VALUES (%s,%s,%s) "
+                                    "ON CONFLICT DO NOTHING", [(_day(day), code, t) for t in syms])
+    return {"date": str(_day(day)), "stocks": n, "warrants": w, "index_members": members}
+
+
+# ── government bond yield curve (HNX) ─────────────────────────────────────
+
+YIELD_HISTORY_START = date(2019, 1, 4)
+
+
+def run_yield_curve(backfill: bool = False) -> dict:
+    """HNX yield curve → gov_bond_yields. Backfill: every Friday from 2019 plus the last 10 days; daily otherwise
+    the days since the latest stored one. Holidays / weekends answer NoData and are skipped."""
+    from vnmarket import VnMarket
+    from vnmarket.errors import NoData
+
+    latest = _latest("gov_bond_yields", "1")
+    last = max(latest.values()) if latest else None
+    today = date.today()
+    if backfill or last is None:
+        days = [YIELD_HISTORY_START + timedelta(days=7 * k) for k in range((today - YIELD_HISTORY_START).days // 7 + 1)]
+        days += [today - timedelta(days=k) for k in range(10)]
+    else:
+        days = [last + timedelta(days=k) for k in range(1, (today - last).days + 1)]
+    n, hit = 0, 0
+    with VnMarket() as vn:
+        for d in sorted(set(x for x in days if x.weekday() < 5)):
+            try:
+                df = vn.macro.yield_curve(d)
+            except NoData:
+                continue
+            hit += 1
+            n += _executemany("""INSERT INTO gov_bond_yields (date, tenor_years, par_yield, spot_annual, spot_continuous)
+                                 VALUES (%s,%s,%s,%s,%s) ON CONFLICT (date, tenor_years) DO UPDATE SET
+                                 par_yield=EXCLUDED.par_yield, spot_annual=EXCLUDED.spot_annual,
+                                 spot_continuous=EXCLUDED.spot_continuous, fetched_at=NOW()""",
+                              [(d, float(r.tenor_years), _num(r.par_yield), _num(r.spot_annual), _num(r.spot_continuous))
+                               for r in df.itertuples(index=False)])
+    if days and hit == 0 and (backfill or last is None):
+        raise RuntimeError("yield_curve: no day answered")
+    return {"days": hit, "rows": n}
+
+
+# ── former HOSE stocks (delisted or moved): backtests without survivorship bias ─
+
+def run_former_hose() -> dict:
+    """Stocks VNDirect knows that are not in securities but traded on HOSE at some point since 2017 (delisted, or
+    moved to HNX/UPCOM): securities row (is_active = false, tag former_hose), their HOSE sessions in ohlcv_daily
+    (adjusted, like the rest) and their dividends (VNDirect events) so vn-portfolio can rebuild raw prices."""
+    from vnmarket import VnMarket
+    from vnmarket.errors import NoData
+
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT ticker FROM securities")
+        have = {r[0] for r in cur.fetchall()}
+    added, sessions, divs, checked = [], 0, 0, 0
+    with VnMarket() as vn:
+        allst = vn.listing.every_stock()
+        cand = allst[(~allst["symbol"].isin(have)) & (allst["status"] != "OTC")
+                     & (allst["delisted_date"].isna() | (allst["delisted_date"] >= pd.Timestamp(PRICE_HISTORY_START)))]
+        for r in cand.itertuples(index=False):
+            checked += 1
+            try:
+                df = vn.market.daily(r.symbol, start=str(PRICE_HISTORY_START))
+            except NoData:
+                continue
+            hose = df[df["exchange"] == "HSX"]
+            if hose.empty:
+                continue
+            with get_conn() as conn, conn.cursor() as cur:
+                cur.execute("""INSERT INTO securities (ticker, exchange, company_name, is_active, tags)
+                               VALUES (%s, 'HOSE', %s, false, ARRAY['former_hose']) ON CONFLICT (ticker) DO NOTHING""",
+                            (r.symbol, r.name_vi or ""))
+            sessions += _executemany("""INSERT INTO ohlcv_daily (ticker, date, open, high, low, close, volume)
+                                        VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING""",
+                                     [(r.symbol, _day(b.date), _num(b.adj_open), _num(b.adj_high), _num(b.adj_low),
+                                       _num(b.adj_close), _int(b.nm_volume) or 0) for b in hose.itertuples(index=False)
+                                      if b.adj_close is not None and not pd.isna(b.adj_close)])
+            try:
+                acts = vn.company.actions(r.symbol)
+            except NoData:
+                acts = pd.DataFrame()
+            rows = []
+            for a in acts.itertuples(index=False) if not acts.empty else []:
+                ex = _day(a.effective_date)
+                if ex is None:
+                    continue
+                if a.type == "DIVIDEND" and a.dividend:
+                    rows.append((r.symbol, "cash", ex, _day(a.expired_date), float(a.dividend), None, a.note or ""))
+                elif a.type in ("STOCKDIV", "KINDDIV") and a.ratio:
+                    rows.append((r.symbol, "stock", ex, None, None, float(a.ratio), a.note or ""))
+            divs += _executemany("""INSERT INTO dividends (ticker, kind, ex_date, payment_date, cash_per_share,
+                                    stock_ratio_pct, note, source) VALUES (%s,%s,%s,%s,%s,%s,%s,'vndirect')
+                                    ON CONFLICT DO NOTHING""", rows)
+            added.append(r.symbol)
+    return {"checked": checked, "former_hose": len(added), "sessions": sessions, "dividends": divs,
+            "sample": added[:15]}
+
+
+# ── indices: size indices + history before the SSI feed + valuation ─────────
+
+def run_size_indices(backfill: bool = False) -> dict:
+    """VN100/VNMID/VNSML upserted in full; VNINDEX/VN30/HNX30 only fill sessions the table does not have (SSI stays the
+    primary for days it already holds). Values in VND, like the SSI rows."""
+    from vnmarket import VnMarket
+
+    latest = _latest("market_index_daily", "index_code")
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT index_code, MIN(date) FROM market_index_daily GROUP BY index_code")
+        first = dict(cur.fetchall())
+    out = {}
+    with VnMarket() as vn:
+        for code in SIZE_INDICES + BACKFILL_INDICES:
+            fill_only = code in BACKFILL_INDICES
+            if fill_only and not backfill and first.get(code) and first[code] <= HISTORY_START + timedelta(days=60):
+                out[code] = 0                                # history already there
+                continue
+            start = HISTORY_START if fill_only else _start(latest, code, backfill)
+            df = vn.market.index_history(code, start=str(start))
+            df = df.sort_values("date")
+            prev = df["close"].shift(1)
+            rows = [(code, _day(r.date), _num(r.open), _num(r.high), _num(r.low), _num(r.close),
+                     round(r.close - p, 4) if pd.notna(p) else 0.0, round((r.close / p - 1) * 100, 4) if pd.notna(p) and p else 0.0,
+                     _int(r.volume) or 0, _num(r.value))
+                    for r, p in zip(df.itertuples(index=False), prev)]
+            conflict = "DO NOTHING" if fill_only else """DO UPDATE SET open=EXCLUDED.open, high=EXCLUDED.high,
+                low=EXCLUDED.low, close=EXCLUDED.close, change_pts=EXCLUDED.change_pts, change_pct=EXCLUDED.change_pct,
+                matched_volume=EXCLUDED.matched_volume, matched_value=EXCLUDED.matched_value, fetched_at=NOW()"""
+            out[code] = _executemany(f"""
+                INSERT INTO market_index_daily (index_code, date, open, high, low, close, change_pts, change_pct,
+                    matched_volume, matched_value) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (index_code, date) {conflict}""", rows)
+    if not any(out[c] for c in SIZE_INDICES) and backfill:
+        raise RuntimeError(f"size_indices: nothing written {out}")
+    return out
+
+
+def run_index_valuation(backfill: bool = False) -> dict:
+    from vnmarket import VnMarket
+
+    latest = _latest("index_valuation", "index_code")
+    out = {}
+    with VnMarket() as vn:
+        for code in VALUATION_INDICES:
+            df = vn.market.valuation(code, start=str(_start(latest, code, backfill)))
+            rows = [(code, _day(r.date), _num(getattr(r, "pe", None)), _num(getattr(r, "pb", None)))
+                    for r in df.itertuples(index=False)]
+            out[code] = _executemany("""
+                INSERT INTO index_valuation (index_code, date, pe, pb) VALUES (%s,%s,%s,%s)
+                ON CONFLICT (index_code, date) DO UPDATE SET pe=EXCLUDED.pe, pb=EXCLUDED.pb, fetched_at=NOW()""", rows)
+    if not any(out.values()):
+        raise RuntimeError(f"index_valuation: nothing written {out}")
+    return out
+
+
+# ── foreign room ─────────────────────────────────────────────────────────────
+
+def run_foreign_room(tickers: list[str] | None = None, backfill: bool = False) -> dict:
+    latest = _latest("foreign_room", "ticker")
+
+    def one(vn, t):
+        df = vn.market.foreign_room(t, start=str(_start(latest, t, backfill)))
+        rows = [(t, _day(r.date), _int(r.total_room), _int(r.room_left)) for r in df.itertuples(index=False)
+                if r.total_room is not None or r.room_left is not None]
+        return _executemany("""
+            INSERT INTO foreign_room (ticker, date, total_room, room_left) VALUES (%s,%s,%s,%s)
+            ON CONFLICT (ticker, date) DO UPDATE SET total_room=EXCLUDED.total_room, room_left=EXCLUDED.room_left,
+                fetched_at=NOW()""", rows)
+
+    return _per_ticker("foreign_room", tickers or _active(), one)
+
+
+# ── shareholders ─────────────────────────────────────────────────────────────
+
+def run_shareholders(tickers: list[str] | None = None) -> dict:
+    def one(vn, t):
+        df = vn.company.shareholders(t)
+        rows = [(t, (r.name or "").strip(), r.holder_type or "", r.role or "", _int(r.shares), _num(r.pct),
+                 _num(r.group_pct), _day(r.effective_date)) for r in df.itertuples(index=False) if (r.name or "").strip()]
+        return _executemany("""
+            INSERT INTO shareholders (ticker, name, holder_type, role, shares, pct, group_pct, effective_date)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (ticker, source, name, effective_date) DO UPDATE SET holder_type=EXCLUDED.holder_type,
+                role=EXCLUDED.role, shares=EXCLUDED.shares, pct=EXCLUDED.pct, group_pct=EXCLUDED.group_pct,
+                updated_at=NOW()""", rows)
+
+    return _per_ticker("shareholders", tickers or _active(), one)
+
+
+# ── corporate actions (market-wide, by disclosure date) ──────────────────────
+
+def _upsert_actions(df: pd.DataFrame) -> int:
+    rows = [(r.id, r.symbol, r.group or "", r.type or "", r.type_desc or "", r.note or "", _num(r.price),
+             _num(r.ratio), _int(r.shares), _day(r.disclosure_date), _day(r.effective_date),
+             _day(r.expired_date), _day(r.actual_date), _day(r.trading_start))
+            for r in df.itertuples(index=False) if r.id and r.symbol]
+    return _executemany("""
+        INSERT INTO corporate_actions (id, ticker, action_group, action_type, type_desc, note, price, ratio,
+            shares, disclosure_date, effective_date, expired_date, actual_date, trading_start)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        ON CONFLICT (id) DO UPDATE SET note=EXCLUDED.note, price=EXCLUDED.price, ratio=EXCLUDED.ratio,
+            shares=EXCLUDED.shares, effective_date=EXCLUDED.effective_date, expired_date=EXCLUDED.expired_date,
+            actual_date=EXCLUDED.actual_date, trading_start=EXCLUDED.trading_start, fetched_at=NOW()""", rows)
+
+
+def run_corporate_actions(tickers: list[str] | None = None, backfill: bool = False, days_back: int = 30) -> dict:
+    """Daily: market-wide rows disclosed in the last `days_back` days. Backfill: every ticker's full history (the
+    market-wide query only reaches recent years; per-ticker queries go back to ~2016)."""
+    if backfill or tickers:
+        return _per_ticker("corporate_actions", tickers or _active(),
+                           lambda vn, t: _upsert_actions(vn.company.actions(t)))
+    from vnmarket import VnMarket
+    with VnMarket() as vn:
+        df = vn.company.actions(None, start=str(date.today() - timedelta(days=days_back)),
+                                end=str(date.today() + timedelta(days=60)))
+    n = _upsert_actions(df)
+    if n == 0:
+        raise RuntimeError("corporate_actions: no rows in the window")
+    return {"rows": n}
+
+
+# ── VNDirect statement items (plans, brokers, insurers) ──────────────────────
+
+def run_vnd_items(sets: tuple[str, ...] = tuple(VND_ITEM_SETS), tickers: list[str] | None = None) -> dict:
+    out = {}
+    for name in sets:
+        models, report_type, sectors = VND_ITEM_SETS[name]
+
+        def one(vn, t, models=models, report_type=report_type):
+            df = vn.finance.items(t, list(models), report_type)
+            rows = [(t, _day(r.fiscal_date), r.report_type or "", int(r.model_type), int(r.item_code), _num(r.value),
+                     None if pd.isna(r.created) else r.created.to_pydatetime(),
+                     None if pd.isna(r.modified) else r.modified.to_pydatetime()) for r in df.itertuples(index=False)]
+            return _executemany("""
+                INSERT INTO vnd_financial_items (ticker, fiscal_date, report_type, model_type, item_code, value, created,
+                    modified) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (ticker, fiscal_date, report_type, model_type, item_code) DO UPDATE SET value=EXCLUDED.value,
+                    created=COALESCE(vnd_financial_items.created, EXCLUDED.created), modified=EXCLUDED.modified,
+                    fetched_at=NOW()""", rows)
+
+        out[name] = _per_ticker(f"vnd_items:{name}", tickers or _active(sectors), one)
+    return out
+
+
+# ── FireAnt structured values (bank loan groups, broker loans) ──────────────
+
+FIREANT_BANK_FIELDS = ("StandardDebt", "WatchlistDebt", "SubstandardDebt", "DoubtfulDebt", "BadDebt", "CustomerLoan",
+                       "DepositOfCustomer", "ProvisionForCustomerLoanLoss", "NPLToLoan", "LoanlossReservesToNPL",
+                       "LoanlossReservesToLoan", "ProvisionChargesToLoan")
+FIREANT_BROKER_FIELDS = ("Loan", "SectorLoan", "ShorttermIssuedBond", "LongtermIssuedBond")
+# FireAnt field → (financial_facts vnstock metric code vn-portfolio reads, sign); portfolio/market_data.py fills the
+# periods vnstock does not have (history before 2024) with these. Checked against vnstock on the 2024–2026 overlap
+# (10 tickers, 50–244 quarter pairs per field, ±1% or ±1 tỷ): equal in 87–100% of pairs, the rest Q4 restatements.
+# Left out: CorporateIncomeTax (11% equal — different definition), GoodWill (0%), StockHolderEquity (bank = capital).
+FIREANT_TO_VNSTOCK = {
+    "NetSale": ("doanh_thu_thuan", 1), "CostOfGoodSold": ("gia_von_hang_ban", -1), "GrossProfit": ("loi_nhuan_gop", 1),
+    "ProfitBeforeTax": ("loi_nhuan_truoc_thue", 1), "ProfitAfterTax": ("loi_nhuan_sau_thue", 1),
+    "ParentCompanyShareholderProfitAfterTax": ("loi_nhuan_cua_co_ong_cua_cong_ty_me", 1),
+    "InterestExpense": ("chi_phi_lai_vay", 1), "OtherProfit": ("thu_nhap_khac_rong", 1),
+    "TotalAsset": ("tong_tai_san", 1), "TotalStockHolderEquity": ("von_chu_so_huu", 1),
+    "ShortTermInterestBearingDebt": ("vay_ngan_han", 1), "LongTermInterestBearingDebt": ("vay_dai_han", 1),
+    "ShortTermAccountReceivable": ("phai_thu_khach_hang", 1), "TotalInventory": ("hang_ton_kho_rong", 1),
+    "CashflowFromOperatingActivity": ("dong_tien_hoat_dong", 1), "PaidInCapital": ("von_dieu_le", 1),
+    "NetInterestIncome": ("thu_nhap_lai_thuan", 1), "TotalOperatingIncome": ("tong_thu_nhap_hoat_ong", 1),
+    "CreditRiskProvisionsExpense": ("trich_lap_du_phong_ton_that_tin_dung", 1),
+    "DepositOfCustomer": ("tien_gui_cua_khach_hang", 1),
+}
+FIREANT_EXTRA = ("Cash", "CashEquivalent", "StockHolderEquity")   # cash = Cash + CashEquivalent (tien_va_tuong_duong_tien)
+
+
+def run_fireant_data(tickers: list[str] | None = None, count: int = 60) -> dict:
+    """FireAnt values per quarter (from 2011) and year → fireant_financial_data (needs a FireAnt token): the mapped
+    statement lines for every ticker, loan groups for banks, loans / issued bonds for brokers."""
+    fields = set(FIREANT_TO_VNSTOCK) | set(FIREANT_EXTRA) | set(FIREANT_BANK_FIELDS) | set(FIREANT_BROKER_FIELDS)
+
+    def one(vn, t):
+        n = 0
+        for period, cnt in (("Q", count), ("Y", count // 4 + 2)):
+            df = vn.finance.data(t, period, cnt)
+            rows = [(t, int(r["year"]), int(r["quarter"]) if period == "Q" else 0, f, _num(r.get(f)))
+                    for _, r in df.iterrows() for f in fields if f in df.columns and _num(r.get(f)) is not None]
+            n += _executemany("""
+                INSERT INTO fireant_financial_data (ticker, year, quarter, field, value) VALUES (%s,%s,%s,%s,%s)
+                ON CONFLICT (ticker, year, quarter, field) DO UPDATE SET value=EXCLUDED.value, fetched_at=NOW()""", rows)
+        return n
+
+    return {"all": _per_ticker("fireant_data", tickers or _active(), one)}
+
+
+def run_fireant_holders(tickers: list[str] | None = None) -> dict:
+    def one(vn, t):
+        df = vn.company.holders(t)
+        rows = [(t, (r.name or "").strip(), "COMPANY" if r.is_organization else "PERSON", r.position or "",
+                 _int(r.shares), None if r.ownership is None or pd.isna(r.ownership) else float(r.ownership) * 100,
+                 _day(r.reported), "fireant") for r in df.itertuples(index=False) if (r.name or "").strip()]
+        return _executemany("""
+            INSERT INTO shareholders (ticker, name, holder_type, role, shares, pct, effective_date, source)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (ticker, source, name, effective_date) DO UPDATE SET holder_type=EXCLUDED.holder_type,
+                role=EXCLUDED.role, shares=EXCLUDED.shares, pct=EXCLUDED.pct, updated_at=NOW()""", rows)
+
+    return _per_ticker("fireant_holders", tickers or _active(), one)
+
+
+# ── commodities ──────────────────────────────────────────────────────────────
+
+def run_commodities(backfill: bool = False) -> dict:
+    import yfinance as yf
+
+    latest = _latest("commodity_daily", "code")
+    out = {}
+    for code, (ticker, unit) in COMMODITIES.items():
+        start = _start(latest, code, backfill, floor=date(2015, 1, 1))
+        try:
+            hist = yf.Ticker(ticker).history(start=str(start), auto_adjust=False)
+        except Exception as exc:
+            out[code] = f"error: {exc!r}"[:120]
+            continue
+        rows = [(code, pd.Timestamp(d).date(), float(c), unit, f"yfinance:{ticker}")
+                for d, c in hist["Close"].dropna().items()] if not hist.empty else []
+        out[code] = _executemany("""
+            INSERT INTO commodity_daily (code, date, close, unit, source) VALUES (%s,%s,%s,%s,%s)
+            ON CONFLICT (code, date) DO UPDATE SET close=EXCLUDED.close, fetched_at=NOW()""", rows)
+    if not any(isinstance(v, int) and v for v in out.values()):
+        raise RuntimeError(f"commodities: nothing written {out}")
+    return out
+
+
+RUNNERS = {
+    "block_trades": lambda a: run_block_trades(a.tickers, a.backfill),
+    "size_indices": lambda a: run_size_indices(a.backfill),
+    "index_valuation": lambda a: run_index_valuation(a.backfill),
+    "foreign_room": lambda a: run_foreign_room(a.tickers, a.backfill),
+    "shareholders": lambda a: run_shareholders(a.tickers),
+    "corporate_actions": lambda a: run_corporate_actions(a.tickers, a.backfill),
+    "vnd_items": lambda a: run_vnd_items(tickers=a.tickers),
+    "commodities": lambda a: run_commodities(a.backfill),
+    "fireant_data": lambda a: run_fireant_data(a.tickers),
+    "price_history": lambda a: run_price_history(a.tickers),
+    "former_hose": lambda a: run_former_hose(),
+    "board_close": lambda a: run_board_close(),
+    "yield_curve": lambda a: run_yield_curve(a.backfill),
+    "fireant_holders": lambda a: run_fireant_holders(a.tickers),
+}
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Rule-engine datasets -> Postgres")
+    ap.add_argument("dataset", choices=sorted(RUNNERS))
+    ap.add_argument("--tickers", default="")
+    ap.add_argument("--backfill", action="store_true")
+    a = ap.parse_args()
+    a.tickers = [t.strip().upper() for t in a.tickers.split(",") if t.strip()] or None
+    print(RUNNERS[a.dataset](a))
+
+
+if __name__ == "__main__":
+    main()
