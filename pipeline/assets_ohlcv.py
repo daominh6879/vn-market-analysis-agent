@@ -49,6 +49,7 @@ def _load_hose_tickers_from_db() -> list[str]:
 class OhlcvIngestConfig(Config):
     days_back: int = 5      # incremental default; use 365 for full historical backfill
     tickers: str = ""       # override list (comma-separated); empty = HOSE universe from DB
+    backfill: bool = False  # fetch the full days_back window even when the ticker already has rows (default: since latest)
 
 
 @asset(
@@ -90,7 +91,7 @@ def ohlcv_daily_ingest(context: AssetExecutionContext, config: OhlcvIngestConfig
     for ticker in ticker_list:
         context.log.info(f"Fetching OHLCV: {ticker} ({config.days_back}d)")
         try:
-            result = fetch_and_upsert(ticker, days=config.days_back)
+            result = fetch_and_upsert(ticker, days=config.days_back, backfill=config.backfill)
             n = result["ohlcv"]
             total_rows += n
             context.log.info(f"  {ticker}: ohlcv={n} foreign={result['foreign']}")

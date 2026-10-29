@@ -34,7 +34,7 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio:latest
+    image: pgsty/minio:latest  # minio/minio removed from Docker Hub; community drop-in fork
     container_name: minio
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}

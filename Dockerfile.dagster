@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends libglib2.0-0 te
 # rapidocr depends on the GUI build of OpenCV (needs libGL, absent from python:slim); the headless build replaces it
 RUN pip install --no-cache-dir rapidocr \
  && pip install --no-cache-dir --force-reinstall --no-deps opencv-python-headless
-# dagster-postgres storage connects through psycopg 3 (the app code uses psycopg2-binary)
+# dagster-postgres storage is pinned to psycopg2 via `scheme` in infra/dagster/dagster.yaml (psycopg3 breaks the webserver)
 COPY . .
 ENV PYTHONPATH=/app/vendor DAGSTER_HOME=/opt/dagster/home
 # env comes from compose env_file; a copied .env would be loaded by the dagster CLI over it (host DAGSTER_HOME, localhost hosts)

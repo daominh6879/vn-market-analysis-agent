@@ -8,6 +8,9 @@ storage:
       hostname: {env: POSTGRES_HOST}
       db_name: dagster
       port: 5432
+      # psycopg2, not SQLAlchemy 2.1's psycopg3 default: dagster-postgres's webserver hook does `with conn:`,
+      # which closes a psycopg3 connection -> every webserver query fails "the connection is closed".
+      scheme: postgresql+psycopg2
 
 # A run whose process died stays STARTED forever (seen 21/10: c5e40587). Fail runs stuck starting or running too long,
 # so data_freshness_sensor can launch a new one.

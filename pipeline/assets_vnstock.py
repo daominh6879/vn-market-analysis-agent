@@ -179,6 +179,8 @@ def vnstock_ratios(context: AssetExecutionContext) -> dict:
     if failed:
         context.log.warning(f"vnstock_ratios: {len(failed)} failed: {failed}")
     context.log.info(f"vnstock_ratios done: {upserted}/{len(ticker_list)} upserted")
+    if ticker_list and upserted == 0:
+        raise RuntimeError(f"vnstock_ratios: 0 upserted for {len(ticker_list)} tickers; failed={failed[:10]}")
     return {"upserted": upserted, "failed": failed}
 
 
