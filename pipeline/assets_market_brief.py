@@ -80,10 +80,9 @@ def corporate_events_ingest(
     context: AssetExecutionContext,
     config: CorporateEventsConfig,
 ) -> dict:
-    from data.corporate_events_scraper import cleanup_old_events, scrape_events, upsert_events
+    from data.corporate_events_scraper import scrape_events, upsert_events
 
-    deleted = cleanup_old_events(days_keep=30)
-    context.log.info(f"corporate_events_ingest: cleaned {deleted} old rows")
+    deleted = 0                 # past events are kept: vn-portfolio's rule engine reads them point-in-time
 
     start = date.today() - timedelta(days=config.days_back)
     end = date.today() + timedelta(days=config.days_ahead)

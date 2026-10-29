@@ -34,7 +34,7 @@ def _dedupe(sig: pd.DataFrame, calendar: pd.DatetimeIndex) -> pd.DataFrame:
         keep.append(ok)
         if ok:
             last[t] = p
-    return sig[keep]
+    return sig.loc[keep]           # not sig[keep]: an empty list there selects zero columns, dropping "date"
 
 
 def _summarise(part: pd.DataFrame, prefix: str) -> dict:

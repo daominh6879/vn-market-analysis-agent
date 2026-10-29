@@ -30,8 +30,9 @@ from dagster import (
 )
 
 from pipeline.assets_bctc import bctc_sync_job
-from pipeline.assets_index import market_index_ingest_job
+from pipeline.assets_index import global_quotes_job, market_index_ingest_job
 from pipeline.assets_market_brief import corporate_events_job, foreign_flows_job
+from pipeline.assets_disclosures import insider_deals_job, insider_trades_job, news_scored_job
 from pipeline.assets_ohlcv import ohlcv_ingest_job
 from pipeline.assets_benchmark import benchmark_ingest_job
 from pipeline.assets_proprietary import breakout_signals_job, proprietary_flows_job
@@ -250,11 +251,11 @@ _BOOTSTRAP_CHECKS: list[tuple[str, str, str]] = [
     ("stock_dividends_job",
      f"SELECT (SELECT count(DISTINCT ticker) FROM dividends) < 0.3 * {_ACTIVE}",   # not every ticker pays; 30% is a floor
      "dividends"),
-    ("ratio_history_job", _tickers_below_coverage("financial_facts WHERE metric_code LIKE 'ratio\_%'"), "ratio_history"),
+    ("ratio_history_job", _tickers_below_coverage(r"financial_facts WHERE metric_code LIKE 'ratio\_%'"), "ratio_history"),
     ("financials_quarterly_job",
      _tickers_below_coverage("financial_facts WHERE period ~ '^Q[1-4]/[0-9]{4}$'"), "quarterly"),
     ("vnstock_financials_job",
-     _tickers_below_coverage("financial_facts WHERE period ~ '^[0-9]{4}$' AND metric_code NOT LIKE 'ratio\_%'"),
+     _tickers_below_coverage(r"financial_facts WHERE period ~ '^[0-9]{4}$' AND metric_code NOT LIKE 'ratio\_%'"),
      "annual_financials"),
     ("vnstock_ratios_job", _tickers_below_coverage("stock_ratios WHERE true"), "stock_ratios"),
     ("daily_snapshots_job", "SELECT NOT EXISTS (SELECT 1 FROM daily_snapshots)", "snapshots"),
@@ -262,20 +263,38 @@ _BOOTSTRAP_CHECKS: list[tuple[str, str, str]] = [
     ("proprietary_flows_job", _tickers_below_coverage("proprietary_flows WHERE true"), "proprietary_flows"),
     ("breakout_signals_job",
      "SELECT EXISTS (SELECT 1 FROM proprietary_flows) AND NOT EXISTS (SELECT 1 FROM breakout_signals)", "breakout_signals"),
+    # depth, not freshness: a short run landing first (5-day default) leaves recent rows that data_freshness_sensor
+    # counts as fresh, so the 1-year history the signals need would never be loaded
+    ("ohlcv_ingest_job", "SELECT (SELECT count(DISTINCT date) FROM ohlcv_daily WHERE date >= CURRENT_DATE - 365) < 200",
+     "ohlcv_history"),
+    ("global_quotes_job", "SELECT NOT EXISTS (SELECT 1 FROM market_quotes)", "global_quotes"),
     # documents has no ticker column; not every ticker has an annual BCTC on CafeF, so 50% is a floor
     ("bctc_sync_job",
      f"SELECT (SELECT count(*) FROM documents WHERE status = 'active' AND collection = 'bctc_structural') < 0.5 * {_ACTIVE}",
      "bctc"),
     ("benchmark_ingest_job",
      "SELECT (SELECT count(*) FROM benchmark_daily WHERE date >= CURRENT_DATE - 365) < 200", "benchmark"),
+    # vn-portfolio's rule engine news rules (khung v2.2): a year of history for its backtest
+    ("insider_trades_job", "SELECT NOT EXISTS (SELECT 1 FROM insider_trades)", "insider_trades"),
+    ("insider_deals_job", "SELECT NOT EXISTS (SELECT 1 FROM insider_deals)", "insider_deals"),
+    ("news_scored_job",
+     "SELECT (SELECT count(*) FROM news_impact_scores s JOIN news_articles a ON a.id = s.article_id "
+     "WHERE s.kind = 'ticker' AND a.published_at >= CURRENT_DATE - 365) < 0.5 * (SELECT count(*) "
+     "FROM news_articles a, unnest(a.tickers) t WHERE a.published_at >= CURRENT_DATE - 365)", "news_scores"),
 ]
+_BOOTSTRAP_RUN_CONFIG: dict[str, dict] = {
+    "ohlcv_history": {"ops": {"ohlcv_daily_ingest": {"config": {"days_back": 365, "backfill": True}}}},
+    "insider_trades": {"ops": {"insider_trades_ingest": {"config": {"days_back": 400}}}},
+    "insider_deals": {"ops": {"insider_deals_ingest": {"config": {"days_back": 400}}}},
+    "news_scores": {"ops": {"news_scored": {"config": {"days_back": 400}}}},
+}
 
 
 @sensor(
     jobs=[securities_shares_job, stock_dividends_job, ratio_history_job, financials_quarterly_job, daily_snapshots_job,
           vnstock_financials_job, vnstock_ratios_job, corporate_events_job,
-          proprietary_flows_job, breakout_signals_job, bctc_sync_job,
-          benchmark_ingest_job],
+          proprietary_flows_job, breakout_signals_job, ohlcv_ingest_job, global_quotes_job, bctc_sync_job,
+          benchmark_ingest_job, insider_trades_job, news_scored_job, insider_deals_job],
     name="data_bootstrap_sensor",
     minimum_interval_seconds=600,
     default_status=DefaultSensorStatus.RUNNING,
@@ -293,6 +312,7 @@ def data_bootstrap_sensor(context):
                     cur.execute(sql)
                     if cur.fetchone()[0]:
                         requests.append(RunRequest(run_key=f"bootstrap-{label}-{today}", job_name=job_name,
+                                                   run_config=_BOOTSTRAP_RUN_CONFIG.get(label, {}),
                                                    tags={"bootstrap": label}))
     except (Exception, SystemExit) as exc:
         return SkipReason(f"bootstrap check failed: {exc}")

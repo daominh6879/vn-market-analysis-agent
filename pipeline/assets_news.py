@@ -6,7 +6,8 @@ Assets:
   fireant_news      — FireAnt API type=1 posts per TICKERS → upsert news_articles (every 6h)
   cafef_ticker_news — CafeF search per TICKERS → upsert news_articles (every 6h)
   news_indexed      — embed unindexed articles → upsert news_chunks (after news_raw)
-  news_purge        — delete articles + Qdrant points older than 90 days (weekly)
+  news_purge        — delete Qdrant points older than 90 days (weekly); Postgres rows are kept as the
+                      point-in-time news history of vn-portfolio's rule engine (/advisor/news-facts, its backtest)
 """
 import hashlib
 import os
@@ -169,22 +170,11 @@ def news_indexed(context: AssetExecutionContext) -> dict:
 
 @asset(
     group_name="news",
-    description="Purge news_articles and Qdrant points older than 90 days.",
+    description="Purge Qdrant news points older than 90 days (news_articles rows are kept: rule-engine history).",
 )
 def news_purge(context: AssetExecutionContext) -> dict:
-    from core.db import get_conn
     from rag.news_index import purge_old_articles_qdrant
 
     qdrant_deleted = purge_old_articles_qdrant(days_to_keep=90)
-
-    pg_deleted = 0
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "DELETE FROM news_articles WHERE published_at < NOW() - INTERVAL '90 days'"
-            )
-            pg_deleted = cur.rowcount
-        conn.commit()
-
-    context.log.info(f"news_purge: pg={pg_deleted} qdrant={qdrant_deleted}")
-    return {"postgres_deleted": pg_deleted, "qdrant_deleted": qdrant_deleted}
+    context.log.info(f"news_purge: qdrant={qdrant_deleted} (news_articles kept)")
+    return {"postgres_deleted": 0, "qdrant_deleted": qdrant_deleted}

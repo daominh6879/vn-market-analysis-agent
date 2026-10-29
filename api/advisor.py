@@ -101,6 +101,19 @@ def market_data(body: MarketDataIn):
     return dump(body.metrics, body.since)
 
 
+class NewsFactsIn(BaseModel):
+    since: date | None = None
+    tickers: list[str] | None = None     # None = every ticker
+
+
+@router.post("/news-facts")
+def news_facts(body: NewsFactsIn):
+    """Articles (with tagged tickers), their LLM impact scores and insider-trade notices for vn-portfolio's rule
+    engine news rules (read-only dump; the caller classifies and applies point-in-time cutoffs)."""
+    from portfolio.news_facts import news_facts as dump
+    return dump(body.since, body.tickers)
+
+
 @router.post("/freshness")
 def data_freshness():
     """{expected_session, fresh, datasets, problems, checked_at} — polled by vn-portfolio to alert on stale data."""

@@ -25,6 +25,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -173,11 +174,12 @@ def setup_minio_and_upload(dry: bool) -> bool:
     try:
         from minio import Minio
         from core.config import settings
+        endpoint = os.getenv("MINIO_ENDPOINT", "http://localhost:9000")  # compose sets http://minio:9000
         client = Minio(
-            "localhost:9000",
+            endpoint.replace("http://", "").replace("https://", ""),
             access_key=settings.MINIO_ROOT_USER,
             secret_key=settings.MINIO_ROOT_PASSWORD,
-            secure=False,
+            secure=endpoint.startswith("https://"),
         )
         if client.bucket_exists(MINIO_BUCKET):
             print(f"  bucket '{MINIO_BUCKET}' already exists")

@@ -415,14 +415,20 @@ def _run_sensor(empty_flags):
 
 
 def test_bootstrap_sensor_requests_only_empty_datasets():
-    out = _run_sensor([True, False, True, False, False, True, False, False, False, False])
+    out = _run_sensor([True, False, True, False, False, True, False, False, False, False, False, False])
     assert sorted(r.job_name for r in out) == ["ratio_history_job", "securities_shares_job", "vnstock_ratios_job"]
     assert all(r.run_key.endswith(date.today().isoformat()) for r in out)   # one retry per day
 
 
+def test_bootstrap_sensor_backfills_a_year_of_ohlcv_when_history_is_shallow():
+    out = _run_sensor([False] * 10 + [True, False])
+    assert [r.job_name for r in out] == ["ohlcv_ingest_job"]
+    assert out[0].run_config["ops"]["ohlcv_daily_ingest"]["config"] == {"days_back": 365, "backfill": True}
+
+
 def test_bootstrap_sensor_skips_when_everything_populated():
     from dagster import SkipReason
-    assert isinstance(_run_sensor([False] * 10), SkipReason)
+    assert isinstance(_run_sensor([False] * 12), SkipReason)
 
 
 def test_data_jobs_cover_all_active_securities_not_index_labels():
