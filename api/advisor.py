@@ -89,6 +89,18 @@ def market_stats(body: TickersIn):
     return evidence.market_stats(body.tickers)
 
 
+class MarketDataIn(BaseModel):
+    metrics: list[str] | None = None     # financial_facts metric codes (None = all)
+    since: date | None = None
+
+
+@router.post("/market-data")
+def market_data(body: MarketDataIn):
+    """Full price / index / financial / flow history for vn-portfolio's rule engine (read-only dump)."""
+    from portfolio.market_data import market_data as dump
+    return dump(body.metrics, body.since)
+
+
 @router.post("/freshness")
 def data_freshness():
     """{expected_session, fresh, datasets, problems, checked_at} — polled by vn-portfolio to alert on stale data."""
