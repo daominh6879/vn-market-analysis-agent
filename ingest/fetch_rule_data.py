@@ -27,7 +27,8 @@ import argparse
 import re
 import sys
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from datetime import time as dtime
 from pathlib import Path
 
 import pandas as pd
@@ -1031,7 +1032,58 @@ def run_etf_baskets(backfill: bool = False) -> dict:
     n = _executemany("""INSERT INTO etf_holdings (fund, as_of, kind, ticker, weight, shares, source, quote)
                         VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (fund, as_of, kind, ticker) DO UPDATE SET
                         weight=EXCLUDED.weight, shares=EXCLUDED.shares, fetched_at=NOW()""", rows)
-    return {"rows": n, "empty_days": empty}
+    return {"rows": n, "empty_days": empty, "index_events": derive_index_events()}
+
+
+# ── index reviews from compositions ──────────────────────────────────────────
+
+ETF_INDEX = {"FUESSV30": "VN30", "FUESSVFL": "VNFINLEAD", "FUESSV50": "VNX50"}   # SSIAM ETFs replicate these
+TRANSIENT_DAYS = 14          # a change undone within this many days is a basket glitch, not a review
+
+
+def composition_events(snapshots: list[tuple[date, set[str]]], transient_days: int = TRANSIENT_DAYS) -> list[tuple]:
+    """(ticker, action, effective_date) from consecutive compositions [(date, tickers)] of one index: tickers that
+    appear are 'add', that disappear 'remove', effective the first date of the new composition. A change reversed
+    within transient_days (FUESSV50 07/2025: 5 banks added, removed a week later) is dropped. Pure."""
+    snaps = sorted(snapshots)
+    raw = []
+    for (d0, a), (d1, b) in zip(snaps, snaps[1:]):
+        raw += [(t, "add", d1) for t in sorted(b - a)] + [(t, "remove", d1) for t in sorted(a - b)]
+    out = []
+    for t, act, d in raw:
+        undo = "remove" if act == "add" else "add"
+        if any(t2 == t and a2 == undo and abs((d2 - d).days) <= transient_days for t2, a2, d2 in raw):
+            continue
+        out.append((t, act, d))
+    return out
+
+
+def derive_index_events() -> int:
+    """Index reviews as they took effect: ETF creation baskets (from 08/2022, weekly) and SSI index membership (daily,
+    from 29/10/2026) → index_membership_events (source etf_basket:<fund> / ssi_membership). CafeF articles cover too
+    little (none for 2025–2026 reviews; vn-portfolio data audit 30/10/2026); an article row keeps its earlier
+    announcement and quote (ON CONFLICT DO NOTHING). announced_at = the effective date (conservative)."""
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo("Asia/Ho_Chi_Minh")
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT fund, as_of, array_agg(ticker) FROM etf_holdings WHERE kind = 'basket' GROUP BY 1, 2")
+        baskets = cur.fetchall()
+        cur.execute("SELECT index_code, date, array_agg(ticker) FROM index_membership GROUP BY 1, 2")
+        members = cur.fetchall()
+    series: dict[tuple[str, str], list] = {}
+    for fund, d, ts in baskets:
+        if fund in ETF_INDEX:
+            series.setdefault((ETF_INDEX[fund], f"etf_basket:{fund}"), []).append((d, set(ts)))
+    for idx, d, ts in members:
+        series.setdefault((idx, "ssi_membership"), []).append((d, set(ts)))
+    rows = []
+    for (idx, src), snaps in series.items():
+        for t, act, d in composition_events(snaps):
+            rows.append((idx, t, act, d, datetime.combine(d, dtime(8, 0), tz), src,
+                         f"{src}: {t} {'vào' if act == 'add' else 'ra khỏi'} rổ từ {d:%d/%m/%Y}"))
+    return _executemany("""INSERT INTO index_membership_events (index_code, ticker, action, effective_date, announced_at,
+                           source, quote, model) VALUES (%s,%s,%s,%s,%s,%s,%s,NULL)
+                           ON CONFLICT (index_code, ticker, action, effective_date) DO NOTHING""", rows)
 
 
 # ── broker research list (Simplize) ──────────────────────────────────────────

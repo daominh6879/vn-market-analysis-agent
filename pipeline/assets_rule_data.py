@@ -50,6 +50,10 @@ class BackfillConfig(Config):
     backfill: bool = False      # True refetches the full history (the bootstrap sensor sets it on an empty table)
 
 
+class WebFactsConfig(Config):
+    days_back: int = 10         # sitemaps walked back from today (a wider filter is re-run with a larger window)
+
+
 def _log(context: AssetExecutionContext, name: str, result: dict) -> dict:
     context.log.info(f"{name}: {result}")
     return {k: (v if isinstance(v, (int, float, str)) else str(v)[:200]) for k, v in result.items()}
@@ -208,9 +212,10 @@ def etf_baskets_ingest(context: AssetExecutionContext, config: BackfillConfig) -
 
 @asset(group_name="rule_data", retry_policy=_RETRY,
        description="CafeF sitemap articles → LLM reads SBV interbank rates and HOSE index review changes, quoted and date-checked.")
-def web_facts_extract(context: AssetExecutionContext) -> dict:
+def web_facts_extract(context: AssetExecutionContext, config: WebFactsConfig) -> dict:
+    from datetime import date, timedelta
     from ingest.web_facts import run
-    return _log(context, "web_facts", run())
+    return _log(context, "web_facts", run(date.today() - timedelta(days=config.days_back)))
 
 
 block_trades_job = define_asset_job("block_trades_job", selection=[block_trades_ingest])

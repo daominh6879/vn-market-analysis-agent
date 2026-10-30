@@ -37,7 +37,12 @@ SITEMAP_INDEX = "https://cafef.vn/sitemap.xml"
 FETCH_PAUSE = 1.0                                   # seconds between requests to cafef.vn
 TZ = "Asia/Ho_Chi_Minh"
 TOPICS = {
-    "interbank": re.compile(r"lien-ngan-hang|qua-dem"),
+    # money-market articles: "liên ngân hàng", "lãi suất qua đêm", "thị trường 2", OMO / tín phiếu, NHNN bơm / hút
+    # (vn-portfolio audit 30/10/2026: the old filter missed "lai-suat-thi-truong-2-giam-sau-ngan-hang-nha-nuoc-hut-ve…"
+    # and read lifestyle stories about leaving things "qua đêm")
+    "interbank": re.compile(r"lien-ngan-hang|lai-suat-qua-dem|thi-truong-2|thi-truong-tien-te|tin-phieu|kenh-cam-co|"
+                            r"(ngan-hang-nha-nuoc|nhnn)-(bom|hut|rut|tiep-tuc-bom|tiep-tuc-hut)|(bom|hut)-rong|"
+                            r"thanh-khoan-(he-thong|ngan-hang|lien-ngan-hang)"),
     "index_review": re.compile(r"(?=.*(vn30|vn100|vndiamond|vnfin|vnmid|vnsml|vnx50|ro-chi-so|chi-so-vn))"
                                r"(?=.*(co-cau|review|loai|them|bo-sung|thay-doi|ra-khoi|vao-ro))"),
 }
