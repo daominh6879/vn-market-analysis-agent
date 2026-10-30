@@ -168,7 +168,7 @@ def _calendar(cur) -> list[date]:
 
 
 def reference(tickers: list[str], as_of: date | None = None) -> dict:
-    """Market reference data for a ledger kept elsewhere: last close (VND), exchange, sector, trading calendar, and
+    """Market reference data for a ledger kept elsewhere: last close (VND) and its date, exchange, sector, trading calendar, and
     the VNINDEX close on/before as_of (benchmark for vn-portfolio's advice outcomes), and the closes (VND) of the
     buy-and-hold benchmark ETFs on/before as_of (benchmark_daily; live-criteria condition 4)."""
     from core.db import get_conn
@@ -178,12 +178,15 @@ def reference(tickers: list[str], as_of: date | None = None) -> dict:
         with conn.cursor() as cur:
             calendar = _calendar(cur)
             prices: dict[str, float] = {}
+            price_dates: dict[str, str] = {}
             meta: dict[str, tuple[str, str]] = {}
             if tickers:
                 cur.execute(
-                    "SELECT DISTINCT ON (ticker) ticker, close FROM ohlcv_daily "
+                    "SELECT DISTINCT ON (ticker) ticker, close, date FROM ohlcv_daily "
                     "WHERE ticker = ANY(%s) AND date <= %s ORDER BY ticker, date DESC", (tickers, as_of))
-                prices = {t: float(c) * _PRICE_UNIT for t, c in cur.fetchall()}
+                rows = cur.fetchall()
+                prices = {t: float(c) * _PRICE_UNIT for t, c, _ in rows}
+                price_dates = {t: d.isoformat() for t, _, d in rows}
                 cur.execute("SELECT ticker, exchange, sector FROM securities WHERE ticker = ANY(%s)", (tickers,))
                 meta = {t: (e, s) for t, e, s in cur.fetchall()}
             cur.execute("SELECT close FROM market_index_daily WHERE index_code = 'VNINDEX' AND date <= %s "
@@ -195,6 +198,7 @@ def reference(tickers: list[str], as_of: date | None = None) -> dict:
     return {
         "known": sorted(meta),
         "prices": prices,
+        "price_dates": price_dates,                     # session of each close: callers detect an unloaded day
         "exchanges": {t: e for t, (e, _) in meta.items()},
         "sectors": {t: s for t, (_, s) in meta.items()},
         "calendar": [d.isoformat() for d in calendar if d <= as_of],
