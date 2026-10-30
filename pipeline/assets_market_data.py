@@ -242,6 +242,7 @@ daily_snapshots_schedule = _schedule(daily_snapshots_job, "0 9,18 * * *", "daily
 
 _COVERAGE_MIN = 0.8   # a dataset covering fewer than 80% of active securities is treated as incomplete
 _ACTIVE = "(SELECT count(*) FROM securities WHERE is_active)"
+_UNKNOWN_SECTOR_MAX = 0.02   # more active securities without a sector than this re-runs the securities job
 
 
 def _tickers_below_coverage(table_filter: str) -> str:
@@ -252,8 +253,11 @@ def _tickers_below_coverage(table_filter: str) -> str:
 
 _BOOTSTRAP_CHECKS: list[tuple[str, str, str]] = [
     # (job name, SQL returning true when the dataset is empty or under-covered, label)
+    # sectors too: 128 active rows kept sector 'Unknown' from 26/10/2026 while the cache had them (vn-portfolio audit)
     ("securities_shares_job",
-     f"SELECT (SELECT count(*) FROM securities WHERE is_active AND listed_shares > 0) < {_COVERAGE_MIN} * {_ACTIVE}",
+     f"SELECT (SELECT count(*) FROM securities WHERE is_active AND listed_shares > 0) < {_COVERAGE_MIN} * {_ACTIVE} "
+     f"OR (SELECT count(*) FROM securities WHERE is_active AND coalesce(sector, 'Unknown') IN ('Unknown', '')) "
+     f"> {_UNKNOWN_SECTOR_MAX} * {_ACTIVE}",
      "listed_shares"),
     ("stock_dividends_job",
      f"SELECT (SELECT count(DISTINCT ticker) FROM dividends) < 0.3 * {_ACTIVE}",   # not every ticker pays; 30% is a floor
@@ -290,6 +294,9 @@ _BOOTSTRAP_CHECKS: list[tuple[str, str, str]] = [
      "FROM news_articles a, unnest(a.tickers) t WHERE a.published_at >= CURRENT_DATE - 365)", "news_scores"),
     # vn-portfolio rule engine datasets (pipeline/assets_rule_data.py): full history on an empty / under-covered table
     ("block_trades_job", _tickers_below_coverage("block_trades WHERE true"), "block_trades"),
+    # 057: exchange of each session — rows stored before it have NULL; a full refetch fills them
+    ("block_trades_job", "SELECT (SELECT count(*) FROM block_trades WHERE exchange IS NULL) > "
+     "0.05 * (SELECT count(*) FROM block_trades)", "block_trades_exchange"),
     ("index_data_job", "SELECT NOT EXISTS (SELECT 1 FROM index_valuation) OR NOT EXISTS "
      "(SELECT 1 FROM market_index_daily WHERE index_code = 'VNMID')", "index_data"),
     ("foreign_room_job", _tickers_below_coverage("foreign_room WHERE true"), "foreign_room"),
@@ -314,6 +321,7 @@ _BOOTSTRAP_RUN_CONFIG: dict[str, dict] = {
     "insider_deals": {"ops": {"insider_deals_ingest": {"config": {"days_back": 400}}}},
     "news_scores": {"ops": {"news_scored": {"config": {"days_back": 400}}}},
     "block_trades": {"ops": {"block_trades_ingest": {"config": {"backfill": True}}}},
+    "block_trades_exchange": {"ops": {"block_trades_ingest": {"config": {"backfill": True}}}},
     "index_data": {"ops": {"size_indices_ingest": {"config": {"backfill": True}},
                            "index_valuation_ingest": {"config": {"backfill": True}}}},
     "foreign_room": {"ops": {"foreign_room_ingest": {"config": {"backfill": True}}}},

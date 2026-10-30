@@ -134,17 +134,23 @@ def _per_ticker(name: str, tickers: list[str], fn) -> dict:
 
 # ── block trades ─────────────────────────────────────────────────────────────
 
+SESSION_EXCHANGE = {"HSX": "HOSE", "HOSE": "HOSE", "HNX": "HNX", "UPCOM": "UPCOM"}   # VNDirect `floor` of a session
+
+
 def run_block_trades(tickers: list[str] | None = None, backfill: bool = False) -> dict:
     latest = _latest("block_trades", "ticker")
 
     def one(vn, t):
         df = vn.market.daily(t, start=str(_start(latest, t, backfill)))
         rows = [(t, _day(r.date), _int(r.pt_volume) or 0, _num(r.pt_value) or 0.0, _int(r.nm_volume) or 0,
-                 _num(r.nm_value) or 0.0) for r in df.itertuples(index=False)]
+                 _num(r.nm_value) or 0.0, SESSION_EXCHANGE.get(getattr(r, "exchange", None)))
+                for r in df.itertuples(index=False)]
         return _executemany("""
-            INSERT INTO block_trades (ticker, date, pt_volume, pt_value, nm_volume, nm_value) VALUES (%s,%s,%s,%s,%s,%s)
+            INSERT INTO block_trades (ticker, date, pt_volume, pt_value, nm_volume, nm_value, exchange)
+            VALUES (%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (ticker, date) DO UPDATE SET pt_volume=EXCLUDED.pt_volume, pt_value=EXCLUDED.pt_value,
-                nm_volume=EXCLUDED.nm_volume, nm_value=EXCLUDED.nm_value, fetched_at=NOW()""", rows)
+                nm_volume=EXCLUDED.nm_volume, nm_value=EXCLUDED.nm_value,
+                exchange=COALESCE(EXCLUDED.exchange, block_trades.exchange), fetched_at=NOW()""", rows)
 
     return _per_ticker("block_trades", tickers or _active(), one)
 

@@ -63,6 +63,12 @@ def _extras(cur, since: date | None) -> dict:
     out["block_trades"] = defaultdict(list)
     for t, d, pv, pval, nv, nval in bt:
         out["block_trades"][t].append([_iso(d), int(pv or 0), _f(pval), int(nv or 0), _f(nval)])
+    # exchange periods (057): first session on each exchange, all history — the price band of every past session
+    out["exchange_periods"] = defaultdict(list)
+    for t, d, ex in _rows(cur, "SELECT ticker, date, exchange FROM (SELECT ticker, date, exchange, lag(exchange) OVER "
+                               "(PARTITION BY ticker ORDER BY date) AS prev FROM block_trades WHERE exchange IS NOT NULL) x "
+                               "WHERE prev IS DISTINCT FROM exchange ORDER BY ticker, date", {}):
+        out["exchange_periods"][t].append([_iso(d), ex])
     out["index_valuation"] = defaultdict(list)
     for code, d, pe, pb in _rows(cur, "SELECT index_code, date, pe, pb FROM index_valuation ORDER BY index_code, date", {}):
         out["index_valuation"][code].append([_iso(d), _f(pe), _f(pb)])
