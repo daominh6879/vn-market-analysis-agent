@@ -49,7 +49,7 @@ INSURER_LINES = (
     (1, r"^\d+\.\s*đầu tư (khác )?(vào|góp vốn vào) (công cụ vốn|đơn vị khác)$", "ins_equity_other"),
     (1, r"^\d+\.\s*đầu tư vào công ty (liên kết|liên doanh)", "ins_associates"),
 )
-EXTRA_DAYS = 400          # block trades / foreign room: one year of history is what the rules look back on
+EXTRA_DAYS = 400          # foreign room / board close: one year of history is what the rules look back on
 
 
 def _extras(cur, since: date | None) -> dict:
@@ -58,8 +58,10 @@ def _extras(cur, since: date | None) -> dict:
     from datetime import timedelta
     recent = {"recent": max(since or date(1900, 1, 1), date.today() - timedelta(days=EXTRA_DAYS))}
     out: dict = {}
+    # block trades from `since` like the daily series: backtests filter foreign put-throughs (3.3, 7.1/7.4) and score
+    # 12.4 on every past session, not only the last EXTRA_DAYS (vn-portfolio I-033)
     bt = _rows(cur, "SELECT ticker, date, pt_volume, pt_value, nm_volume, nm_value FROM block_trades "
-                    "WHERE date >= %(recent)s ORDER BY ticker, date", recent)
+                    "WHERE date >= %(since)s ORDER BY ticker, date", {"since": since or date(1900, 1, 1)})
     out["block_trades"] = defaultdict(list)
     for t, d, pv, pval, nv, nval in bt:
         out["block_trades"][t].append([_iso(d), int(pv or 0), _f(pval), int(nv or 0), _f(nval)])
