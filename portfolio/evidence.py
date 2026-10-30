@@ -108,9 +108,9 @@ def save_scores(conn, scores: dict[tuple[str, int], dict], kinds: dict[tuple[str
     with conn.cursor() as cur:
         cur.executemany(
             "INSERT INTO news_impact_scores (article_id, ticker, kind, channel, score, direction, magnitude, impact, "
-            "model, origin) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+            "labels, model, origin) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
             [(i, t, *kinds.get((t, i), ("ticker", None)), s["score"], s["direction"], s["magnitude"], s["impact"],
-              model, origin) for (t, i), s in scores.items()])
+              s.get("labels"), model, origin) for (t, i), s in scores.items()])
     conn.commit()
 
 

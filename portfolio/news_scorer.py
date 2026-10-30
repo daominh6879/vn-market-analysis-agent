@@ -7,7 +7,9 @@ news_relevance matches titles on keywords, so its sector / related pools hold an
 - score: 3 = direct, material impact on this company; 2 = real but indirect or small; 1 = loosely related; 0 = none;
 - direction: 1 positive / -1 negative / 0 neutral or unclear, for this company;
 - magnitude: 1 small / 2 medium / 3 large;
-- impact: one line naming the channel and the direction.
+- impact: one line naming the channel and the direction;
+- labels: the events the article reports about this company, from LABELS (vn-portfolio's rule engine reads them,
+  news.yaml llm_labels; anything else is dropped).
 Sector / related articles scoring >= SCORE_MIN are kept, best first, KEEP_PER_GROUP per group. Ticker news is scored
 too (direction, for the advisor and the event study) but never dropped.
 
@@ -29,7 +31,21 @@ MAX_OUTPUT_TOKENS = 8000
 BATCH_PAIRS = 40                 # pairs per LLM call: ~120 pairs in one call overran the output and the JSON was cut
 WORKERS = 4
 IMPACT_CHARS = 200
-SCORE_FIELDS = ("score", "direction", "magnitude", "impact")
+SCORE_FIELDS = ("score", "direction", "magnitude", "impact", "labels")
+LABELS = {                       # code → what it means; keys must match vn-portfolio config/news.yaml llm_labels.map
+    "legal_case": "lãnh đạo / cổ đông lớn / chính doanh nghiệp bị khởi tố, bắt, truy tố, thu hồi giấy phép",
+    "forced_sale_named": "cổ phiếu của một người / tổ chức cụ thể bị bán giải chấp",
+    "bond_default": "doanh nghiệp chậm / không trả lãi hoặc gốc trái phiếu của chính mình",
+    "leadership_exit_sudden": "chủ tịch / tổng giám đốc rời đi đột ngột (không phải phó TGĐ, không phải theo kế hoạch)",
+    "leadership_exit_planned": "chủ tịch / TGĐ thay theo kế hoạch: hết nhiệm kỳ, nghỉ hưu, bàn giao đã công bố",
+    "late_disclosure": "doanh nghiệp bị nhắc nhở / xử phạt vì chậm hoặc không công bố thông tin",
+    "rumor": "tin đồn chưa xác thực, \"room kín\", hô hào mua",
+    "material_event": "sự kiện đủ lớn để giải thích biến động giá: KQKD, M&A, cổ tức lớn, hợp đồng lớn",
+    "financial_report_filing": "chính bản công bố BCTC (không phải giải trình, không phải chọn kiểm toán)",
+    "auditor_change": "thay đơn vị kiểm toán",
+    "audit_gap": "chênh lệch lợi nhuận trước – sau kiểm toán / soát xét",
+    "audit_gap_loss": "chênh lệch kiểm toán làm lãi thành lỗ",
+}
 
 _SYSTEM = (
     "Bạn là chuyên viên phân tích ngành chứng khoán Việt Nam. Với mỗi cặp (mã, tin) được đưa, đánh giá tin đó có ý nghĩa "
@@ -43,8 +59,12 @@ _SYSTEM = (
     "tin so với tình trạng bình thường của doanh nghiệp, không theo giọng văn của bài; không rõ thì để 0.\n"
     "magnitude: 1 = nhỏ, 2 = vừa, 3 = lớn (so với quy mô lợi nhuận của doanh nghiệp).\n"
     "impact: một câu ngắn tiếng Việt, nêu kênh và chiều tác động lên doanh nghiệp.\n"
+    "labels: các sự kiện mà tin nói về CHÍNH doanh nghiệp này, chỉ chọn mã trong danh sách; tin về doanh nghiệp khác, tin "
+    "ngành hay không có sự kiện nào thì []:\n"
+    + "".join(f"- {k}: {v}\n" for k, v in LABELS.items()) +
     "Chỉ dùng tiêu đề và đoạn trích; không bịa số liệu. Chỉ trả về MỘT đối tượng JSON: "
-    '{"items": [{"t": "MÃ", "id": 123, "score": 0, "direction": 0, "magnitude": 1, "impact": "..."}]}, đủ mọi cặp được '
+    '{"items": [{"t": "MÃ", "id": 123, "score": 0, "direction": 0, "magnitude": 1, "impact": "...", "labels": []}]}, '
+    "đủ mọi cặp được "
     "hỏi, không có văn bản nào khác."
 )
 
@@ -89,7 +109,8 @@ def _int(v, lo: int, hi: int) -> int | None:
 
 
 def parse_scores(text: str, asked: set[tuple[str, int]]) -> dict[tuple[str, int], dict]:
-    """{(ticker, id): {score, direction, magnitude, impact}} for asked pairs; a pair needs a valid score."""
+    """{(ticker, id): {score, direction, magnitude, impact, labels}} for asked pairs; a pair needs a valid score.
+    labels keeps known LABELS codes only."""
     from portfolio.advisor import _extract_json
     out: dict[tuple[str, int], dict] = {}
     for it in (_extract_json(text) or {}).get("items") or []:
@@ -100,7 +121,9 @@ def parse_scores(text: str, asked: set[tuple[str, int]]) -> dict[tuple[str, int]
         if key in asked and score is not None:
             out[key] = {"score": score, "direction": _int(it.get("direction"), -1, 1) or 0,
                         "magnitude": _int(it.get("magnitude"), 1, 3),
-                        "impact": " ".join(str(it.get("impact") or "").split())[:IMPACT_CHARS]}
+                        "impact": " ".join(str(it.get("impact") or "").split())[:IMPACT_CHARS],
+                        "labels": sorted({x for x in (it.get("labels") or []) if isinstance(x, str) and x in LABELS})
+                        if isinstance(it.get("labels"), list) else []}
     return out
 
 
@@ -109,7 +132,7 @@ def apply_scores(groups: dict[str, dict[str, list[dict]]], scores: dict[tuple[st
     (newest first within a score), KEEP_PER_GROUP per group."""
     def with_score(t: str, a: dict) -> dict:
         s = scores.get((t, a["id"]))
-        return {**a, **{k: s[k] for k in SCORE_FIELDS}} if s else a
+        return {**a, **{k: s[k] for k in SCORE_FIELDS if k in s}} if s else a
     out = {}
     for t, g in groups.items():
         out[t] = {"ticker": [with_score(t, a) for a in g["ticker"]]}

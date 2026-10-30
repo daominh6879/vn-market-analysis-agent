@@ -32,7 +32,7 @@ def news_facts(since: date | None = None, tickers: list[str] | None = None) -> d
                     f"WHERE published_at >= %(since)s{tick_filter} ORDER BY published_at", {**p, "n": SNIPPET_CHARS})
         arts = cur.fetchall()
         ids = [a[0] for a in arts]
-        cur.execute("SELECT article_id, ticker, kind, channel, score, direction, magnitude, origin, scored_at "
+        cur.execute("SELECT article_id, ticker, kind, channel, score, direction, magnitude, origin, scored_at, labels "
                     "FROM news_impact_scores WHERE article_id = ANY(%s)", (ids,))
         scores = cur.fetchall()
         cur.execute("SELECT ticker, event_code, title, public_date, start_date, end_date, raw, fetched_at "
@@ -53,7 +53,8 @@ def news_facts(since: date | None = None, tickers: list[str] | None = None) -> d
         "articles": [{"id": i, "published_at": _iso(pub), "source": src, "title": t, "url": u, "tickers": tk or [],
                       "snippet": " ".join((body or "").split())} for i, pub, src, t, u, tk, body in arts],
         "scores": [{"article_id": a, "ticker": t, "kind": k, "channel": ch, "score": s, "direction": d,
-                    "magnitude": m, "origin": o, "scored_at": _iso(at)} for a, t, k, ch, s, d, m, o, at in scores],
+                    "magnitude": m, "origin": o, "scored_at": _iso(at), "labels": lb}      # labels None: before 058
+                   for a, t, k, ch, s, d, m, o, at, lb in scores],
         "insider_trades": [{"ticker": t, "event_code": c, "title": ti, "public_date": _iso(pd_), "start_date": _iso(sd),
                             "end_date": _iso(ed), "raw": raw, "fetched_at": _iso(fa)}
                            for t, c, ti, pd_, sd, ed, raw, fa in insider],
