@@ -38,3 +38,23 @@ def test_parse_cpi_month_only_not_period_averages():
     assert out["cpi_yoy"][0] == 5.60 and out["cpi_mom"][0] == 0.16 and out["cpi_ytd"][0] == 3.82
     assert parse_cpi("Chỉ số giá tiêu dùng (CPI) tháng 3/2019 giảm 0,21% so với tháng trước.")["cpi_mom"][0] == -0.21
     assert "cpi_yoy" not in parse_cpi("Tại Mỹ, CPI tháng 10/2021 tăng 6,2% so với cùng kỳ năm trước.")
+
+
+def test_web_facts_checks_keep_only_quoted_dated_facts():
+    from datetime import datetime, timezone
+    from ingest.web_facts import check_interbank, check_review
+    body = "Kết tuần, lãi suất kỳ hạn qua đêm là 6,6% (tăng 163 điểm cơ bản). NHNN bơm ròng 37 nghìn tỷ."
+    pub = datetime(2022, 10, 11, 2, 14, tzinfo=timezone.utc)
+    facts = [{"date": "2022-10-07", "tenor": "overnight", "rate_pct": 6.6, "quote": "Kết tuần, lãi suất kỳ hạn qua đêm là 6,6%"},
+             {"date": "2022-10-07", "tenor": "1w", "rate_pct": 7.2, "quote": "Kết tuần, lãi suất kỳ hạn qua đêm là 6,6%"},
+             {"date": "2022-09-01", "tenor": "overnight", "rate_pct": 6.6, "quote": "Kết tuần, lãi suất kỳ hạn qua đêm là 6,6%"},
+             {"date": "2022-10-07", "tenor": "overnight", "rate_pct": 6.6, "quote": "lãi suất qua đêm 6,6% theo bài khác"}]
+    assert check_interbank(facts, body, pub) == [("interbank_on", datetime(2022, 10, 7).date(), 6.6,
+                                                  "Kết tuần, lãi suất kỳ hạn qua đêm là 6,6%")]
+    body = "Tại rổ VNDiamond, TCM bị loại khỏi chỉ số trong khi NLG được thêm vào chỉ số kỳ này."
+    ch = [{"index": "VNDiamond", "ticker": "NLG", "action": "add", "effective_date": "2022-11-07",
+           "quote": "TCM bị loại khỏi chỉ số trong khi NLG được thêm vào chỉ số kỳ này"},
+          {"index": "VN30", "ticker": "XXX", "action": "add", "effective_date": "2022-11-07",
+           "quote": "TCM bị loại khỏi chỉ số trong khi NLG được thêm vào chỉ số kỳ này"}]
+    assert check_review(ch, body, datetime(2022, 10, 21, 10, tzinfo=timezone.utc), {"NLG", "TCM"}) == [
+        ("VNDIAMOND", "NLG", "add", datetime(2022, 11, 7).date(), ch[0]["quote"])]
