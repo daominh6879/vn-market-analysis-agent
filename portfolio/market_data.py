@@ -127,7 +127,24 @@ def _extras(cur, since: date | None) -> dict:
             node["values"][m] = _f(v)
             node["quotes"][m] = quote
     out.update(_extras_055(cur))
+    out.update(_extras_056(cur))
     return {k: (dict(v) if not isinstance(v, list) else v) for k, v in out.items()}
+
+
+def _extras_056(cur) -> dict:
+    """Migration 056: index board at 14:25 (stored day by day), ETF baskets / holdings, index review events."""
+    out: dict = {"index_snapshot": defaultdict(list), "etf_holdings": defaultdict(list), "index_reviews": []}
+    for row in _rows(cur, "SELECT index_code, date, captured_at, open, high, low, price, volume, value FROM "
+                          "index_snapshot_1425 ORDER BY index_code, date", {}):
+        out["index_snapshot"][row[0]].append([_iso(row[1]), row[2].isoformat(), *[_f(x) for x in row[3:]]])
+    for fund, d, kind, t, w, sh in _rows(cur, "SELECT fund, as_of, kind, ticker, weight, shares FROM etf_holdings "
+                                              "ORDER BY fund, as_of, ticker", {}):
+        out["etf_holdings"][fund].append([_iso(d), kind, t, _f(w), sh])
+    for idx, t, act, eff, ann, src in _rows(cur, "SELECT index_code, ticker, action, effective_date, announced_at, source "
+                                                 "FROM index_membership_events ORDER BY effective_date", {}):
+        out["index_reviews"].append({"index": idx, "ticker": t, "action": act, "effective_date": _iso(eff),
+                                     "announced_at": ann.isoformat(), "source": src})
+    return out
 
 
 def _extras_055(cur) -> dict:

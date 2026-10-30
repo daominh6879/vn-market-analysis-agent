@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import time
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -615,11 +616,16 @@ def _month_end(year: int, month: int) -> date:
 def parse_cpi(text: str) -> dict[str, tuple[float, str]]:
     """The month's CPI sentences → {cpi_mom, cpi_ytd, cpi_yoy: (percent, sentence)}; core_yoy from 'Lạm phát cơ bản
     tháng X … so với cùng kỳ'. The figures may sit in one sentence or several ('So với tháng 12/2025, CPI tháng Chín
-    tăng 4,20%; tăng 5,08% so với cùng kỳ'). Period averages (bình quân, quý) are skipped. Signs from tăng / giảm."""
+    tăng 4,20%; tăng 5,08% so với cùng kỳ'). Only sentences about 'CPI tháng …'; period figures (bình quân, quý, 'tính
+    chung 5 tháng', 'CPI sáu tháng') are skipped — they were read as the month before (05/2026, 08/2021, 06/2024).
+    Signs from tăng / giảm."""
     out: dict[str, tuple[float, str]] = {}
     for sent in re.split(r"(?<=\.)\s+", text):
         low = sent.lower()
-        if "cpi" in low and "tháng" in low and not re.search(r"bình quân|quý|lạm phát cơ bản", low):
+        if (re.search(r"cpi\)?\s+tháng\s+(?:\d|[^\W\d_])", low)
+                and not re.search(r"bình quân|quý|lạm phát cơ bản|tính chung|\d+\s+tháng\s+(?:đầu\s+)?năm|"
+                                  r"(?:sáu|chín|mười)\s+tháng|tại mỹ|của mỹ|trung quốc|nhật bản|hàn quốc|khu vực đồng euro|"
+                                  r"eurozone|thế giới|nước anh|tại anh|ấn độ|thái lan|indonesia", low)):
             clauses = re.findall(r"(tăng|giảm)\s+" + _PCT + r"\s*(so với [^;,.]*?(?:trước|\d{4}))", sent)
             # 'So với tháng 12/2025, CPI tháng Chín tăng 4,20%' — the comparison comes first
             lead = re.match(r"\s*So với (tháng 12/\d{4}|cùng kỳ năm trước|tháng trước),\s*CPI[^%]*?(tăng|giảm)\s+" + _PCT, sent)
@@ -684,6 +690,31 @@ def vbma_rows(df: pd.DataFrame, since: date | None) -> list[tuple]:
     return out
 
 
+VBMA_MACRO = {"Lạm phát": ("cpi_yoy", 10), "Lạm phát cơ bản": ("core_yoy", 10), "Tăng trưởng tín dụng": ("credit_ytd", 35)}
+
+
+def vbma_macro_rows(df: pd.DataFrame) -> list[tuple]:
+    """VBMA monthly macro table → macro_indicators (source vbma). The table has no release dates, so each month is
+    usable only `lag` days after its end (CPI: NSO publishes ~6th of the next month → 10; credit: SBV ~mid next month
+    → 35). credit_ytd_prev = the same month a year earlier, as the NSO rows carry it."""
+    tz = "Asia/Ho_Chi_Minh"
+    out, credit = [], {}
+    for r in df.to_dict("records"):
+        if r["indicator"] not in VBMA_MACRO:
+            continue
+        code, lag = VBMA_MACRO[r["indicator"]]
+        pe = r["period"].date()
+        pub = (pd.Timestamp(pe) + pd.Timedelta(days=lag, hours=9)).tz_localize(tz).to_pydatetime()
+        out.append((code, pe, float(r["value"]), pub, "vbma", f"VBMA tổng quan vĩ mô: {r['indicator']} ({r['unit']})"))
+        if code == "credit_ytd":
+            credit[pe] = (float(r["value"]), pub)
+    for pe, (_, pub) in credit.items():
+        prev = credit.get((pd.Timestamp(pe) - pd.DateOffset(years=1) + pd.offsets.MonthEnd(0)).date())
+        if prev:
+            out.append(("credit_ytd_prev", pe, prev[0], pub, "vbma", "VBMA tổng quan vĩ mô: tín dụng cùng kỳ năm trước"))
+    return out
+
+
 def run_macro(backfill: bool = False) -> dict:
     """NSO CPI releases (monthly) and socio-economic press releases (credit / deposit growth) → macro_indicators, with
     the post time as published_at and the sentence as quote; plus today's Vietcombank 12-month VND deposit rate and
@@ -724,6 +755,7 @@ def run_macro(backfill: bool = False) -> dict:
                 if df["published"].min().date() < NSO_HISTORY_START:
                     break
         rows += vbma_rows(vn.macro.short_term_rates(), None if backfill else date.today() - timedelta(days=30))
+        rows += vbma_macro_rows(vn.macro.macro_overview())
         try:
             dep = vn.macro.deposit_rates()
             x = dep[(dep.currency == "VND") & (dep.tenor_type == "Savings") & (dep.tenor == "12-months")]
@@ -737,6 +769,64 @@ def run_macro(backfill: bool = False) -> dict:
     if n == 0:
         raise RuntimeError(f"macro: nothing parsed from {posts} posts; unparsed={unparsed[:5]}")
     return {"posts": posts, "rows": n, "unparsed": len(unparsed), "unparsed_sample": unparsed[:5]}
+
+
+WAYBACK_CDX = "http://web.archive.org/cdx/search/cdx"
+VCB_RATE_PAGES = ("portal.vietcombank.com.vn/UserControls/TVPortal.TyGia/pListLaiSuat.aspx*",
+                  "vietcombank.com.vn/vi-VN/KHCN/Cong-cu-Tien-ich/KHCN---Lai-suat")
+
+
+def vcb_rate_from_page(text: str) -> tuple[float, str | None] | None:
+    """12-month VND savings rate (%) from an archived Vietcombank page: the current page's hidden JSON
+    (currentDataInterestRate, with UpdatedDate) or the old pListLaiSuat table ('12 months 7.40%')."""
+    import json as _json
+    m = re.search(r'id="currentDataInterestRate" value="([^"]+)"', text)
+    if m:
+        j = _json.loads(html_unescape(m.group(1)))
+        for x in j.get("Data") or []:
+            if x.get("tenorType") == "Savings" and x.get("tenor") == "12-months" and x.get("currencyCode") == "VND":
+                return float(x["rates"]) * 100, j.get("UpdatedDate")
+        return None
+    plain = re.sub(r"\s+", " ", html_unescape(re.sub(r"<[^>]+>", " ", text)))
+    m = re.search(r"Savings.*?12 (?:months|tháng)\s+([\d.,]+)\s*%", plain)
+    return (float(m.group(1).replace(",", ".")), None) if m else None
+
+
+def html_unescape(s: str) -> str:
+    import html as _html
+    return _html.unescape(s)
+
+
+def run_deposit_history() -> dict:
+    """Vietcombank's 12-month VND savings rate from archive.org captures of its rate pages (2021–, ~monthly) →
+    macro_indicators deposit_12m_vcb, source vcb_wayback. Known from VCB's own update time when the page carries it,
+    else from the capture time. The daily collector (run_macro) stores today's rate from now on."""
+    import httpx
+    tz = "Asia/Ho_Chi_Minh"
+    rows, pages, failed = [], 0, []
+    for url in VCB_RATE_PAGES:
+        caps = httpx.get(WAYBACK_CDX, params={"url": url, "output": "json", "filter": "statuscode:200",
+                                              "collapse": "timestamp:8"}, timeout=120).json()[1:]
+        for cap in caps:
+            ts, orig = cap[1], cap[2]
+            if "CusstomType" in orig and "CusstomType=4" not in orig and "CusstomType=1" not in orig:
+                continue
+            time.sleep(2)
+            try:
+                text = httpx.get(f"http://web.archive.org/web/{ts}id_/{orig}", timeout=120).text
+                got = vcb_rate_from_page(text)
+            except Exception as e:
+                failed.append((ts, repr(e)[:60]))
+                continue
+            pages += 1
+            if not got:
+                continue
+            captured = pd.Timestamp(ts, tz="UTC")
+            known = pd.Timestamp(got[1]) if got[1] else captured
+            known = min(known, captured)
+            rows.append(("deposit_12m_vcb", known.tz_convert(tz).date(), got[0], known.to_pydatetime(), "vcb_wayback",
+                         f"archive.org {ts}: Vietcombank tiết kiệm 12 tháng VND {got[0]:g}%"))
+    return {"pages": pages, "rows": _store_macro(rows), "failed": failed[:5]}
 
 
 FX_HISTORY_START = date(2020, 2, 3)       # first Vietcombank table its website API returns
@@ -864,6 +954,80 @@ def run_intraday(tickers: list[str] | None = None, backfill: bool = False, since
     return _per_ticker("intraday", tickers, one)
 
 
+# ── index board at 14:25 / ETF baskets ───────────────────────────────────────
+
+SNAPSHOT_INDICES = ("VNINDEX", "VN30", "VNMID", "VNSML", "VN100", "HNXINDEX", "UPCOMINDEX")
+SNAPSHOT_WINDOW = ("14:20", "14:30")        # a capture outside it is not "the 14:25 state" and is not stored
+
+
+def run_index_snapshot() -> dict:
+    """Index board at ~14:25 (scheduled 14:25 weekdays) → index_snapshot_1425: level, open/high/low, matched and
+    block-trade value, breadth, foreign. No history exists anywhere (VNMID / VNSML have no minute bars), so this is
+    stored day by day; it gives the 14:25 decision a same-day index value."""
+    from vnmarket import VnMarket
+
+    now = pd.Timestamp.now(tz="Asia/Ho_Chi_Minh")
+    if not SNAPSHOT_WINDOW[0] <= now.strftime("%H:%M") <= SNAPSHOT_WINDOW[1]:
+        return {"rows": 0, "skipped": f"outside {SNAPSHOT_WINDOW} ({now:%H:%M})"}
+    rows, failed = [], []
+    with VnMarket() as vn:
+        for code in SNAPSHOT_INDICES:
+            try:
+                x = vn.market.index(code)
+            except Exception as e:
+                failed.append((code, repr(e)[:80]))
+                continue
+            t = pd.Timestamp(int(x.get("time") or now.timestamp() * 1000), unit="ms", tz="UTC").tz_convert("Asia/Ho_Chi_Minh")
+            if t.date() != now.date():                       # a holiday: the board still shows the last session
+                continue
+            rows.append((code, t.date(), t.to_pydatetime(), _num(x.get("chart_open")), _num(x.get("chart_high")),
+                         _num(x.get("chart_low")), _num(x.get("index_value")), _num(x.get("prev_index_value")),
+                         _int(x.get("total_qtty")), _num(x.get("total_value")), _num(x.get("total_value_pt")),
+                         _int(x.get("advances")), _int(x.get("declines")), _int(x.get("nochanges")),
+                         _int(x.get("total_buy_foreign_qtty")), _int(x.get("total_sell_foreign_qtty")), "vnmarket"))
+    n = _executemany("""INSERT INTO index_snapshot_1425 (index_code, date, captured_at, open, high, low, price, prev_close,
+                        volume, value, value_pt, advances, declines, unchanged, foreign_buy_qty, foreign_sell_qty, source)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (index_code, date) DO NOTHING""",
+                     rows)
+    if failed and not rows:
+        raise RuntimeError(f"index_snapshot: no index answered; {failed[:3]}")
+    return {"rows": n, "failed": failed}
+
+
+ETF_FUNDS = ("FUESSV30", "FUESSVFL", "FUESSV50")
+ETF_HISTORY_START = date(2022, 8, 1)        # first SSIAM basket file (FUESSV30 ~05/08/2022)
+
+
+def run_etf_baskets(backfill: bool = False) -> dict:
+    """SSIAM ETF creation baskets → etf_holdings kind 'basket' (weight, quantity per creation unit). Daily: the last 5
+    days; backfill: every Friday from 08/2022 (composition only changes at reviews and drifts with prices)."""
+    from vnmarket import VnMarket
+    from vnmarket.errors import NoData, SourceError
+
+    end = date.today()
+    if backfill:
+        days = [ETF_HISTORY_START + timedelta(days=i) for i in range((end - ETF_HISTORY_START).days + 1)]
+        days = [d for d in days if d.weekday() == 4]
+    else:
+        days = [end - timedelta(days=i) for i in range(5) if (end - timedelta(days=i)).weekday() < 5]
+    rows, empty = [], 0
+    with VnMarket() as vn:
+        for fund in ETF_FUNDS:
+            for d in days:
+                try:
+                    df = vn.market.etf_basket(fund, d)
+                except (NoData, SourceError):
+                    empty += 1
+                    continue
+                for r in df.to_dict("records"):
+                    rows.append((fund, r["date"].date(), "basket", r["ticker"], _num(r["weight"]), _int(r["quantity"]),
+                                 f"ssiam:{fund}", None))
+    n = _executemany("""INSERT INTO etf_holdings (fund, as_of, kind, ticker, weight, shares, source, quote)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (fund, as_of, kind, ticker) DO UPDATE SET
+                        weight=EXCLUDED.weight, shares=EXCLUDED.shares, fetched_at=NOW()""", rows)
+    return {"rows": n, "empty_days": empty}
+
+
 # ── broker research list (Simplize) ──────────────────────────────────────────
 
 BROKER_HISTORY_START = date(2023, 1, 1)
@@ -909,6 +1073,9 @@ RUNNERS = {
     "fireant_holders": lambda a: run_fireant_holders(a.tickers),
     "macro": lambda a: run_macro(a.backfill),
     "fx_history": lambda a: run_fx_history(),
+    "deposit_history": lambda a: run_deposit_history(),
+    "index_snapshot": lambda a: run_index_snapshot(),
+    "etf_baskets": lambda a: run_etf_baskets(a.backfill),
     "insurer_lines": lambda a: run_insurer_lines(a.tickers, a.backfill),
     "intraday": lambda a: run_intraday(a.tickers, a.backfill),
     "broker_reports": lambda a: run_broker_reports(a.tickers, a.backfill),

@@ -22,6 +22,9 @@ Assets (ingest/fetch_rule_data.py, bctc notes: ingest/extract_bctc_notes.py):
   intraday_ingest           14:25 state + ATC fill per session (Vietcap 1m, DNSE fallback; indices too) → intraday_snapshot (weekdays 15:10)
   broker_reports_ingest     broker research list, target prices (Simplize) → broker_reports    (weekdays 19:00)
   broker_forecasts_extract  EPS / NPAT forecasts read from the report PDFs → broker_forecasts  (weekdays 19:00)
+  index_snapshot_ingest     index board at 14:25 (VNINDEX, VN30, VNMID, VNSML…, value, breadth) → index_snapshot_1425 (weekdays 14:25)
+  etf_baskets_ingest        SSIAM ETF creation baskets (FUESSV30, FUESSVFL, FUESSV50)      → etf_holdings (weekdays 19:10)
+  web_facts_extract         CafeF articles → interbank rates (macro_indicators), index reviews (index_membership_events) (daily 20:00)
 
 data_bootstrap_sensor (pipeline/assets_market_data.py) starts each job with backfill when its table is empty.
 """
@@ -189,6 +192,27 @@ def broker_forecasts_extract(context: AssetExecutionContext) -> dict:
     return _log(context, "broker_forecasts", run())
 
 
+@asset(group_name="rule_data", retry_policy=RetryPolicy(max_retries=2, delay=60),
+       description="Index board at 14:25 → index_snapshot_1425 (no history exists: stored day by day; same-day index value for 14:25 decisions).")
+def index_snapshot_ingest(context: AssetExecutionContext) -> dict:
+    from ingest.fetch_rule_data import run_index_snapshot
+    return _log(context, "index_snapshot", run_index_snapshot())
+
+
+@asset(group_name="rule_data", retry_policy=_RETRY,
+       description="SSIAM ETF creation baskets (weight, quantity per unit) → etf_holdings kind basket.")
+def etf_baskets_ingest(context: AssetExecutionContext, config: BackfillConfig) -> dict:
+    from ingest.fetch_rule_data import run_etf_baskets
+    return _log(context, "etf_baskets", run_etf_baskets(backfill=config.backfill))
+
+
+@asset(group_name="rule_data", retry_policy=_RETRY,
+       description="CafeF sitemap articles → LLM reads SBV interbank rates and HOSE index review changes, quoted and date-checked.")
+def web_facts_extract(context: AssetExecutionContext) -> dict:
+    from ingest.web_facts import run
+    return _log(context, "web_facts", run())
+
+
 block_trades_job = define_asset_job("block_trades_job", selection=[block_trades_ingest])
 index_data_job = define_asset_job("index_data_job", selection=[size_indices_ingest, index_valuation_ingest])
 foreign_room_job = define_asset_job("foreign_room_job", selection=[foreign_room_ingest])
@@ -205,6 +229,9 @@ macro_job = define_asset_job("macro_job", selection=[macro_ingest])
 insurer_lines_job = define_asset_job("insurer_lines_job", selection=[insurer_lines_ingest])
 intraday_job = define_asset_job("intraday_job", selection=[intraday_ingest])
 broker_job = define_asset_job("broker_job", selection=[broker_reports_ingest, broker_forecasts_extract])
+index_snapshot_job = define_asset_job("index_snapshot_job", selection=[index_snapshot_ingest])
+etf_baskets_job = define_asset_job("etf_baskets_job", selection=[etf_baskets_ingest])
+web_facts_job = define_asset_job("web_facts_job", selection=[web_facts_extract])
 
 
 def _schedule(job, cron: str, name: str) -> ScheduleDefinition:
@@ -229,12 +256,17 @@ rule_data_schedules = [
     _schedule(insurer_lines_job, "30 8 * * 6", "insurer_lines_sat_0830"),
     _schedule(intraday_job, "10 15 * * 1-5", "intraday_1510"),                 # after the ATC bar (14:45)
     _schedule(broker_job, "0 19 * * 1-5", "broker_1900"),
+    _schedule(index_snapshot_job, "25 14 * * 1-5", "index_snapshot_1425"),
+    _schedule(etf_baskets_job, "10 19 * * 1-5", "etf_baskets_1910"),
+    _schedule(web_facts_job, "0 20 * * *", "web_facts_2000"),
 ]
 rule_data_jobs = [block_trades_job, index_data_job, foreign_room_job, corporate_actions_job, commodities_job,
                   shareholders_job, vnd_items_job, bctc_notes_job, fireant_data_job, price_history_job,
-                  board_close_job, yield_curve_job, macro_job, insurer_lines_job, intraday_job, broker_job]
+                  board_close_job, yield_curve_job, macro_job, insurer_lines_job, intraday_job, broker_job,
+                  index_snapshot_job, etf_baskets_job, web_facts_job]
 rule_data_assets = [block_trades_ingest, size_indices_ingest, index_valuation_ingest, foreign_room_ingest,
                     corporate_actions_ingest, commodities_ingest, shareholders_ingest, vnd_items_ingest,
                     bctc_notes_extract, fireant_data_ingest, fireant_holders_ingest, price_history_ingest,
                     board_close_ingest, yield_curve_ingest, macro_ingest, insurer_lines_ingest, intraday_ingest,
-                    broker_reports_ingest, broker_forecasts_extract]
+                    broker_reports_ingest, broker_forecasts_extract, index_snapshot_ingest, etf_baskets_ingest,
+                    web_facts_extract]
