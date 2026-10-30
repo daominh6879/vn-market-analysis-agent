@@ -32,13 +32,15 @@ _MAX_FAILED_SHARE = 0.1          # more failed tickers than this share fails the
 
 
 def _load_hose_tickers_from_db() -> list[str]:
-    """Query securities table for HOSE tickers. Returns empty list on error."""
+    """Query securities table for the universe: HOSE rows (former HOSE stocks included, as before) and every active
+    security on any exchange — the HNX / UPCoM stocks of the universe (PVS, ACV…) carried a wrong 'HOSE' label until
+    sync_exchanges fixed it (30/10/2026) and must keep their prices. Returns empty list on error."""
     try:
         from core.db import get_conn
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT ticker FROM securities WHERE exchange = 'HOSE' ORDER BY ticker"
+                    "SELECT ticker FROM securities WHERE exchange = 'HOSE' OR is_active ORDER BY ticker"
                 )
                 rows = cur.fetchall()
         return [r[0] for r in rows] if rows else []

@@ -55,6 +55,52 @@ def upsert_securities(rows: list[dict]) -> int:
         return 0
 
 
+LISTING_EXCHANGE = {"HSX": "HOSE", "HNX": "HNX", "UPCOM": "UPCOM"}   # vnmarket listing (VCI spelling) → our label
+
+
+def exchange_updates(current: dict[str, str], listing: dict[str, str]) -> list[tuple[str, str]]:
+    """(exchange, ticker) for every active security whose label differs from where the stock is listed now.
+    Pure. A ticker the listing does not know keeps its label (delisted / suspended rows are not guessed)."""
+    out = []
+    for t, ex in current.items():
+        real = LISTING_EXCHANGE.get(listing.get(t, ""))
+        if real and real != ex:
+            out.append((real, t))
+    return sorted(out, key=lambda x: x[1])
+
+
+def delisted(current: dict[str, str], listing: dict[str, str]) -> list[str]:
+    """Active securities the listing reports DELISTED. Pure."""
+    return sorted(t for t in current if listing.get(t) == "DELISTED")
+
+
+def sync_exchanges() -> list[tuple[str, str]]:
+    """Set securities.exchange of active rows from the live listing. Until 30/10/2026 every row was written 'HOSE'
+    (HOSE_SEED carried HNX / UPCoM stocks: PVS, APS, CEO, ACV, ABB…), so the rule engine gave them the ±7% band.
+    A stock the listing reports DELISTED (BCG, SVI on 30/10/2026, still active here) is set inactive, like the other
+    former HOSE rows. Returns the (exchange or "DELISTED", ticker) changes; raises if the listing is empty (a run that
+    checks nothing must fail)."""
+    from core.db import get_conn
+    from core.vnmarket_client import get_client
+
+    df = get_client().listing.all()
+    listing = dict(zip(df["symbol"].astype(str), df["exchange"].astype(str)))
+    if not listing:
+        raise RuntimeError("vnmarket listing.all() returned nothing — exchanges not checked")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT ticker, exchange FROM securities WHERE is_active")
+            current = dict(cur.fetchall())
+            changes = exchange_updates(current, listing)
+            if changes:
+                cur.executemany("UPDATE securities SET exchange = %s, updated_at = NOW() WHERE ticker = %s", changes)
+            gone = delisted(current, listing)
+            if gone:
+                cur.execute("UPDATE securities SET is_active = false, updated_at = NOW() WHERE ticker = ANY(%s)", (gone,))
+        conn.commit()
+    return changes + [("DELISTED", t) for t in gone]
+
+
 def seed_from_hose_seed() -> int:
     """Seed securities from HOSE_SEED hardcoded list (company_name left empty — no vnstock)."""
     from data.hose_universe import HOSE_SEED, _enrich
@@ -123,6 +169,8 @@ def main() -> None:
         print(f"Done — {n} rows upserted into securities")
     else:
         print("0 rows upserted — check stderr for errors")
+    moved = sync_exchanges()
+    print(f"Exchange labels fixed from the listing: {len(moved)} {moved}")
 
 
 if __name__ == "__main__":

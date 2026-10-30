@@ -67,10 +67,12 @@ def _fail_if_nothing(name: str, done: int, total: int, failed: list[str]) -> Non
     retry_policy=RetryPolicy(max_retries=2, delay=300),
 )
 def securities_shares(context: AssetExecutionContext) -> dict:
-    from ingest.seed_securities import seed_from_json
+    from ingest.seed_securities import seed_from_json, sync_exchanges
     from ingest.fetch_shares import fetch_issue_share, fill_from_charter_capital, update_shares
 
     context.log.info(f"securities re-seeded: {seed_from_json()} rows")
+    moved = sync_exchanges()                       # after the re-seed: its fallback writes 'HOSE' for every row
+    context.log.info(f"exchange labels fixed from the listing: {len(moved)} {moved[:30]}")
     # Cheap DB-only fill first so market cap works even if the provider is down; vnmarket values overwrite it.
     approx = fill_from_charter_capital()
     context.log.info(f"charter-capital fallback filled {approx} tickers")
