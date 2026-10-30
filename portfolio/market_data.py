@@ -220,6 +220,8 @@ def market_data(metrics: list[str] | None = None, since: date | None = None) -> 
                         "FROM corporate_events ORDER BY ticker, ex_date", p)
         fx = _rows(cur, "SELECT snapshot_date, value FROM daily_snapshots WHERE series = 'sbv_central_rate' "
                         "ORDER BY snapshot_date", p)
+        fx_vcb = _rows(cur, "SELECT snapshot_date, sell FROM daily_snapshots WHERE series = 'vcb_usd' AND sell IS NOT NULL "
+                            "AND snapshot_date >= %(since)s ORDER BY snapshot_date", p)
         bench = _rows(cur, "SELECT ticker, date, open, high, low, close, volume FROM benchmark_daily "
                            "WHERE date >= %(since)s ORDER BY ticker, date", p)
         extras = _extras(cur, since)
@@ -269,6 +271,7 @@ def market_data(metrics: list[str] | None = None, since: date | None = None) -> 
         "dividends": out_div,
         "events": out_ev,
         "fx": {_iso(d): _f(v) for d, v in fx},
+        "fx_vcb": {_iso(d): _f(v) for d, v in fx_vcb},   # Vietcombank USD sell, that day's last table (from 02/2020)
         "benchmark": out_bench,
         "index_value_unit": "VND",          # market_index_daily.matched_value is VND (SSI and VNDirect rows alike)
         "financials_filled_from_fireant": filled,

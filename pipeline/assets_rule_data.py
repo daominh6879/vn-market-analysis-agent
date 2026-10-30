@@ -17,9 +17,9 @@ Assets (ingest/fetch_rule_data.py, bctc notes: ingest/extract_bctc_notes.py):
   price_history_ingest      prices from 2017, foreign flows from 2018  → ohlcv_daily, foreign_flows (Sunday 11:00)
   bctc_notes_extract        related party, bonds, CASA (PDF notes; only figures with no structured source)
                                                                        → bctc_note_facts       (Sunday 10:00)
-  macro_ingest              CPI, credit / deposit growth (NSO), VCB 12-month deposit rate → macro_indicators (daily 09:00)
+  macro_ingest              CPI, credit / deposit growth (NSO), VCB 12-month deposit rate, VBMA short-term rates → macro_indicators (daily 09:00)
   insurer_lines_ingest      insurers' full statements (investment lines) → fireant_statement_lines (Saturday 08:30)
-  intraday_ingest           14:25 state + ATC fill per session (DNSE 1m) → intraday_snapshot   (weekdays 15:10)
+  intraday_ingest           14:25 state + ATC fill per session (Vietcap 1m, DNSE fallback; indices too) → intraday_snapshot (weekdays 15:10)
   broker_reports_ingest     broker research list, target prices (Simplize) → broker_reports    (weekdays 19:00)
   broker_forecasts_extract  EPS / NPAT forecasts read from the report PDFs → broker_forecasts  (weekdays 19:00)
 

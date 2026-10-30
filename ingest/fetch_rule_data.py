@@ -664,9 +664,30 @@ def _store_macro(rows: list[tuple]) -> int:
                            quote=EXCLUDED.quote, fetched_at=NOW()""", rows)
 
 
+VBMA_TENORS = ("2w", "3w", "1m", "2m", "3m", "6m", "9m", "1y")
+
+
+def vbma_rows(df: pd.DataFrame, since: date | None) -> list[tuple]:
+    """VBMA short-term benchmark rates → macro_indicators rows stb_<tenor>. The file has day D by 09:20 of the next
+    morning (checked 30/10/2026); published_at = D + 1 day 09:00, i.e. usable from the next session, never D itself."""
+    tz = "Asia/Ho_Chi_Minh"
+    out = []
+    for r in df.to_dict("records"):
+        d = r["date"].date()
+        if since and d < since:
+            continue
+        pub = (pd.Timestamp(d) + pd.Timedelta(days=1, hours=9)).tz_localize(tz).to_pydatetime()
+        for tenor in VBMA_TENORS:
+            v = r.get(tenor)
+            if v is not None and not pd.isna(v):
+                out.append((f"stb_{tenor}", d, float(v), pub, "vbma", "VBMA lãi suất tham chiếu ngắn hạn " + tenor))
+    return out
+
+
 def run_macro(backfill: bool = False) -> dict:
     """NSO CPI releases (monthly) and socio-economic press releases (credit / deposit growth) → macro_indicators, with
-    the post time as published_at and the sentence as quote; plus today's Vietcombank 12-month VND deposit rate.
+    the post time as published_at and the sentence as quote; plus today's Vietcombank 12-month VND deposit rate and
+    VBMA's short-term benchmark rates (all since 06/2020 on backfill, else the last 30 days).
     Backfill pages back to 2019; otherwise the newest 20 posts of each search."""
     from vnmarket import VnMarket
     from vnmarket.errors import NoData, SourceError
@@ -702,6 +723,7 @@ def run_macro(backfill: bool = False) -> dict:
                         unparsed.append(r.title[:80])
                 if df["published"].min().date() < NSO_HISTORY_START:
                     break
+        rows += vbma_rows(vn.macro.short_term_rates(), None if backfill else date.today() - timedelta(days=30))
         try:
             dep = vn.macro.deposit_rates()
             x = dep[(dep.currency == "VND") & (dep.tenor_type == "Savings") & (dep.tenor == "12-months")]
@@ -715,6 +737,35 @@ def run_macro(backfill: bool = False) -> dict:
     if n == 0:
         raise RuntimeError(f"macro: nothing parsed from {posts} posts; unparsed={unparsed[:5]}")
     return {"posts": posts, "rows": n, "unparsed": len(unparsed), "unparsed_sample": unparsed[:5]}
+
+
+FX_HISTORY_START = date(2020, 2, 3)       # first Vietcombank table its website API returns
+
+
+def run_fx_history(start: date | None = None) -> dict:
+    """Vietcombank USD/VND of every past weekday (that day's last table) → daily_snapshots vcb_usd (buy = cash buy, as
+    the daily collector in tools/global_market.py stores it). Fills only missing days; the collector's own rows stay."""
+    from vnmarket import VnMarket
+    from vnmarket.errors import NoData, SourceError
+
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT snapshot_date FROM daily_snapshots WHERE series = 'vcb_usd'")
+        have = {r[0] for r in cur.fetchall()}
+    d, end, rows, empty = start or FX_HISTORY_START, date.today() - timedelta(days=1), [], 0
+    with VnMarket() as vn:
+        while d <= end:
+            if d.weekday() < 5 and d not in have:
+                try:
+                    usd = vn.macro.fx_on(d)
+                    usd = usd[usd.currency == "USD"]
+                    if not usd.empty and usd.sell.iloc[0]:
+                        rows.append((d, _num(usd.buy_cash.iloc[0]), _num(usd.sell.iloc[0])))
+                except (NoData, SourceError):
+                    empty += 1
+            d += timedelta(days=1)
+    n = _executemany("""INSERT INTO daily_snapshots (snapshot_date, series, buy, sell, unit, source)
+                        VALUES (%s, 'vcb_usd', %s, %s, 'VND/USD', 'vietcombank') ON CONFLICT DO NOTHING""", rows)
+    return {"rows": n, "empty_days": empty}
 
 
 # ── insurers: full statements (investment lines) ─────────────────────────────
@@ -745,10 +796,13 @@ def run_insurer_lines(tickers: list[str] | None = None, backfill: bool = False) 
 
 SNAPSHOT_AT = "14:25"
 ATC_AT = "14:45"
-INTRADAY_BACKFILL_DAYS = 100           # DNSE keeps about three months of 1-minute bars
+INTRADAY_HISTORY_START = date(2023, 9, 11)  # first 1-minute bar Vietcap keeps (DNSE / SSI: about three months)
+INTRADAY_CHUNK_DAYS = 150                   # ≈ 110 sessions ≈ 30k bars, half of one Vietcap call's limit
+INTRADAY_INDICES = ("VNINDEX", "VN30")      # index state at 14:25 (Vietcap has no VNMID / VNSML minutes)
+INTRADAY_DAY_DONE = "14:50"                 # today's session counts once the ATC bar (14:45) is out
 
 
-def intraday_rows(t: str, bars: pd.DataFrame) -> list[tuple]:
+def intraday_rows(t: str, bars: pd.DataFrame, source: str = "dnse") -> list[tuple]:
     """1-minute bars of several sessions → one row per session: what was known before 14:25 and the ATC fill."""
     out = []
     bars = bars.copy()
@@ -763,25 +817,49 @@ def intraday_rows(t: str, bars: pd.DataFrame) -> list[tuple]:
                     _num(pre["close"].iloc[-1]), int(pre["volume"].sum()),
                     _num(atc["close"].iloc[0]) if not atc.empty else None,
                     int(atc["volume"].iloc[0]) if not atc.empty else None,
-                    _num(g["close"].iloc[-1]), int(g["volume"].sum()), "dnse"))
+                    _num(g["close"].iloc[-1]), int(g["volume"].sum()), source))
     return out
 
 
-def run_intraday(tickers: list[str] | None = None, backfill: bool = False) -> dict:
-    """After the close: every active ticker's 1-minute bars (last 5 days, or ~3 months on backfill) → intraday_snapshot.
-    Only sessions with an ATC bar are complete; a session still trading is skipped by the caller's schedule."""
-    tickers = tickers or _active()
-    start = date.today() - timedelta(days=INTRADAY_BACKFILL_DAYS if backfill else 5)
+def run_intraday(tickers: list[str] | None = None, backfill: bool = False, since: date | None = None) -> dict:
+    """After the close: every active ticker's and INTRADAY_INDICES' 1-minute bars (last 5 days, or from 11/09/2023 on
+    backfill, in INTRADAY_CHUNK_DAYS pieces) → intraday_snapshot. Today's session is stored only after the ATC
+    (INTRADAY_DAY_DONE), so a run during trading hours never saves a morning price as the 14:25 state."""
+    tickers = tickers or [*_active(), *INTRADAY_INDICES]
+    now = pd.Timestamp.now(tz="Asia/Ho_Chi_Minh")
+    end = now.date() if now.strftime("%H:%M") >= INTRADAY_DAY_DONE else now.date() - timedelta(days=1)
+    start = since or (INTRADAY_HISTORY_START if backfill else end - timedelta(days=5))
+    chunks = []
+    while start <= end:
+        chunks.append((start, min(end, start + timedelta(days=INTRADAY_CHUNK_DAYS - 1))))
+        start = chunks[-1][1] + timedelta(days=1)
 
     def one(vn, t: str) -> int:
-        bars = vn.prices.history(t, start=start, end=date.today(), interval="1m")
-        return _executemany("""INSERT INTO intraday_snapshot (ticker, date, open, high_1425, low_1425, price_1425,
-                               volume_1425, atc_price, atc_volume, close, volume, source)
-                               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (ticker, date) DO UPDATE SET
-                               open=EXCLUDED.open, high_1425=EXCLUDED.high_1425, low_1425=EXCLUDED.low_1425,
-                               price_1425=EXCLUDED.price_1425, volume_1425=EXCLUDED.volume_1425,
-                               atc_price=EXCLUDED.atc_price, atc_volume=EXCLUDED.atc_volume, close=EXCLUDED.close,
-                               volume=EXCLUDED.volume, fetched_at=NOW()""", intraday_rows(t, bars))
+        from vnmarket.errors import NoData, SourceError
+        n, answered, errors = 0, False, []
+        for a, b in chunks:
+            try:
+                bars = vn.prices.history(t, start=a, end=b, interval="1m")
+            except NoData:
+                continue
+            except SourceError as e:                       # every source empty (not listed yet / suspended) or down
+                if "HTTP" in str(e):
+                    errors.append(str(e)[:80])
+                continue
+            answered = True
+            n += _executemany("""INSERT INTO intraday_snapshot (ticker, date, open, high_1425, low_1425, price_1425,
+                                 volume_1425, atc_price, atc_volume, close, volume, source)
+                                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (ticker, date) DO UPDATE SET
+                                 open=EXCLUDED.open, high_1425=EXCLUDED.high_1425, low_1425=EXCLUDED.low_1425,
+                                 price_1425=EXCLUDED.price_1425, volume_1425=EXCLUDED.volume_1425,
+                                 atc_price=EXCLUDED.atc_price, atc_volume=EXCLUDED.atc_volume, close=EXCLUDED.close,
+                                 volume=EXCLUDED.volume, source=EXCLUDED.source, fetched_at=NOW()""",
+                              intraday_rows(t, bars, bars.attrs.get("source", "unknown")))
+        if errors:
+            raise SourceError(f"intraday {t}: {len(errors)} piece(s) failed, {n} rows kept: {errors[0]}")
+        if not answered:
+            raise NoData(f"intraday: no 1-minute bars for {t}")
+        return n
 
     return _per_ticker("intraday", tickers, one)
 
@@ -830,6 +908,7 @@ RUNNERS = {
     "yield_curve": lambda a: run_yield_curve(a.backfill),
     "fireant_holders": lambda a: run_fireant_holders(a.tickers),
     "macro": lambda a: run_macro(a.backfill),
+    "fx_history": lambda a: run_fx_history(),
     "insurer_lines": lambda a: run_insurer_lines(a.tickers, a.backfill),
     "intraday": lambda a: run_intraday(a.tickers, a.backfill),
     "broker_reports": lambda a: run_broker_reports(a.tickers, a.backfill),
