@@ -58,3 +58,38 @@ def test_web_facts_checks_keep_only_quoted_dated_facts():
            "quote": "TCM bị loại khỏi chỉ số trong khi NLG được thêm vào chỉ số kỳ này"}]
     assert check_review(ch, body, datetime(2022, 10, 21, 10, tzinfo=timezone.utc), {"NLG", "TCM"}) == [
         ("VNDIAMOND", "NLG", "add", datetime(2022, 11, 7).date(), ch[0]["quote"])]
+
+
+def test_sbv_rate_rows_store_as_seen_and_date_starred_tenors_to_reference():
+    from zoneinfo import ZoneInfo
+    from ingest.fetch_rule_data import sbv_rate_rows
+    now = datetime(2026, 10, 31, 10, 15, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh"))
+    ib = pd.DataFrame([{"date": pd.Timestamp(2026, 10, 29), "tenor": "on", "rate": 3.74, "volume": 809175.0,
+                        "reference_date": pd.Timestamp(2026, 10, 29)},
+                       {"date": pd.Timestamp(2026, 10, 29), "tenor": "9m", "rate": 7.11, "volume": 100.0,
+                        "reference_date": pd.Timestamp(2026, 10, 27)}])
+    pol = pd.DataFrame([{"kind": "refinancing", "name": "Lãi suất tái cấp vốn", "rate": 4.5,
+                         "decision": "1123/QĐ-NHNN ngày 16/06/2023", "decision_date": pd.Timestamp(2023, 6, 16),
+                         "effective_date": pd.Timestamp(2023, 3, 19)}])
+    omo = pd.DataFrame([{"date": pd.Timestamp(2026, 10, 30), "type": "repo", "tenor_days": 7, "members": 11,
+                         "winners": 11, "volume": 23598.36, "rate": 4.5},
+                        {"date": pd.Timestamp(2026, 10, 30), "type": "repo", "tenor_days": 0, "members": None,
+                         "winners": None, "volume": 29935.76, "rate": None}])
+    rows = {(r[0], r[1]): r for r in sbv_rate_rows({"interbank": ib, "policy": pol}, omo, now)}
+    assert rows[("interbank_on", date(2026, 10, 29))][2:5] == (3.74, now, "sbv")
+    assert ("interbank_9m", date(2026, 10, 27)) in rows
+    assert rows[("interbank_volume_on", date(2026, 10, 29))][2] == 809175.0
+    ref = rows[("sbv_refinancing_rate", date(2023, 3, 19))]
+    assert ref[2] == 4.5 and ref[3].date() == date(2023, 6, 16)          # known from the decision, not before
+    assert rows[("omo_repo_7d_rate", date(2026, 10, 30))][2] == 4.5
+    assert rows[("omo_repo_volume", date(2026, 10, 30))][2] == 29935.76
+    assert sbv_rate_rows(None, None, now) == []
+
+
+def test_sbv_cpi_month():
+    from ingest.fetch_rule_data import sbv_cpi_month
+    assert sbv_cpi_month("CPI tháng 9/2026 tăng 0,62% so với tháng trước", date(2026, 10, 5)) == (2026, 9)
+    assert sbv_cpi_month("CPI tháng 01/2015 giảm 0,2% so với tháng trước", date(2015, 3, 3)) == (2015, 1)
+    assert sbv_cpi_month("CPI tháng 2 giảm 0,05%", date(2015, 3, 3)) == (2015, 2)
+    assert sbv_cpi_month("Lạm phát cơ bản tám tháng đầu năm tăng 2,71%", date(2024, 9, 9)) is None
+    assert sbv_cpi_month("CPI bình quân năm sau so với năm trước (từ 2005-2014)", date(2015, 1, 31)) is None

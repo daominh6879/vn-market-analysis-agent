@@ -25,6 +25,7 @@ Assets (ingest/fetch_rule_data.py, bctc notes: ingest/extract_bctc_notes.py):
   index_snapshot_ingest     index board at 14:25 (VNINDEX, VN30, VNMID, VNSML…, value, breadth) → index_snapshot_1425 (weekdays 14:25)
   etf_baskets_ingest        SSIAM ETF creation baskets (FUESSV30, FUESSVFL, FUESSV50)      → etf_holdings (weekdays 19:10)
   web_facts_extract         CafeF articles → interbank rates (macro_indicators), index reviews (index_membership_events) (daily 20:00)
+  sbv_ingest                sbv.gov.vn interbank / policy rates, open-market auction, CPI news → macro_indicators (daily 10:15, 17:15)
 
 data_bootstrap_sensor (pipeline/assets_market_data.py) starts each job with backfill when its table is empty.
 """
@@ -223,6 +224,13 @@ def web_facts_extract(context: AssetExecutionContext, config: WebFactsConfig) ->
     return _log(context, "web_facts", run(date.today() - timedelta(days=config.days_back)))
 
 
+@asset(group_name="rule_data", retry_policy=_RETRY,
+       description="sbv.gov.vn: interbank rates per tenor, refinancing / rediscount rates, the open-market auction (latest day only online: stored day by day) and CPI news → macro_indicators source sbv.")
+def sbv_ingest(context: AssetExecutionContext, config: BackfillConfig) -> dict:
+    from ingest.fetch_rule_data import run_sbv
+    return _log(context, "sbv", run_sbv(backfill=config.backfill))
+
+
 block_trades_job = define_asset_job("block_trades_job", selection=[block_trades_ingest])
 index_data_job = define_asset_job("index_data_job", selection=[size_indices_ingest, index_valuation_ingest])
 foreign_room_job = define_asset_job("foreign_room_job", selection=[foreign_room_ingest])
@@ -244,6 +252,7 @@ broker_job = define_asset_job("broker_job", selection=[broker_reports_ingest, br
 index_snapshot_job = define_asset_job("index_snapshot_job", selection=[index_snapshot_ingest])
 etf_baskets_job = define_asset_job("etf_baskets_job", selection=[etf_baskets_ingest])
 web_facts_job = define_asset_job("web_facts_job", selection=[web_facts_extract])
+sbv_job = define_asset_job("sbv_job", selection=[sbv_ingest])
 
 
 def _schedule(job, cron: str, name: str) -> ScheduleDefinition:
@@ -271,14 +280,17 @@ rule_data_schedules = [
     _schedule(index_snapshot_job, "25 14 * * 1-5", "index_snapshot_1425"),
     _schedule(etf_baskets_job, "10 19 * * 1-5", "etf_baskets_1910"),
     _schedule(web_facts_job, "0 20 * * *", "web_facts_2000"),
+    # interbank table for day D appears the next morning(s), the auction result the same afternoon; every day so a
+    # late table is still caught (upsert keeps the first sighting as published_at)
+    _schedule(sbv_job, "15 10,17 * * *", "sbv_1015_1715"),
 ]
 rule_data_jobs = [block_trades_job, index_data_job, foreign_room_job, corporate_actions_job, commodities_job,
                   shareholders_job, vnd_items_job, bctc_notes_job, fireant_data_job, fireant_financials_job,
                   price_history_job, board_close_job, yield_curve_job, macro_job, insurer_lines_job, intraday_job, broker_job,
-                  index_snapshot_job, etf_baskets_job, web_facts_job]
+                  index_snapshot_job, etf_baskets_job, web_facts_job, sbv_job]
 rule_data_assets = [block_trades_ingest, size_indices_ingest, index_valuation_ingest, foreign_room_ingest,
                     corporate_actions_ingest, commodities_ingest, shareholders_ingest, vnd_items_ingest,
                     bctc_notes_extract, fireant_data_ingest, fireant_holders_ingest, price_history_ingest,
                     board_close_ingest, yield_curve_ingest, macro_ingest, insurer_lines_ingest, intraday_ingest,
                     broker_reports_ingest, broker_forecasts_extract, index_snapshot_ingest, etf_baskets_ingest,
-                    web_facts_extract]
+                    web_facts_extract, sbv_ingest]

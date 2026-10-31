@@ -40,7 +40,7 @@ from pipeline.assets_vnstock import vnstock_financials_job, vnstock_ratios_job
 from pipeline.assets_rule_data import (
     bctc_notes_job, block_trades_job, commodities_job, corporate_actions_job, foreign_room_job, index_data_job,
     shareholders_job, vnd_items_job, fireant_data_job, price_history_job, yield_curve_job, macro_job,
-    insurer_lines_job, intraday_job, broker_job, etf_baskets_job, fireant_financials_job,
+    insurer_lines_job, intraday_job, broker_job, etf_baskets_job, fireant_financials_job, sbv_job,
 )
 
 _TZ = "Asia/Ho_Chi_Minh"
@@ -313,6 +313,8 @@ _BOOTSTRAP_CHECKS: list[tuple[str, str, str]] = [
     ("intraday_job", "SELECT NOT EXISTS (SELECT 1 FROM intraday_snapshot)", "intraday"),
     ("broker_job", "SELECT NOT EXISTS (SELECT 1 FROM broker_reports)", "broker"),
     ("etf_baskets_job", "SELECT NOT EXISTS (SELECT 1 FROM etf_holdings WHERE kind = 'basket')", "etf_baskets"),
+    # CPI news list back to 2015 (~130 posts); a backfill cut short by the site's rate limit (403) is resumed next day
+    ("sbv_job", "SELECT (SELECT count(DISTINCT source) FROM macro_indicators WHERE source LIKE 'sbv:%') < 100", "sbv"),
     ("price_history_job", "SELECT (SELECT count(DISTINCT ticker) FROM ohlcv_daily WHERE date < '2018-01-01') < 0.5 * "
      f"{_ACTIVE}", "price_history"),
 ]
@@ -334,6 +336,7 @@ _BOOTSTRAP_RUN_CONFIG: dict[str, dict] = {
     "intraday": {"ops": {"intraday_ingest": {"config": {"backfill": True}}}},
     "broker": {"ops": {"broker_reports_ingest": {"config": {"backfill": True}}}},
     "etf_baskets": {"ops": {"etf_baskets_ingest": {"config": {"backfill": True}}}},
+    "sbv": {"ops": {"sbv_ingest": {"config": {"backfill": True}}}},
 }
 
 
@@ -344,7 +347,7 @@ _BOOTSTRAP_RUN_CONFIG: dict[str, dict] = {
           benchmark_ingest_job, insider_trades_job, news_scored_job, insider_deals_job,
           block_trades_job, index_data_job, foreign_room_job, corporate_actions_job, commodities_job, shareholders_job,
           vnd_items_job, bctc_notes_job, fireant_data_job, price_history_job, yield_curve_job, macro_job,
-          insurer_lines_job, intraday_job, broker_job, etf_baskets_job],
+          insurer_lines_job, intraday_job, broker_job, etf_baskets_job, sbv_job],
     name="data_bootstrap_sensor",
     minimum_interval_seconds=600,
     default_status=DefaultSensorStatus.RUNNING,

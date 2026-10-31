@@ -782,6 +782,111 @@ def run_macro(backfill: bool = False) -> dict:
     return {"posts": posts, "rows": n, "unparsed": len(unparsed), "unparsed_sample": unparsed[:5]}
 
 
+def sbv_rate_rows(rates: dict | None, omo: pd.DataFrame | None, now: datetime) -> list[tuple]:
+    """sbv.gov.vn rate pages → macro_indicators rows (source sbv). The pages show only the latest day, so the figures
+    are stored as they are seen: published_at = the fetch time (the first sighting is kept, _store_macro), never earlier.
+      interbank_<tenor>, interbank_volume_<tenor>   rate %/year, volume tỷ đồng; period_end = the day the figure is
+                                                    for (a (*) tenor: the referenced day)
+      sbv_<kind>_rate                               refinancing / rediscount; period_end = effective date, known from
+                                                    the later of effective and decision date
+      omo_<type>_<n>d_rate, omo_<type>_<n>d_volume  open-market auction per tenor (repo = SBV injects, bill = withdraws)
+      omo_<type>_volume                             the auction total"""
+    tz = "Asia/Ho_Chi_Minh"
+    out = []
+    for r in (rates["interbank"].itertuples(index=False) if rates else []):
+        pe = r.reference_date.date()
+        q = f"NHNN lãi suất BQ liên ngân hàng {r.tenor}, ngày áp dụng {r.date:%d/%m/%Y}"
+        out.append((f"interbank_{r.tenor}", pe, float(r.rate), now, "sbv", q))
+        if r.volume is not None and not pd.isna(r.volume):
+            out.append((f"interbank_volume_{r.tenor}", pe, float(r.volume), now, "sbv", q + " (doanh số, tỷ đồng)"))
+    for r in (rates["policy"].itertuples(index=False) if rates else []):
+        if r.effective_date is None or pd.isna(r.effective_date):
+            continue
+        known = max(x for x in (r.effective_date, r.decision_date) if x is not None and not pd.isna(x))
+        pub = min((known + pd.Timedelta(hours=9)).tz_localize(tz).to_pydatetime(), now)
+        out.append((f"sbv_{r.kind}_rate", r.effective_date.date(), float(r.rate), pub, "sbv",
+                    f"NHNN {r.name} {r.rate:g}%, {r.decision}, áp dụng {r.effective_date:%d/%m/%Y}"))
+    for r in (omo.itertuples(index=False) if omo is not None else []):
+        d, q = r.date.date(), f"NHNN kết quả đấu thầu thị trường mở ngày {r.date:%d/%m/%Y}"
+        if r.tenor_days == 0:
+            if r.volume is not None and not pd.isna(r.volume):
+                out.append((f"omo_{r.type}_volume", d, float(r.volume), now, "sbv", q + ", tổng khối lượng (tỷ đồng)"))
+            continue
+        key = f"omo_{r.type}_{r.tenor_days}d"
+        if r.rate is not None and not pd.isna(r.rate):
+            out.append((key + "_rate", d, float(r.rate), now, "sbv", f"{q}, kỳ hạn {r.tenor_days} ngày, lãi suất"))
+        if r.volume is not None and not pd.isna(r.volume):
+            out.append((key + "_volume", d, float(r.volume), now, "sbv", f"{q}, kỳ hạn {r.tenor_days} ngày, khối lượng"))
+    return out
+
+
+def sbv_cpi_month(title: str, published: date) -> tuple[int, int] | None:
+    """'CPI tháng 9/2026 tăng …' → (2026, 9); other 'CPI tháng …' titles via _month_of ('CPI tháng 2 giảm 0,05%')."""
+    m = re.search(r"tháng\s+(\d{1,2})/(\d{4})", title, re.I)
+    if m and 1 <= int(m.group(1)) <= 12:
+        return int(m.group(2)), int(m.group(1))
+    return _month_of(title, published) if re.match(r"\s*CPI\s+tháng", title, re.I) else None
+
+
+def run_sbv(backfill: bool = False) -> dict:
+    """sbv.gov.vn: interbank rates, SBV policy rates, the latest open-market auction (no history online: stored day by
+    day) and the CPI news list → macro_indicators. CPI posts are read once each (source sbv:<slug>) from the list
+    itself — title and summary through parse_cpi, published_at = the list date 23:59 — so a run is 3 page calls (the
+    site's F5 layer answers 403 after a few calls even from fresh sessions, 31/10/2026). Backfill walks the whole CPI
+    list (~14 pages, to 2015); otherwise its first page."""
+    from urllib.parse import unquote
+    from vnmarket import VnMarket
+    from vnmarket.errors import NoData, SourceError
+
+    tz = "Asia/Ho_Chi_Minh"
+    now = pd.Timestamp.now(tz=tz).to_pydatetime()
+    rows, errors, posts, cpi_rows = [], [], 0, 0
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT DISTINCT source FROM macro_indicators WHERE source LIKE 'sbv:%'")
+        known = {r[0] for r in cur.fetchall()}
+    with VnMarket() as vn:
+        rates = omo = None
+        try:
+            rates = vn.macro.sbv_rates()
+        except (NoData, SourceError) as e:
+            errors.append(f"rates: {e}")
+        try:
+            omo = vn.macro.sbv_open_market()
+        except (NoData, SourceError) as e:
+            errors.append(f"open_market: {e}")
+        rows += sbv_rate_rows(rates, omo, now)
+        # backfill resumes about where the last one was cut off (10 posts a page, newest first) — a full walk is
+        # stopped by the site's 403 after a few pages
+        first = max(1, len(known) // 10) if backfill else 1
+        for page in range(first, 30 if backfill else 2):
+            try:
+                lst = vn.macro.sbv_cpi_posts(page)
+            except NoData:
+                break
+            except SourceError as e:
+                errors.append(f"cpi page {page}: {e}")
+                break
+            for p in lst.itertuples(index=False):
+                src = "sbv:" + unquote(p.url.split("/vi/w/", 1)[-1])[:80]      # slugs contain '/' ('tháng-9/2026-…')
+                ym = sbv_cpi_month(p.title, p.published.date())
+                if src in known or not ym:
+                    continue
+                posts += 1
+                # list date only (the article page carries the time, but sbv.gov.vn answers 403 after a few calls):
+                # known from the end of that day, i.e. the next session
+                pub = (p.published + pd.Timedelta(hours=23, minutes=59)).tz_localize(tz).to_pydatetime()
+                found = {**parse_cpi(p.title), **parse_cpi(p.summary or "")}
+                for code, (v, q) in found.items():
+                    rows.append((code, _month_end(*ym), v, pub, src, q))
+                    cpi_rows += 1
+            if lst.published.min().year < 2015:
+                break
+    n = _store_macro(rows)
+    if n == 0:
+        raise RuntimeError(f"sbv: nothing stored; errors={errors[:5]}")
+    return {"rows": n, "cpi_posts": posts, "cpi_rows": cpi_rows, "errors": len(errors), "error_sample": errors[:5]}
+
+
 WAYBACK_CDX = "http://web.archive.org/cdx/search/cdx"
 VCB_RATE_PAGES = ("portal.vietcombank.com.vn/UserControls/TVPortal.TyGia/pListLaiSuat.aspx*",
                   "vietcombank.com.vn/vi-VN/KHCN/Cong-cu-Tien-ich/KHCN---Lai-suat")
