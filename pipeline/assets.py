@@ -413,7 +413,7 @@ from pipeline.assets_market_data import (
     securities_shares_job, stock_dividends_job, ratio_history_job, financials_quarterly_job, daily_snapshots_job,
     securities_shares_schedule, stock_dividends_schedule, stock_dividends_all_schedule,
     ratio_history_schedule, financials_quarterly_schedule, daily_snapshots_schedule,
-    data_bootstrap_sensor, data_freshness_sensor,
+    data_bootstrap_sensor, data_freshness_sensor, financial_gap_sensor,
 )
 from pipeline.assets_bctc import bctc_sync, bctc_sync_job, bctc_sync_schedule
 from pipeline.assets_rule_data import rule_data_assets, rule_data_jobs, rule_data_schedules
@@ -664,6 +664,6 @@ defs = Definitions(
                proprietary_flows_schedule, breakout_signals_schedule, bctc_sync_schedule,
                benchmark_ingest_schedule, news_scored_schedule, insider_trades_schedule,
                insider_deals_schedule, *rule_data_schedules],
-    sensors=[minio_new_pdf_sensor, data_bootstrap_sensor, data_freshness_sensor],
+    sensors=[minio_new_pdf_sensor, data_bootstrap_sensor, data_freshness_sensor, financial_gap_sensor],
     asset_checks=[gated_mid_beats_ungated],
 )

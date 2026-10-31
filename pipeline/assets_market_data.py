@@ -40,7 +40,7 @@ from pipeline.assets_vnstock import vnstock_financials_job, vnstock_ratios_job
 from pipeline.assets_rule_data import (
     bctc_notes_job, block_trades_job, commodities_job, corporate_actions_job, foreign_room_job, index_data_job,
     shareholders_job, vnd_items_job, fireant_data_job, price_history_job, yield_curve_job, macro_job,
-    insurer_lines_job, intraday_job, broker_job, etf_baskets_job,
+    insurer_lines_job, intraday_job, broker_job, etf_baskets_job, fireant_financials_job,
 )
 
 _TZ = "Asia/Ho_Chi_Minh"
@@ -164,6 +164,7 @@ def ratio_history(context: AssetExecutionContext) -> dict:
 
 class QuarterlyConfig(Config):
     years_back: int = 2   # current year and N previous
+    tickers: str = ""     # comma list; empty = every ticker (financial_gap_sensor passes the stale ones)
 
 
 @asset(
@@ -174,7 +175,7 @@ class QuarterlyConfig(Config):
 def financials_quarterly(context: AssetExecutionContext, config: QuarterlyConfig) -> dict:
     from ingest.fetch_financials import fetch_finance_facts, insert_vnstock_facts
 
-    tickers = _tickers("all")
+    tickers = [t.strip().upper() for t in config.tickers.split(",") if t.strip()] or _tickers("all")
     year = date.today().year
     facts, done, failed = 0, 0, []
     for t in tickers:
@@ -366,6 +367,94 @@ def data_bootstrap_sensor(context):
     except (Exception, SystemExit) as exc:
         return SkipReason(f"bootstrap check failed: {exc}")
     return requests or SkipReason("all market-data datasets already populated")
+
+
+# ── Financial statement gaps: per ticker, not per table ───────────────────────
+# data_bootstrap_sensor only asks "does any row exist for 80% of tickers"; vn-portfolio's long-term engine needs, per
+# ticker, ≥ 4 consecutive annual years and a quarter no older than ~2 quarters. Every day this finds the traded
+# tickers that miss either (vnstock ∪ FireAnt, what /advisor/market-data serves) and re-runs the statement jobs for
+# exactly those tickers: VCI (vnstock_financials / financials_quarterly) and FireAnt (fireant_financials_job).
+
+GAP_MIN_ANNUAL_YEARS = 4        # long_term.min_annual_years in vn-portfolio
+GAP_ANNUAL_WINDOW = 5           # look at the last 5 closed years
+GAP_STALE_DAYS = 92 * 2 + 45    # vn-portfolio long_term.stale_financials: latest quarter end older than this
+GAP_MAX_TICKERS = 400           # one day's batch; the rest is picked up the next day
+
+_GAP_SQL = """
+WITH traded AS (
+  SELECT DISTINCT o.ticker FROM ohlcv_daily o JOIN securities s ON s.ticker = o.ticker AND s.is_active
+  WHERE o.date >= CURRENT_DATE - 30),
+periods AS (
+  SELECT ticker, period FROM financial_facts
+   WHERE source = 'vnstock' AND report_type = 'consolidated' AND metric_code NOT LIKE 'ratio\\_%%'
+     AND ticker IN (SELECT ticker FROM traded)
+  UNION
+  SELECT ticker, CASE WHEN quarter = 0 THEN year::text ELSE 'Q' || quarter || '/' || year END FROM fireant_financial_data
+   WHERE field = ANY(%(fields)s) AND ticker IN (SELECT ticker FROM traded)),
+annual AS (
+  SELECT ticker, count(*) AS n FROM periods
+   WHERE period ~ '^[0-9]{4}$' AND period::int BETWEEN %(y0)s AND %(y1)s GROUP BY ticker),
+quarterly AS (
+  SELECT ticker, max(make_date(split_part(period, '/', 2)::int, substr(period, 2, 1)::int * 3, 1)
+                     + interval '1 month' - interval '1 day')::date AS latest_end
+    FROM periods WHERE period ~ '^Q[1-4]/[0-9]{4}$' GROUP BY ticker)
+SELECT t.ticker, coalesce(a.n, 0) < %(min_years)s AS annual_gap,
+       q.latest_end IS NULL OR q.latest_end < CURRENT_DATE - %(stale_days)s AS quarter_gap
+  FROM traded t LEFT JOIN annual a USING (ticker) LEFT JOIN quarterly q USING (ticker)
+ ORDER BY t.ticker
+"""
+
+
+def financial_gap_tickers(cur, today: date) -> tuple[list[str], list[str]]:
+    """(tickers short of annual years, tickers whose newest quarter is stale) among tickers traded in 30 days."""
+    from ingest.fetch_rule_data import FIREANT_TO_VNSTOCK
+    cur.execute(_GAP_SQL, {"fields": list(FIREANT_TO_VNSTOCK), "y0": today.year - GAP_ANNUAL_WINDOW,
+                           "y1": today.year - 1, "min_years": GAP_MIN_ANNUAL_YEARS, "stale_days": GAP_STALE_DAYS})
+    rows = cur.fetchall()
+    return [t for t, a, _ in rows if a], [t for t, _, q in rows if q]
+
+
+def financial_gap_requests(annual: list[str], quarter: list[str], today: date) -> list[RunRequest]:
+    """One request per job per day for the tickers with gaps (capped at GAP_MAX_TICKERS). Pure."""
+    day = today.isoformat()
+    out = []
+    if annual:
+        a = ",".join(annual[:GAP_MAX_TICKERS])
+        out.append(RunRequest(run_key=f"fin-gap-annual-{day}", job_name="vnstock_financials_job",
+                              run_config={"ops": {"vnstock_financials": {"config": {
+                                  "tickers": a, "period_from": today.year - 8, "period_to": today.year}}}},
+                              tags={"financial_gap": "annual", "tickers": str(len(annual))}))
+    if quarter:
+        out.append(RunRequest(run_key=f"fin-gap-quarterly-{day}", job_name="financials_quarterly_job",
+                              run_config={"ops": {"financials_quarterly": {"config": {
+                                  "tickers": ",".join(quarter[:GAP_MAX_TICKERS])}}}},
+                              tags={"financial_gap": "quarterly", "tickers": str(len(quarter))}))
+    both = list(dict.fromkeys(annual + quarter))[:GAP_MAX_TICKERS]
+    if both:
+        out.append(RunRequest(run_key=f"fin-gap-fireant-{day}", job_name="fireant_financials_job",
+                              run_config={"ops": {"fireant_data_ingest": {"config": {"tickers": ",".join(both)}}}},
+                              tags={"financial_gap": "fireant", "tickers": str(len(both))}))
+    return out
+
+
+@sensor(
+    jobs=[vnstock_financials_job, financials_quarterly_job, fireant_financials_job],
+    name="financial_gap_sensor",
+    minimum_interval_seconds=3600,
+    default_status=DefaultSensorStatus.RUNNING,
+    description="Daily: re-fetch statements (VCI + FireAnt) for the traded tickers short of 4 annual years or with a "
+                "stale latest quarter (vn-portfolio long-term engine needs).",
+)
+def financial_gap_sensor(context):
+    from core.db import get_conn
+    today = date.today()
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            annual, quarter = financial_gap_tickers(cur, today)
+    except (Exception, SystemExit) as exc:
+        return SkipReason(f"financial gap check failed: {exc}")
+    context.log.info(f"financial gaps: {len(annual)} short of annual years, {len(quarter)} stale quarter")
+    return financial_gap_requests(annual, quarter, today) or SkipReason("no financial statement gaps")
 
 
 # ── Freshness sensor: re-run the ingest of a daily dataset that misses the last finished session ──

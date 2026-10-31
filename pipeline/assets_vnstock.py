@@ -29,7 +29,7 @@ from dagster import AssetExecutionContext, Config, DefaultScheduleStatus, RetryP
 
 class VnstockFinancialsConfig(Config):
     tickers: str = ""   # empty = all active tickers from securities table
-    period_from: int = 2020
+    period_from: int = date.today().year - 8   # LT engine needs ≥ 4 consecutive years, prefers 5; gaps cut the series
     period_to: int = date.today().year
     report_type: str = "consolidated"
     source: str = "VCI"

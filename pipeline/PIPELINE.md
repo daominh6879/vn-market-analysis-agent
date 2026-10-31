@@ -88,10 +88,23 @@ Idempotent: URL là dedup key trong Postgres; `url_hash` là point ID trong Qdra
 - Cron `0 2 * * 0`
 - Xóa bài cũ > 90 ngày, Chủ nhật 02:00
 
+## BCTC: nguồn và lấp khoảng trống (31/10/2026)
+
+| Nguồn | Vào bảng | Ghi chú |
+|---|---|---|
+| VCI IQ (`vn.finance.statement(labels=False)`) | `financial_facts` (source `vnstock`) | Nguồn chính. Khi VCI không trả lời, mã đó **không có gì** (KBS/FireAnt trong `vnmarket` không mang mã trường VCI nên không làm dự phòng được ở bước này) |
+| FireAnt (`vn.finance.data`, cần token) | `fireant_financial_data` | 60 quý + 17 năm. `/advisor/market-data` lấp **cả kỳ** VCI không có và **từng trường** VCI thiếu (OCF, vốn điều lệ…) theo `FIREANT_TO_VNSTOCK`; không bao giờ đè số VCI, không điền mã khi VCI đã có alias (`FILL_ALIASES`) |
+
+- `financial_gap_sensor` (mỗi giờ, mỗi job một lần/ngày): tìm mã đang giao dịch (30 ngày) có < 4 năm trong 5 năm gần
+  nhất hoặc quý mới nhất cũ hơn 229 ngày (VCI ∪ FireAnt) → chạy `vnstock_financials_job` (8 năm), `financials_quarterly_job`
+  và `fireant_financials_job` **chỉ cho các mã đó** (tối đa 400 mã/ngày).
+- `vnstock_financials` mặc định lấy 8 năm (trước: từ 2020).
+- Dò nguồn cho mã thiếu: `python scripts/probe_financial_sources.py --gaps 30 --csv probe.csv` (chỉ đọc).
+
 ## Tải lại theo yêu cầu (vn-portfolio)
 
 `POST /advisor/refetch` (`portfolio/refetch.py`) chạy lại đúng hàm fetch + upsert của `vnstock_financials` (BCTC năm,
-8 năm gần nhất), `financials_quarterly` (BCTC quý, 2 năm) và `ohlcv_daily_ingest` (giá vào `ohlcv_daily`, từ phiên mới nhất đã có hoặc 400 ngày) cho tối đa 10 mã mỗi lần. Kết quả so trước/sau: số kỳ BCTC / số phiên và kỳ mới nhất (`new` / `unchanged` / `empty` / `error`).
+8 năm gần nhất), `financials_quarterly` (BCTC quý, 2 năm), FireAnt (`fireant_data_one`, một lần mỗi mã) và `ohlcv_daily_ingest` (giá vào `ohlcv_daily`, từ phiên mới nhất đã có hoặc 400 ngày) cho tối đa 10 mã mỗi lần. Kết quả so trước/sau: số kỳ BCTC / số phiên và kỳ mới nhất (`new` / `unchanged` / `empty` / `error`).
 Không tạo bảng mới, không thay lịch chạy: chỉ để tab "Dữ liệu thiếu" của vn-portfolio lấp mã thiếu ngay thay vì chờ lịch.
 
 ## Audit trail

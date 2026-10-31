@@ -134,18 +134,18 @@ def test_refetch_runs_each_ticker_dataset_and_reports_what_changed(client, monke
             ("HPG", "prices"): {"count": 500, "latest": "2026-10-30"},
             ("FPT", "prices"): {"count": 500, "latest": "2026-10-30"}}
 
-    def annual(t):
+    def annual(t, _done=None):
         calls.append(("a", t))
         if t == "HPG":                                       # source had 2 more years for HPG
             held[(t, "financials_annual")] = {"count": 5, "latest": "2025"}
         return 412                                           # FPT: same 6 years rewritten
 
-    def boom(t):
+    def boom(t, _done=None):
         raise SystemExit("source down")
 
     monkeypatch.setitem(rf.FETCHERS, "financials_annual", annual)
     monkeypatch.setitem(rf.FETCHERS, "financials_quarterly", boom)
-    monkeypatch.setitem(rf.FETCHERS, "prices", lambda t: 0)
+    monkeypatch.setitem(rf.FETCHERS, "prices", lambda t, _done=None: 0)
     monkeypatch.setattr(rf, "state", lambda t, d: dict(held.get((t, d), {"count": 0, "latest": None})))
     h = {"X-Internal-Key": KEY}
     r = client.post("/advisor/refetch", json={"tickers": ["hpg", "FPT", "HPG"],
@@ -171,3 +171,27 @@ def test_refetch_rejects_bad_requests(client):
                        headers=h).status_code == 400
     many = [f"T{i:02d}X" for i in range(11)]
     assert client.post("/advisor/refetch", json={"tickers": many, "datasets": ["prices"]}, headers=h).status_code == 400
+
+
+def test_financials_combine_vci_and_fireant_once_per_ticker(monkeypatch):
+    import pytest
+    from portfolio import refetch as rf
+    fa_calls = []
+
+    def vci_down(t, q):
+        raise SystemExit("vci_iq unavailable")
+
+    monkeypatch.setattr(rf, "_vci", vci_down)
+    monkeypatch.setattr(rf, "_fireant", lambda t: fa_calls.append(t) or 120)
+    done: dict = {}
+    rows, src = rf._annual("AAA", done)
+    assert rows == 120 and src["fireant"] == 120 and src["vci"].startswith("lỗi")    # VCI down, FireAnt fills
+    rows, src = rf._quarterly("AAA", done)                                         # FireAnt reused, not called again
+    assert fa_calls == ["AAA"] and rows == 0 and "đã tải" in src["fireant"]
+
+    def fa_down(t):
+        raise RuntimeError("FireAnt chưa cấu hình")
+
+    monkeypatch.setattr(rf, "_fireant", fa_down)
+    with pytest.raises(RuntimeError):                                              # every source failed
+        rf._annual("BBB", {})

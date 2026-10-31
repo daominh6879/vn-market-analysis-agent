@@ -26,23 +26,71 @@ PRICE_DAYS_BACK = 400        # covers price_history<60 / 52-week windows for a n
 TICKER = re.compile(r"^[A-Z0-9]{3,10}$")
 
 
-def _annual(ticker: str) -> int:
+FIREANT_QUARTERS = 60        # same depth as fireant_data_ingest: 15 years of quarters, 17 years of annual values
+
+
+def _vci(ticker: str, quarterly: bool) -> int:
+    """VCI statements → financial_facts (vnstock_financials / financials_quarterly assets)."""
     from ingest.fetch_financials import fetch_finance_facts, insert_vnstock_facts
     year = date.today().year
-    facts = fetch_finance_facts(ticker=ticker, report_type="consolidated", period_from=year - ANNUAL_YEARS_BACK,
-                                period_to=year, source="VCI", quarterly=False)
+    back = QUARTERLY_YEARS_BACK if quarterly else ANNUAL_YEARS_BACK
+    facts = fetch_finance_facts(ticker=ticker, report_type="consolidated", period_from=year - back, period_to=year,
+                                source="VCI", quarterly=quarterly)
     return insert_vnstock_facts(facts) if facts else 0
 
 
-def _quarterly(ticker: str) -> int:
-    from ingest.fetch_financials import fetch_finance_facts, insert_vnstock_facts
-    year = date.today().year
-    facts = fetch_finance_facts(ticker=ticker, report_type="consolidated", period_from=year - QUARTERLY_YEARS_BACK,
-                                period_to=year, source="KBS", quarterly=True)
-    return insert_vnstock_facts(facts) if facts else 0
+def _fireant(ticker: str) -> int:
+    """FireAnt quarterly + annual values → fireant_financial_data (fireant_data_ingest asset). /advisor/market-data
+    fills from them every period and field VCI lacks. 0 when no FireAnt credentials are configured."""
+    from vnmarket import VnMarket
+    from vnmarket.errors import NoData
+    from vnmarket.sources import fireant
+    from ingest.fetch_rule_data import fireant_data_one
+    if not fireant.enabled():
+        raise RuntimeError("FireAnt chưa cấu hình (FIREANT_TOKEN hoặc FIREANT_EMAIL/PASSWORD)")
+    with VnMarket() as vn:
+        try:
+            return fireant_data_one(vn, ticker, FIREANT_QUARTERS)
+        except NoData:
+            return 0
 
 
-def _prices(ticker: str) -> int:
+def _financials(ticker: str, quarterly: bool, fireant_done: dict) -> tuple[int, dict]:
+    """Both statement sources, each one's outcome reported; raises only when every source failed. FireAnt answers
+    quarters and years in one call, so it runs once per ticker per request (fireant_done: ticker → rows or error);
+    the second dataset reuses that outcome."""
+    rows, sources = 0, {}
+    try:
+        n = _vci(ticker, quarterly)
+        rows += n
+        sources["vci"] = n
+    except (Exception, SystemExit) as exc:              # fetchers sys.exit on some source errors
+        sources["vci"] = f"lỗi: {type(exc).__name__}: {exc}"[:160]
+    if ticker not in fireant_done:
+        try:
+            n = _fireant(ticker)
+            rows += n
+            fireant_done[ticker] = n
+        except (Exception, SystemExit) as exc:
+            fireant_done[ticker] = f"lỗi: {type(exc).__name__}: {exc}"[:160]
+        sources["fireant"] = fireant_done[ticker]
+    else:
+        prev = fireant_done[ticker]
+        sources["fireant"] = prev if isinstance(prev, str) else f"đã tải cùng lần này ({prev} dòng)"
+    if all(isinstance(v, str) and v.startswith("lỗi") for v in sources.values()):
+        raise RuntimeError("; ".join(f"{k} {v}" for k, v in sources.items()))
+    return rows, sources
+
+
+def _annual(ticker: str, fireant_done: dict | None = None) -> tuple[int, dict]:
+    return _financials(ticker, False, {} if fireant_done is None else fireant_done)
+
+
+def _quarterly(ticker: str, fireant_done: dict | None = None) -> tuple[int, dict]:
+    return _financials(ticker, True, {} if fireant_done is None else fireant_done)
+
+
+def _prices(ticker: str, _fireant_done: dict | None = None) -> int:
     """ohlcv_daily (what /advisor/market-data serves), same function as the ohlcv_daily_ingest asset: since the
     latest stored session, or PRICE_DAYS_BACK days for a ticker without rows."""
     from ingest.fetch_ohlcv import fetch_and_upsert
@@ -51,24 +99,29 @@ def _prices(ticker: str) -> int:
 
 FETCHERS = {"financials_annual": _annual, "financials_quarterly": _quarterly, "prices": _prices}
 
-# what /advisor/market-data reads, per dataset: (count, newest) of distinct periods / sessions for one ticker
-_FIN = ("FROM financial_facts WHERE ticker = %s AND source = 'vnstock' AND report_type = 'consolidated' "
-        "AND period ~ %s")
+# what /advisor/market-data serves, per dataset: (count, newest) of distinct periods / sessions for one ticker —
+# financial periods = vnstock (VCI) periods ∪ FireAnt periods (market_data._fireant_history fills the gaps)
+_PERIODS = """SELECT period AS p FROM financial_facts WHERE ticker = %(t)s AND source = 'vnstock'
+                AND report_type = 'consolidated' AND period ~ %(pattern)s
+              UNION SELECT {fa_period} FROM fireant_financial_data WHERE ticker = %(t)s AND {fa_where}
+                AND field = ANY(%(fields)s)"""
 STATE_SQL = {
-    "financials_annual": (f"SELECT COUNT(DISTINCT period), MAX(period) {_FIN}", r"^[0-9]{4}$"),
-    "financials_quarterly": (f"SELECT COUNT(DISTINCT period), "
-                             f"MAX(split_part(period, '/', 2) || '-Q' || substr(period, 2, 1)) {_FIN}",
-                             r"^Q[1-4]/[0-9]{4}$"),
-    "prices": ("SELECT COUNT(*), MAX(date)::text FROM ohlcv_daily WHERE ticker = %s", None),
+    "financials_annual": ("SELECT COUNT(*), MAX(p) FROM ({}) x".format(
+        _PERIODS.format(fa_period="year::text", fa_where="quarter = 0")), r"^[0-9]{4}$"),
+    "financials_quarterly": ("SELECT COUNT(*), MAX(split_part(p, '/', 2) || '-Q' || substr(p, 2, 1)) FROM ({}) x".format(
+        _PERIODS.format(fa_period="'Q' || quarter || '/' || year", fa_where="quarter BETWEEN 1 AND 4")),
+        r"^Q[1-4]/[0-9]{4}$"),
+    "prices": ("SELECT COUNT(*), MAX(date)::text FROM ohlcv_daily WHERE ticker = %(t)s", None),
 }
 
 
 def state(ticker: str, dataset: str) -> dict:
     """{count, latest} of what the engine side will see for this ticker × dataset."""
     from core.db import get_conn
+    from ingest.fetch_rule_data import FIREANT_TO_VNSTOCK
     sql, pattern = STATE_SQL[dataset]
     with get_conn() as conn, conn.cursor() as cur:
-        cur.execute(sql, (ticker, pattern) if pattern else (ticker,))
+        cur.execute(sql, {"t": ticker, "pattern": pattern, "fields": list(FIREANT_TO_VNSTOCK)})
         n, latest = cur.fetchone()
     return {"count": int(n or 0), "latest": latest}
 
@@ -99,20 +152,42 @@ def refetch(tickers: list[str], datasets: list[str]) -> dict:
     nothing the table did not have; empty = the source returned nothing; rows = rows upserted (incl. rewrites)."""
     ts, ds = validate(tickers, datasets)
     results = []
+    fireant_done: dict[str, int | str] = {}
     for t in ts:
+        # every dataset's "before" first: FireAnt, run with the first financial dataset, also brings the other one
+        before = {}
+        for d in ds:
+            try:
+                before[d] = state(t, d)
+            except Exception as exc:
+                before[d] = exc
+        rs = []
         for d in ds:
             t0 = time.time()
             r = {"ticker": t, "dataset": d, "rows": 0}
             try:
-                r["before"] = state(t, d)
-                r["rows"] = FETCHERS[d](t)
-                r["after"] = state(t, d)
-                b, a = r["before"], r["after"]
-                grew = a["count"] > b["count"] or (a["latest"] or "") > (b["latest"] or "")
-                r["status"] = "new" if grew else "unchanged" if r["rows"] else "empty"
+                if isinstance(before[d], Exception):
+                    raise before[d]
+                r["before"] = before[d]
+                out = FETCHERS[d](t, fireant_done)
+                r["rows"], r["sources"] = out if isinstance(out, tuple) else (out, None)
             except (Exception, SystemExit) as exc:          # fetchers sys.exit on some source errors
                 r.update(status="error", error=f"{type(exc).__name__}: {exc}"[:200])
             r["seconds"] = round(time.time() - t0, 1)
-            results.append(r)
+            rs.append(r)
+        for r in rs:
+            if r.get("status") == "error":
+                continue
+            try:
+                r["after"] = state(t, r["dataset"])
+            except Exception as exc:
+                r.update(status="error", error=f"{type(exc).__name__}: {exc}"[:200])
+                continue
+            b, a = r["before"], r["after"]
+            grew = a["count"] > b["count"] or (a["latest"] or "") > (b["latest"] or "")
+            fetched = r["rows"] or any(isinstance(v, int) and v or isinstance(v, str) and v.startswith("đã tải")
+                                       for v in (r.get("sources") or {}).values())
+            r["status"] = "new" if grew else "unchanged" if fetched else "empty"
+        results += rs
     counts = {s: sum(1 for r in results if r["status"] == s) for s in STATUSES}
     return {"results": results, **counts}

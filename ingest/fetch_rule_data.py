@@ -533,20 +533,24 @@ FIREANT_EXTRA = ("Cash", "CashEquivalent", "StockHolderEquity")   # cash = Cash 
 def run_fireant_data(tickers: list[str] | None = None, count: int = 60) -> dict:
     """FireAnt values per quarter (from 2011) and year → fireant_financial_data (needs a FireAnt token): the mapped
     statement lines for every ticker, loan groups for banks, loans / issued bonds for brokers."""
-    fields = set(FIREANT_TO_VNSTOCK) | set(FIREANT_EXTRA) | set(FIREANT_BANK_FIELDS) | set(FIREANT_BROKER_FIELDS)
+    return {"all": _per_ticker("fireant_data", tickers or _active(), lambda vn, t: fireant_data_one(vn, t, count))}
 
-    def one(vn, t):
-        n = 0
-        for period, cnt in (("Q", count), ("Y", count // 4 + 2)):
-            df = vn.finance.data(t, period, cnt)
-            rows = [(t, int(r["year"]), int(r["quarter"]) if period == "Q" else 0, f, _num(r.get(f)))
-                    for _, r in df.iterrows() for f in fields if f in df.columns and _num(r.get(f)) is not None]
-            n += _executemany("""
-                INSERT INTO fireant_financial_data (ticker, year, quarter, field, value) VALUES (%s,%s,%s,%s,%s)
-                ON CONFLICT (ticker, year, quarter, field) DO UPDATE SET value=EXCLUDED.value, fetched_at=NOW()""", rows)
-        return n
 
-    return {"all": _per_ticker("fireant_data", tickers or _active(), one)}
+FIREANT_FIELDS = set(FIREANT_TO_VNSTOCK) | set(FIREANT_EXTRA) | set(FIREANT_BANK_FIELDS) | set(FIREANT_BROKER_FIELDS)
+
+
+def fireant_data_one(vn, t: str, count: int = 60) -> int:
+    """One ticker: `count` quarters and count/4 + 2 years of FireAnt values → fireant_financial_data (rows upserted).
+    Raises NoData when FireAnt has nothing for the ticker."""
+    n = 0
+    for period, cnt in (("Q", count), ("Y", count // 4 + 2)):
+        df = vn.finance.data(t, period, cnt)
+        rows = [(t, int(r["year"]), int(r["quarter"]) if period == "Q" else 0, f, _num(r.get(f)))
+                for _, r in df.iterrows() for f in FIREANT_FIELDS if f in df.columns and _num(r.get(f)) is not None]
+        n += _executemany("""
+            INSERT INTO fireant_financial_data (ticker, year, quarter, field, value) VALUES (%s,%s,%s,%s,%s)
+            ON CONFLICT (ticker, year, quarter, field) DO UPDATE SET value=EXCLUDED.value, fetched_at=NOW()""", rows)
+    return n
 
 
 def run_fireant_holders(tickers: list[str] | None = None) -> dict:

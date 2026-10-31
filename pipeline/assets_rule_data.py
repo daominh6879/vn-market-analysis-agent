@@ -50,6 +50,10 @@ class BackfillConfig(Config):
     backfill: bool = False      # True refetches the full history (the bootstrap sensor sets it on an empty table)
 
 
+class TickersConfig(Config):
+    tickers: str = ""     # comma list; empty = every active ticker (financial_gap_sensor passes the ones with gaps)
+
+
 class WebFactsConfig(Config):
     days_back: int = 10         # sitemaps walked back from today (a wider filter is re-run with a larger window)
 
@@ -117,9 +121,10 @@ def vnd_items_ingest(context: AssetExecutionContext) -> dict:
 
 @asset(group_name="rule_data", retry_policy=_RETRY,
        description="FireAnt quarterly values: bank loan groups 1–5, NPL, loan-loss reserves; broker loans and sector-wide broker loans → fireant_financial_data.")
-def fireant_data_ingest(context: AssetExecutionContext) -> dict:
+def fireant_data_ingest(context: AssetExecutionContext, config: TickersConfig) -> dict:
     from ingest.fetch_rule_data import run_fireant_data
-    return _log(context, "fireant_data", run_fireant_data())
+    tickers = [t.strip().upper() for t in config.tickers.split(",") if t.strip()] or None
+    return _log(context, "fireant_data", run_fireant_data(tickers))
 
 
 @asset(group_name="rule_data", retry_policy=_RETRY,
@@ -227,6 +232,8 @@ shareholders_job = define_asset_job("shareholders_job", selection=[shareholders_
 vnd_items_job = define_asset_job("vnd_items_job", selection=[vnd_items_ingest])
 bctc_notes_job = define_asset_job("bctc_notes_job", selection=[bctc_notes_extract])
 fireant_data_job = define_asset_job("fireant_data_job", selection=[fireant_data_ingest, fireant_holders_ingest])
+# statements only, for a few tickers (financial_gap_sensor): no holders refetch of the whole market
+fireant_financials_job = define_asset_job("fireant_financials_job", selection=[fireant_data_ingest])
 price_history_job = define_asset_job("price_history_job", selection=[price_history_ingest])
 board_close_job = define_asset_job("board_close_job", selection=[board_close_ingest])
 yield_curve_job = define_asset_job("yield_curve_job", selection=[yield_curve_ingest])
@@ -266,8 +273,8 @@ rule_data_schedules = [
     _schedule(web_facts_job, "0 20 * * *", "web_facts_2000"),
 ]
 rule_data_jobs = [block_trades_job, index_data_job, foreign_room_job, corporate_actions_job, commodities_job,
-                  shareholders_job, vnd_items_job, bctc_notes_job, fireant_data_job, price_history_job,
-                  board_close_job, yield_curve_job, macro_job, insurer_lines_job, intraday_job, broker_job,
+                  shareholders_job, vnd_items_job, bctc_notes_job, fireant_data_job, fireant_financials_job,
+                  price_history_job, board_close_job, yield_curve_job, macro_job, insurer_lines_job, intraday_job, broker_job,
                   index_snapshot_job, etf_baskets_job, web_facts_job]
 rule_data_assets = [block_trades_ingest, size_indices_ingest, index_valuation_ingest, foreign_room_ingest,
                     corporate_actions_ingest, commodities_ingest, shareholders_ingest, vnd_items_ingest,

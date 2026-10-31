@@ -195,25 +195,47 @@ def _fa_map():
 _FA_FIELDS = (*_fa_map(), "Cash", "CashEquivalent")
 
 
-def _fireant_history(out_fin: dict, fa_rows: list[tuple], metrics: list[str] | None) -> int:
-    """Periods vnstock has no figures for (before 2024) get FireAnt values under the vnstock codes (fetch_rule_data
-    FIREANT_TO_VNSTOCK, checked on the overlap). Never overwrites a vnstock period. Marked with _source = 'fireant'."""
+# Codes vn-portfolio reads as the same field (its app/engine/financials.FIELDS, first code wins). A FireAnt value is
+# only added to a vnstock period when none of the codes of its group is there, so it can never shadow a vnstock alias.
+FILL_ALIASES = [
+    {"loi_nhuan_cua_co_ong_cua_cong_ty_me", "co_ong_cua_cong_ty_me", "loi_nhuan_sau_thue_phan_bo_cho_chu_so_huu"},
+    {"loi_nhuan_truoc_thue", "loi_nhuanlo_truoc_thue"},
+    {"thu_nhap_khac_rong", "lailo_thuan_tu_hoat_ong_khac"},
+    {"doanh_thu_thuan", "tong_thu_nhap_hoat_ong", "doanh_thu_hoat_ong"},
+    {"vay_ngan_han", "vay_va_no_thue_tai_san_tai_chinh_ngan_han"},
+    {"phai_thu_khach_hang", "cac_khoan_phai_thu"},
+    {"hang_ton_kho_rong", "hang_ton_kho"},
+]
+_ALIAS_OF = {c: g for g in FILL_ALIASES for c in g}
+
+
+def _fireant_history(out_fin: dict, fa_rows: list[tuple], metrics: list[str] | None) -> dict:
+    """FireAnt values under the vnstock codes (fetch_rule_data FIREANT_TO_VNSTOCK, checked on the overlap) for what
+    vnstock does not have: whole periods (history before 2024, tickers VCI has no statements for) and single missing
+    fields of a period vnstock does have (e.g. a year without operating cash flow). A vnstock value is never
+    overwritten. Returns {"periods": whole periods added, "fields": fields added to existing periods}."""
     m = _fa_map()
     per: dict[tuple[str, str], dict] = defaultdict(dict)
     for t, y, q, f, v in fa_rows:
         per[(t, f"Q{q}/{y}" if q else str(y))][f] = _f(v)
-    n = 0
+    periods = fields = 0
     for (t, period), vals in per.items():
-        if period in out_fin.get(t, {}):
-            continue
         row = {code: vals[f] * sign for f, (code, sign) in m.items() if vals.get(f) is not None
                and (not metrics or code in metrics)}
         if vals.get("Cash") is not None and (not metrics or "tien_va_tuong_duong_tien" in metrics):
             row["tien_va_tuong_duong_tien"] = vals["Cash"] + (vals.get("CashEquivalent") or 0)
-        if row:
+        if not row:
+            continue
+        have = out_fin.get(t, {}).get(period)
+        if not have:
             out_fin[t][period] = row
-            n += 1
-    return n
+            periods += 1
+            continue
+        for code, v in row.items():
+            if all(have.get(c) is None for c in _ALIAS_OF.get(code, {code})):
+                have[code] = v
+                fields += 1
+    return {"periods": periods, "fields": fields}
 
 
 def market_data(metrics: list[str] | None = None, since: date | None = None) -> dict:
@@ -299,6 +321,7 @@ def market_data(metrics: list[str] | None = None, since: date | None = None) -> 
         "fx_vcb": {_iso(d): _f(v) for d, v in fx_vcb},   # Vietcombank USD sell, that day's last table (from 02/2020)
         "benchmark": out_bench,
         "index_value_unit": "VND",          # market_index_daily.matched_value is VND (SSI and VNDirect rows alike)
-        "financials_filled_from_fireant": filled,
+        "financials_filled_from_fireant": filled["periods"],
+        "financials_fields_filled_from_fireant": filled["fields"],
         **extras,
     }
