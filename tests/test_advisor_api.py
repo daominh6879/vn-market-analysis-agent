@@ -126,20 +126,27 @@ def test_market_stats_delegates(client, monkeypatch):
     assert client.post("/advisor/market-stats", json={"tickers": ["HPG"]}).status_code == 401
 
 
-def test_refetch_runs_each_ticker_dataset_and_reports_failures(client, monkeypatch):
+def test_refetch_runs_each_ticker_dataset_and_reports_what_changed(client, monkeypatch):
     from portfolio import refetch as rf
     calls = []
+    held = {("HPG", "financials_annual"): {"count": 3, "latest": "2024"},
+            ("FPT", "financials_annual"): {"count": 6, "latest": "2025"},
+            ("HPG", "prices"): {"count": 500, "latest": "2026-10-30"},
+            ("FPT", "prices"): {"count": 500, "latest": "2026-10-30"}}
 
-    def ok(t):
+    def annual(t):
         calls.append(("a", t))
-        return 12
+        if t == "HPG":                                       # source had 2 more years for HPG
+            held[(t, "financials_annual")] = {"count": 5, "latest": "2025"}
+        return 412                                           # FPT: same 6 years rewritten
 
     def boom(t):
         raise SystemExit("source down")
 
-    monkeypatch.setitem(rf.FETCHERS, "financials_annual", ok)
+    monkeypatch.setitem(rf.FETCHERS, "financials_annual", annual)
     monkeypatch.setitem(rf.FETCHERS, "financials_quarterly", boom)
     monkeypatch.setitem(rf.FETCHERS, "prices", lambda t: 0)
+    monkeypatch.setattr(rf, "state", lambda t, d: dict(held.get((t, d), {"count": 0, "latest": None})))
     h = {"X-Internal-Key": KEY}
     r = client.post("/advisor/refetch", json={"tickers": ["hpg", "FPT", "HPG"],
                                               "datasets": ["financials_annual", "financials_quarterly", "prices"]},
@@ -147,8 +154,13 @@ def test_refetch_runs_each_ticker_dataset_and_reports_failures(client, monkeypat
     assert r.status_code == 200
     j = r.json()
     assert calls == [("a", "HPG"), ("a", "FPT")]                 # normalized + de-duplicated
-    assert (j["ok"], j["error"], j["empty"]) == (2, 2, 2)
-    assert {x["status"] for x in j["results"] if x["dataset"] == "financials_quarterly"} == {"error"}
+    by = {(x["ticker"], x["dataset"]): x for x in j["results"]}
+    assert by[("HPG", "financials_annual")]["status"] == "new"
+    assert by[("HPG", "financials_annual")]["before"]["count"] == 3 and by[("HPG", "financials_annual")]["after"]["count"] == 5
+    assert by[("FPT", "financials_annual")]["status"] == "unchanged"     # 412 rows rewritten, no new year
+    assert by[("HPG", "prices")]["status"] == "empty"
+    assert by[("HPG", "financials_quarterly")]["status"] == "error"
+    assert (j["new"], j["unchanged"], j["empty"], j["error"]) == (1, 1, 2, 2)
 
 
 def test_refetch_rejects_bad_requests(client):

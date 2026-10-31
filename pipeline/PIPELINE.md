@@ -91,7 +91,7 @@ Idempotent: URL là dedup key trong Postgres; `url_hash` là point ID trong Qdra
 ## Tải lại theo yêu cầu (vn-portfolio)
 
 `POST /advisor/refetch` (`portfolio/refetch.py`) chạy lại đúng hàm fetch + upsert của `vnstock_financials` (BCTC năm,
-8 năm gần nhất), `financials_quarterly` (BCTC quý, 2 năm) và `vnstock_prices` (400 ngày) cho tối đa 10 mã mỗi lần.
+8 năm gần nhất), `financials_quarterly` (BCTC quý, 2 năm) và `ohlcv_daily_ingest` (giá vào `ohlcv_daily`, từ phiên mới nhất đã có hoặc 400 ngày) cho tối đa 10 mã mỗi lần. Kết quả so trước/sau: số kỳ BCTC / số phiên và kỳ mới nhất (`new` / `unchanged` / `empty` / `error`).
 Không tạo bảng mới, không thay lịch chạy: chỉ để tab "Dữ liệu thiếu" của vn-portfolio lấp mã thiếu ngay thay vì chờ lịch.
 
 ## Audit trail
