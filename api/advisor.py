@@ -114,6 +114,22 @@ def news_facts(body: NewsFactsIn):
     return dump(body.since, body.tickers)
 
 
+class RefetchIn(BaseModel):
+    tickers: list[str]
+    datasets: list[str]                  # subset of portfolio.refetch.DATASETS
+
+
+@router.post("/refetch")
+def refetch(body: RefetchIn):
+    """Re-run the scheduled fetch + upsert for a few tickers now (vn-portfolio "Dữ liệu thiếu" page). Same functions
+    and tables as the Dagster assets; at most refetch.MAX_TICKERS tickers per call."""
+    from portfolio import refetch as rf
+    try:
+        return rf.refetch(body.tickers, body.datasets)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/freshness")
 def data_freshness():
     """{expected_session, fresh, datasets, problems, checked_at} — polled by vn-portfolio to alert on stale data."""

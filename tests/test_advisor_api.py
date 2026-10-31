@@ -124,3 +124,38 @@ def test_market_stats_delegates(client, monkeypatch):
     r = client.post("/advisor/market-stats", json={"tickers": ["HPG"]}, headers={"X-Internal-Key": KEY})
     assert r.status_code == 200 and r.json() == {"tickers": {"HPG": {}}}
     assert client.post("/advisor/market-stats", json={"tickers": ["HPG"]}).status_code == 401
+
+
+def test_refetch_runs_each_ticker_dataset_and_reports_failures(client, monkeypatch):
+    from portfolio import refetch as rf
+    calls = []
+
+    def ok(t):
+        calls.append(("a", t))
+        return 12
+
+    def boom(t):
+        raise SystemExit("source down")
+
+    monkeypatch.setitem(rf.FETCHERS, "financials_annual", ok)
+    monkeypatch.setitem(rf.FETCHERS, "financials_quarterly", boom)
+    monkeypatch.setitem(rf.FETCHERS, "prices", lambda t: 0)
+    h = {"X-Internal-Key": KEY}
+    r = client.post("/advisor/refetch", json={"tickers": ["hpg", "FPT", "HPG"],
+                                              "datasets": ["financials_annual", "financials_quarterly", "prices"]},
+                    headers=h)
+    assert r.status_code == 200
+    j = r.json()
+    assert calls == [("a", "HPG"), ("a", "FPT")]                 # normalized + de-duplicated
+    assert (j["ok"], j["error"], j["empty"]) == (2, 2, 2)
+    assert {x["status"] for x in j["results"] if x["dataset"] == "financials_quarterly"} == {"error"}
+
+
+def test_refetch_rejects_bad_requests(client):
+    h = {"X-Internal-Key": KEY}
+    assert client.post("/advisor/refetch", json={"tickers": [], "datasets": ["prices"]}, headers=h).status_code == 400
+    assert client.post("/advisor/refetch", json={"tickers": ["HPG"], "datasets": ["x"]}, headers=h).status_code == 400
+    assert client.post("/advisor/refetch", json={"tickers": ["A;DROP"], "datasets": ["prices"]},
+                       headers=h).status_code == 400
+    many = [f"T{i:02d}X" for i in range(11)]
+    assert client.post("/advisor/refetch", json={"tickers": many, "datasets": ["prices"]}, headers=h).status_code == 400
