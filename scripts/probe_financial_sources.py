@@ -121,7 +121,7 @@ def probe_vnd(vn, t: str) -> dict:
 
 def gap_tickers(n: int) -> list[str]:
     from core.db import get_conn
-    from pipeline.assets_market_data import financial_gap_tickers
+    from portfolio.financial_gaps import financial_gap_tickers
     with get_conn() as conn, conn.cursor() as cur:
         annual, quarter = financial_gap_tickers(cur, date.today())
     return list(dict.fromkeys(annual + quarter))[:n]
