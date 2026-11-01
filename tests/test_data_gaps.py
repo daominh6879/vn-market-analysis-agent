@@ -67,6 +67,11 @@ class TestParseDividendText:
     def test_stock_ratio_colon(self):
         from ingest.fetch_dividends import parse_dividend_text
         assert parse_dividend_text("Phát hành cổ phiếu thưởng tỷ lệ 100:15")["stock_ratio_pct"] == 15.0
+        # decimals / thousands separators in the ratio (CTG 12/2025 was stored as 44.0 instead of 44.6)
+        assert parse_dividend_text("Trả cổ tức bằng cổ phiếu tỷ lệ 100:44,6")["stock_ratio_pct"] == 44.6
+        assert parse_dividend_text("Phát hành cổ phiếu trả cổ tức, tỷ lệ 100:44.6")["stock_ratio_pct"] == 44.6
+        assert parse_dividend_text("Chia cổ tức bằng cổ phiếu tỷ lệ 1.000:446")["stock_ratio_pct"] == 44.6
+        assert parse_dividend_text("Phát hành cổ phiếu để trả cổ tức tỷ lệ 1000:446")["stock_ratio_pct"] == 44.6
 
     def test_cash_and_stock_in_one_event(self):
         from ingest.fetch_dividends import parse_dividend_text

@@ -38,11 +38,20 @@ _STOCK_PCT_RES = (
     re.compile(rf"({_NUM})\s*%\s*(?:\(?\s*)?bằng cổ phiếu", re.IGNORECASE),
     re.compile(rf"(?:thưởng|phát hành)[^%\d:]{{0,40}}?({_NUM})\s*%", re.IGNORECASE),
 )
-_STOCK_RATIO_RE = re.compile(r"(\d+)\s*:\s*(\d+)")
+# a side of "100:44,6" / "1.000:446": a group of 3 digits after "." / "," is a thousands separator, anything else a
+# decimal part (before 01/11/2026 the decimals were cut: CTG 12/2025 "100:44,6" was stored as 44.0)
+_RATIO_SIDE = r"\d{1,3}(?:[.,]\d{3})+(?![.,]?\d)|\d+(?:[.,]\d+)?"
+_STOCK_RATIO_RE = re.compile(rf"({_RATIO_SIDE})\s*:\s*({_RATIO_SIDE})")
 
 
 def _num(s: str) -> float:
     return float(s.replace(",", "."))
+
+
+def _ratio_side(s: str) -> float:
+    if re.fullmatch(r"\d{1,3}(?:[.,]\d{3})+", s):
+        return float(re.sub(r"[.,]", "", s))
+    return _num(s)
 
 
 def parse_dividend_text(text: str) -> dict:
@@ -70,8 +79,10 @@ def parse_dividend_text(text: str) -> dict:
             break
     if stock is None and cash is None and re.search(r"cổ phiếu", t, re.IGNORECASE):
         m = _STOCK_RATIO_RE.search(t)
-        if m and int(m.group(1)) > 0:
-            stock = round(int(m.group(2)) / int(m.group(1)) * 100, 2)
+        if m:
+            a, b = _ratio_side(m.group(1)), _ratio_side(m.group(2))
+            pct = round(b / a * 100, 2) if a > 0 else None
+            stock = pct if pct is not None and 0 < pct <= 1000 else None
     return {"cash_per_share": cash, "stock_ratio_pct": stock}
 
 
