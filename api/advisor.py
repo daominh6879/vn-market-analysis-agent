@@ -13,7 +13,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
-from portfolio import advisor, evidence, freshness, ledger
+from portfolio import advisor, evidence, freshness, job_health, ledger
 
 
 def _check_key(x_internal_key: str = Header(default="")) -> None:
@@ -134,6 +134,15 @@ def refetch(body: RefetchIn):
 def data_freshness():
     """{expected_session, fresh, datasets, problems, checked_at} — polled by vn-portfolio to alert on stale data."""
     return freshness.check()
+
+
+@router.post("/job-health")
+def dagster_job_health():
+    """{healthy, jobs, problems, checked_at} — jobs whose latest runs all failed; polled by vn-portfolio to alert."""
+    try:
+        return job_health.check()
+    except Exception as e:                      # Dagster down / unreachable: reported, never a 500 with a traceback
+        raise HTTPException(503, f"không đọc được lịch sử Dagster: {type(e).__name__}: {str(e)[:150]}")
 
 
 @router.post("/advise")
