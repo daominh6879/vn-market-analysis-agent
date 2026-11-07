@@ -3,7 +3,8 @@ portfolio/freshness.py — is the daily market data the advisor reads complete f
 
 Dagster fills the daily tables after the close (foreign flows 17:30, index 18:00, OHLCV 18:30). Until READY_HOUR the last
 finished session counted as "expected" is the previous trading day. A dataset is fresh when it holds rows for the expected
-session covering at least COVERAGE_MIN of its usual daily row count (max over the BASELINE_SESSIONS sessions before).
+session covering at least COVERAGE_MIN of its usual daily row count (median over the BASELINE_SESSIONS sessions before —
+not the max: one bulk-loaded session, e.g. 459 rows on 30/10/2026 vs 397-435 normally, would fail every later normal day).
 
 Used by the advise gate (stale -> StaleDataError, no advice on old data), POST /advisor/freshness (vn-portfolio alerts
 when Dagster is down) and pipeline data_freshness_sensor (re-runs the job of a stale dataset).
@@ -83,7 +84,8 @@ def check(now: datetime | None = None) -> dict:
                 cur.execute(
                     f"SELECT (SELECT MAX(date) FROM {table} WHERE {where}), "
                     f"(SELECT count(*) FROM {table} WHERE {where} AND date = %(d)s), "
-                    f"(SELECT COALESCE(MAX(n), 0) FROM (SELECT count(*) n FROM {table} WHERE {where} AND date < %(d)s "
+                    f"(SELECT COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY n), 0)::int FROM "
+                    f"(SELECT count(*) n FROM {table} WHERE {where} AND date < %(d)s "
                     f" GROUP BY date ORDER BY date DESC LIMIT %(k)s) b)",
                     {"d": expected, "k": BASELINE_SESSIONS})
                 latest, rows, baseline = cur.fetchone()

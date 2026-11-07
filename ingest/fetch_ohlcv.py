@@ -210,7 +210,7 @@ def fetch_and_upsert(
     Fetch OHLCV (and foreign volumes if Fireant) for ticker.
 
     When start_date/end_date given: use that range.
-    Otherwise incremental: only fetch since latest date in DB.
+    Otherwise incremental: fetch from the latest date in DB (inclusive).
     backfill=True: ignore DB state, always fetch `days` rows.
 
     Returns {"ohlcv": N, "foreign": N}.
@@ -224,10 +224,12 @@ def fetch_and_upsert(
         range_end = end_date
     else:
         latest = _latest_date(ticker) if not backfill else None
-        if latest and latest >= today:
-            return {"ohlcv": 0, "foreign": 0}
         if latest and not backfill:
-            range_start = latest + timedelta(days=1)
+            # Re-fetch the last stored day too (upsert is idempotent): an ingest during the session stores a partial
+            # candle for today; starting at latest + 1 (and returning early when latest >= today) left it unrefreshed
+            # for good — 03/11/2026: ~370 bars from 09h-11h with partial volume (KOS 0.95M vs 38.7M matched) that the
+            # 18:30 run never rewrote, so the data audit found 210/365 closes off the SSI board.
+            range_start = min(latest, today)
         else:
             range_start = today - timedelta(days=days)
         range_end = today
